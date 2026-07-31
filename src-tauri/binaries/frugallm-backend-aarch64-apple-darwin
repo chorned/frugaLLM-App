@@ -1,0 +1,5 @@
+#!/bin/bash
+echo "Dummy backend sidecar running..."
+while true; do
+  sleep 60
+done
