@@ -24,4 +24,11 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-shell = "2.3.5"
 tauri-plugin-http = "2.5.9"
+tauri-plugin-store = "2"
+keyring = "4.1.6"
+portable-pty = "0.9.0"
+axum = "0.8.9"
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "fs", "io-util", "process"] }
+reqwest = { version = "0.13.4", features = ["json", "stream"] }
+nvml-wrapper = "0.12.1"
 

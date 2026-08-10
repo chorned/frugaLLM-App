@@ -1,26 +1,51 @@
 import { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import confetti from 'canvas-confetti';
 import { listen } from '@tauri-apps/api/event';
+import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import '@xterm/xterm/css/xterm.css';
+import { openUrl } from '@tauri-apps/plugin-opener';
+import ReactMarkdown from 'react-markdown';
+import agentsGuide from './guides/agents.md?raw';
+import ollamaGuide from './guides/ollama.md?raw';
+import openrouterGuide from './guides/openrouter.md?raw';
+
+const GUIDES_MAP: Record<string, string> = {
+  agents: agentsGuide,
+  ollama: ollamaGuide,
+  openrouter: openrouterGuide
+};
+
 
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 130;
 
-const initialNodes = [
-  {
-    id: 'node-antigravity',
-    x: 400, y: 100,
-    data: { 
-      label: 'ANTIGRAVITY AGENT', 
-      description: 'Meet the Antigravity Agent, your personal CLI orchestrator! It acts as the strict supervisor, ensuring all data that flows through perfectly matches your schemas.',
-      schemaPath: './schemas/output.json', 
-      cwd: '~/Projects/gnhf',
-      bin: 'agy',
-      extraArgs: '--verbose',
-      prompt: 'Summarize the latest changes in the src directory',
-      status: 'active',
-      isAgent: true
-    }
-  },
+
+
+type NodeData = {
+  label: string;
+  description: string;
+  ip?: string;
+  port?: string;
+  status: string;
+  schemaPath?: string;
+  cwd?: string;
+  bin?: string;
+  extraArgs?: string;
+  prompt?: string;
+  isAgent?: boolean;
+};
+
+type AppNode = {
+  id: string;
+  x: number;
+  y: number;
+  data: NodeData;
+};
+
+const initialNodes: AppNode[] = [
   {
     id: 'node-ollama',
     x: 100, y: 200,
@@ -29,7 +54,7 @@ const initialNodes = [
       description: 'Your private, local brain! Ollama runs lightweight open-source models right on your machine, keeping your data entirely private and free from cloud costs.',
       ip: '127.0.0.1', 
       port: '11434',
-      status: 'active'
+      status: 'needs_activation'
     }
   },
   {
@@ -40,7 +65,7 @@ const initialNodes = [
       description: 'The ultimate gateway to the cloud! OpenRouter acts as a smart multiplexer, automatically routing your requests to the best and cheapest proprietary AI models available.',
       ip: 'api.openrouter.ai', 
       port: '443',
-      status: 'active'
+      status: 'needs_activation'
     }
   },
   {
@@ -73,13 +98,12 @@ const initialNodes = [
       description: "Say hello to Hermes, your internal AI chat interface! It's not just for chatting; Hermes can kick off complex, multi-step agent workflows to get real work done.",
       ip: '127.0.0.1', 
       port: '3001',
-      status: 'error'
+      status: 'inactive'
     }
   }
 ];
 
 const initialEdges = [
-  { id: 'edge-ag-frugallm', source: 'node-antigravity', target: 'node-frugallm' },
   { id: 'edge-frugallm-ollama', source: 'node-frugallm', target: 'node-ollama' },
   { id: 'edge-frugallm-openrouter', source: 'node-frugallm', target: 'node-openrouter' },
   { id: 'edge-opencode-frugallm', source: 'node-opencode', target: 'node-frugallm' },
@@ -104,7 +128,7 @@ const Tooltip = ({ text }: { text: string }) => {
   );
 };
 
-const NodeConfigPanel = ({ node, onClose, onSave }: any) => {
+const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled, isOpenCodeInstalled, isOllamaInstalled, detectedVram, setDetectedVram, hasActiveBackend, handleInitializeHermes, handleOpenHermes, handleInitializeOpenCode, handleOpenOpenCode, handleInitializeOllama, handleOpenOllama }: any) => {
   const [formData, setFormData] = useState({
     ip: node.data.ip || '',
     port: node.data.port || '',
@@ -113,7 +137,8 @@ const NodeConfigPanel = ({ node, onClose, onSave }: any) => {
     cwd: node.data.cwd || '',
     bin: node.data.bin || '',
     extraArgs: node.data.extraArgs || '',
-    prompt: node.data.prompt || ''
+    prompt: node.data.prompt || '',
+    apiKey: '' // specifically for openrouter credentials
   });
 
   useEffect(() => {
@@ -125,7 +150,8 @@ const NodeConfigPanel = ({ node, onClose, onSave }: any) => {
       cwd: node.data.cwd || '',
       bin: node.data.bin || '',
       extraArgs: node.data.extraArgs || '',
-      prompt: node.data.prompt || ''
+      prompt: node.data.prompt || '',
+      apiKey: ''
     });
   }, [node]);
 
@@ -191,27 +217,113 @@ const NodeConfigPanel = ({ node, onClose, onSave }: any) => {
                 <input type="text" name="port" value={formData.port} onChange={handleChange}
                   style={{ width: '100%', padding: '10px 12px', border: '2px solid #111827', backgroundColor: '#ffffff', color: '#111827', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: '2px 2px 0px #111827' }} />
               </div>
+              {node.id === 'node-openrouter' && (
+                <div>
+                  <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#111827', marginBottom: '6px' }}>API KEY <Tooltip text="Your OpenRouter API Key. This will be securely saved into your operating system's native Keychain!" /></label>
+                  <input type="password" name="apiKey" value={formData.apiKey} onChange={handleChange} placeholder="sk-or-v1-..."
+                    style={{ width: '100%', padding: '10px 12px', border: '2px solid #111827', backgroundColor: '#ffffff', color: '#111827', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: '2px 2px 0px #111827' }} />
+                </div>
+              )}
             </>
           )}
-          <div>
-            <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#111827', marginBottom: '6px' }}>SERVICE STATUS <Tooltip text="Is this node ready for action? You can mark it 'ACTIVE' to use it now, 'INACTIVE' if you're just planning it out, or 'ERROR' if it's offline." /></label>
-            <select name="status" value={formData.status} onChange={handleChange}
-              style={{ width: '100%', padding: '10px 12px', border: '2px solid #111827', backgroundColor: '#ffffff', color: '#111827', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: '2px 2px 0px #111827', appearance: 'none', backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'%23111827\'%3E%3Cpath stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M19 9l-7 7-7-7\'%3E%3C/path%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', backgroundSize: '16px' }}>
-              <option value="active">ACTIVE</option>
-              <option value="inactive">INACTIVE (PLANNED)</option>
-              <option value="error">ERROR / OFFLINE</option>
-            </select>
-          </div>
+          
         </div>
         
         <p style={{ fontSize: '0.85rem', color: '#4b5563', marginTop: '32px', marginBottom: '0', lineHeight: 1.5, fontFamily: 'sans-serif', borderTop: '1px dashed #d1d5db', paddingTop: '16px' }}>
           {node.data.description}
         </p>
+
+      {node.id === 'node-hermes' && isHermesInstalled === false && (
+        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: '#fff7ed', border: '2px dashed #ea580c', borderRadius: '8px' }}>
+          <h4 style={{ margin: '0 0 10px 0', color: '#9a3412', fontSize: '0.9rem' }}>HERMES AGENT MISSING</h4>
+          {!hasActiveBackend ? (
+            <p style={{ fontSize: '0.8rem', color: '#9a3412', margin: 0, fontWeight: 600 }}>Prerequisite: Connect Ollama or OpenRouter first.</p>
+          ) : (
+            <button 
+              onClick={(e) => { e.stopPropagation(); handleInitializeHermes(); }}
+              style={{ width: '100%', padding: '12px', backgroundColor: '#ea580c', color: 'white', border: '2px solid #9a3412', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              INITIALIZE HERMES
+            </button>
+          )}
+        </div>
+      )}
+      
+      {node.id === 'node-hermes' && isHermesInstalled === true && (
+        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: '#f0fdf4', border: '2px dashed #16a34a', borderRadius: '8px' }}>
+          <h4 style={{ margin: '0 0 10px 0', color: '#166534', fontSize: '0.9rem' }}>HERMES AGENT INSTALLED</h4>
+          <button 
+            onClick={(e) => { e.stopPropagation(); handleOpenHermes(); }}
+            style={{ width: '100%', padding: '12px', backgroundColor: '#16a34a', color: 'white', border: '2px solid #166534', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+            OPEN HERMES
+          </button>
+        </div>
+      )}
+
+      {node.id === 'node-opencode' && isOpenCodeInstalled === false && (
+        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: '#fff7ed', border: '2px dashed #ea580c', borderRadius: '8px' }}>
+          <h4 style={{ margin: '0 0 10px 0', color: '#9a3412', fontSize: '0.9rem' }}>OPENCODE AGENT MISSING</h4>
+          {!hasActiveBackend ? (
+            <p style={{ fontSize: '0.8rem', color: '#9a3412', margin: 0, fontWeight: 600 }}>Prerequisite: Connect Ollama or OpenRouter first.</p>
+          ) : (
+            <button 
+              onClick={(e) => { e.stopPropagation(); handleInitializeOpenCode(); }}
+              style={{ width: '100%', padding: '12px', backgroundColor: '#ea580c', color: 'white', border: '2px solid #9a3412', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              INITIALIZE OPENCODE
+            </button>
+          )}
+        </div>
+      )}
+      
+      {node.id === 'node-opencode' && isOpenCodeInstalled === true && (
+        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: '#f0fdf4', border: '2px dashed #16a34a', borderRadius: '8px' }}>
+          <h4 style={{ margin: '0 0 10px 0', color: '#166534', fontSize: '0.9rem' }}>OPENCODE AGENT INSTALLED</h4>
+          <button 
+            onClick={(e) => { e.stopPropagation(); handleOpenOpenCode(); }}
+            style={{ width: '100%', padding: '12px', backgroundColor: '#16a34a', color: 'white', border: '2px solid #166534', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+            OPEN OPENCODE
+          </button>
+        </div>
+      )}
+
+      {node.id === 'node-ollama' && isOllamaInstalled === false && (
+        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: '#fff7ed', border: '2px dashed #ea580c', borderRadius: '8px' }}>
+          <h4 style={{ margin: '0 0 10px 0', color: '#9a3412', fontSize: '0.9rem' }}>OLLAMA MISSING</h4>
+          
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#9a3412', marginBottom: '6px' }}>VRAM DETECTED (GB) <Tooltip text="We tried to auto-detect your Video RAM, but you can correct this if it's wrong." /></label>
+            <input type="text" value={detectedVram} onChange={(e) => setDetectedVram(e.target.value)}
+              style={{ width: '100%', padding: '10px 12px', border: '2px solid #9a3412', backgroundColor: '#ffffff', color: '#9a3412', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: '2px 2px 0px #9a3412' }} />
+          </div>
+
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#9a3412', marginBottom: '6px' }}>RECOMMENDED MODEL <Tooltip text="Based on your VRAM, we'll pull this model for you!" /></label>
+            <input type="text" readOnly value={Number(detectedVram) >= 32 ? 'gemma4:31b' : Number(detectedVram) >= 24 ? 'gemma4:26b' : Number(detectedVram) >= 12 ? 'gemma4:12b' : Number(detectedVram) >= 8 ? 'gemma4:e4b' : Number(detectedVram) >= 4 ? 'gemma4:e2b' : 'Unsupported (< 4GB VRAM)'}
+              style={{ width: '100%', padding: '10px 12px', border: '2px solid #9a3412', backgroundColor: '#fed7aa', color: '#9a3412', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, cursor: 'not-allowed' }} />
+          </div>
+
+          <button 
+            onClick={(e) => { e.stopPropagation(); handleInitializeOllama(); }}
+            style={{ width: '100%', padding: '12px', backgroundColor: '#ea580c', color: 'white', border: '2px solid #9a3412', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+            INITIALIZE OLLAMA
+          </button>
+        </div>
+      )}
+      
+      {node.id === 'node-ollama' && isOllamaInstalled === true && (
+        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: '#f0fdf4', border: '2px dashed #16a34a', borderRadius: '8px' }}>
+          <h4 style={{ margin: '0 0 10px 0', color: '#166534', fontSize: '0.9rem' }}>OLLAMA INSTALLED</h4>
+          <button 
+            onClick={(e) => { e.stopPropagation(); handleOpenOllama(); }}
+            style={{ width: '100%', padding: '12px', backgroundColor: '#16a34a', color: 'white', border: '2px solid #166534', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+            CHAT WITH OLLAMA
+          </button>
+        </div>
+      )}
       </div>
       
-      <div style={{ padding: '20px', borderTop: '2px dashed #d1d5db', backgroundColor: '#ffffff' }}>
+      <div style={{ padding: '20px', borderTop: '2px dashed #d1d5db', backgroundColor: '#ffffff', display: 'flex', gap: '10px' }}>
         <button onClick={handleSave} style={{ 
-          width: '100%', padding: '12px', backgroundColor: '#ea580c', color: 'white', 
+          flex: 1, padding: '12px', backgroundColor: '#ea580c', color: 'white', 
           border: '2px solid #111827', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '1px',
           boxShadow: '3px 3px 0px #111827', transition: 'all 0.1s'
         }}
@@ -220,6 +332,238 @@ const NodeConfigPanel = ({ node, onClose, onSave }: any) => {
         >
           UPDATE PROTOCOL
         </button>
+        <button onClick={(e) => {
+          e.stopPropagation();
+          const guideMap: any = { 'node-ollama': 'ollama', 'node-openrouter': 'openrouter' };
+          const guide = guideMap[node.id] || 'agents';
+          onOpenGuide(guide);
+        }} style={{ 
+          padding: '12px 20px', backgroundColor: '#ffffff', color: '#111827', 
+          border: '2px solid #111827', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '1px',
+          boxShadow: '3px 3px 0px #111827', transition: 'all 0.1s', display: 'flex', alignItems: 'center', gap: '8px'
+        }}
+        onMouseDown={e => { e.currentTarget.style.transform = 'translate(2px, 2px)'; e.currentTarget.style.boxShadow = '1px 1px 0px #111827'; }}
+        onMouseUp={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '3px 3px 0px #111827'; }}
+        >
+          <span>HELP</span>
+          <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>?</span>
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const TerminalView = ({ mode, onExit, setIsHermesInstalled, setIsOpenCodeInstalled, setIsOllamaInstalled }: { mode: 'install-hermes' | 'run-hermes' | 'install-opencode' | 'run-opencode' | 'install-ollama' | 'run-ollama', onExit: () => void, setIsHermesInstalled: (installed: boolean) => void, setIsOpenCodeInstalled: (installed: boolean) => void, setIsOllamaInstalled: (installed: boolean) => void }) => {
+  const terminalRef = useRef<HTMLDivElement>(null);
+  const [isProvisioningModel, setIsProvisioningModel] = useState(false);
+  const [downloadPercent, setDownloadPercent] = useState<number>(0);
+
+  useEffect(() => {
+    if (!terminalRef.current) return;
+    const term = new Terminal({ theme: { background: '#111827' } });
+    const fitAddon = new FitAddon();
+    term.loadAddon(fitAddon);
+    term.open(terminalRef.current);
+    
+    // Explicitly fit before spawning PTY so cols/rows are initialized correctly
+    try {
+      fitAddon.fit();
+    } catch (e) {
+      console.error(e);
+    }
+    
+    term.onResize(({ cols, rows }) => {
+      invoke('resize_pty', { cols, rows }).catch(console.error);
+    });
+
+    let fitTimeout: number | undefined;
+    const resizeObserver = new ResizeObserver(() => {
+      window.clearTimeout(fitTimeout);
+      fitTimeout = window.setTimeout(() => {
+        try {
+          fitAddon.fit();
+        } catch (e) {
+          console.error(e);
+        }
+      }, 50);
+    });
+    resizeObserver.observe(terminalRef.current);
+
+    let unlistenOutput: (() => void) | null = null;
+    let unlistenExit: (() => void) | null = null;
+    let isMounted = true;
+
+    const start = async () => {
+      if (mode.startsWith('install')) {
+        let installingText = 'Initializing installation...';
+        if (mode === 'install-opencode') installingText = 'Initializing OpenCode environment...';
+        if (mode === 'install-hermes') installingText = 'Initializing Hermes Agent environment...';
+        if (mode === 'install-ollama') installingText = 'Initializing Ollama installation...';
+        term.writeln(installingText);
+        unlistenOutput = await listen<string>('pty_output', (event) => term.write(event.payload));
+        unlistenExit = await listen<{ exit_code: number }>('pty_exit', (event) => {
+          term.writeln(`\r\n\x1b[32mInstallation finished with code ${event.payload.exit_code}\x1b[0m\r\n`);
+          if (event.payload.exit_code === 0) {
+            if (mode === 'install-opencode') {
+              setIsOpenCodeInstalled(true);
+              setTimeout(async () => {
+                if (!isMounted) return;
+                try {
+                  await invoke('configure_opencode_defaults');
+                  term.writeln(`\\r\\n\\x1b[32mConfiguration applied. Closing...\\x1b[0m\\r\\n`);
+                  setTimeout(() => { if (isMounted) onExit(); }, 1000);
+                } catch (err) {
+                  term.writeln(`\\r\\n\\x1b[31mFailed to configure OpenCode: ${err}\\x1b[0m\\r\\n`);
+                }
+              }, 1000);
+            } else if (mode !== 'install-ollama') {
+              setIsHermesInstalled(true);
+              setTimeout(async () => {
+                if (!isMounted) return;
+                try {
+                  await invoke('configure_hermes_defaults');
+                  term.writeln(`\r\n\x1b[32mConfiguration applied. Closing...\x1b[0m\r\n`);
+                  setTimeout(() => { if (isMounted) onExit(); }, 1000);
+                } catch (err) {
+                  term.writeln(`\r\n\x1b[31mFailed to configure Hermes: ${err}\x1b[0m\r\n`);
+                }
+              }, 1000);
+            }
+          }
+        });
+        
+        if (!isMounted) return;
+        if (mode === 'install-opencode') {
+          await invoke('spawn_pty', { command: 'bash', args: ['-c', 'export TERM=xterm-256color && curl -fsSL https://opencode.ai/install | bash'] });
+        } else if (mode === 'install-ollama') {
+          const unlisten1 = await listen<{ status: string }>('download_progress', (event) => term.write(event.payload.status));
+          const unlisten2 = await listen<string>('installing_ollama', () => term.writeln('Installing Ollama Engine...'));
+          const unlisten4 = await listen('model_provisioning_started', () => {
+             setIsProvisioningModel(true);
+             setDownloadPercent(0);
+          });
+          const unlisten5 = await listen<number>('model_download_progress', (event) => {
+             setDownloadPercent(event.payload);
+          });
+          const unlisten3 = await listen<{ success: boolean; message: string }>('model_deployment_complete', async (event) => {
+            setIsProvisioningModel(false);
+            if (event.payload.success) {
+              setIsOllamaInstalled(true);
+              term.writeln(`\r\n\x1b[32mModel Provisioned successfully.\x1b[0m\r\n`);
+              term.writeln(`\r\n\x1b[33mTesting endpoint...\x1b[0m`);
+              try {
+                const response = await tauriFetch('http://127.0.0.1:11434/api/generate', {
+                   method: 'POST',
+                   headers: { 'Content-Type': 'application/json' },
+                   body: JSON.stringify({ model: 'frugallm-active', prompt: 'say hi', stream: false })
+                });
+                if (response.ok) {
+                   term.writeln(`\r\n\x1b[32mEndpoint test succeeded!\x1b[0m\r\n`);
+                   confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+                } else {
+                   term.writeln(`\r\n\x1b[31mEndpoint test failed with status ${response.status}\x1b[0m\r\n`);
+                }
+              } catch (e) {
+                 term.writeln(`\r\n\x1b[31mEndpoint test failed: ${e}\x1b[0m\r\n`);
+              }
+              setTimeout(() => { if (isMounted) onExit(); }, 3000);
+            } else {
+              console.error(event.payload.message);
+              term.writeln(`\r\n\x1b[31mInstallation failed: ${event.payload.message}\x1b[0m\r\n`);
+            }
+            unlisten1();
+            unlisten2();
+            unlisten3();
+            unlisten4();
+            unlisten5();
+          });
+          
+          invoke('deploy_local_model').catch((err) => {
+            console.error(err);
+            setIsProvisioningModel(false);
+            term.writeln(`\r\n\x1b[31mInstallation failed: ${err}\x1b[0m\r\n`);
+            unlisten1();
+            unlisten2();
+            unlisten3();
+            unlisten4();
+            unlisten5();
+          });
+        } else {
+          await invoke('spawn_pty', { command: 'bash', args: ['-c', 'export TERM=xterm-256color && curl -sSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup'] });
+        }
+        invoke('resize_pty', { cols: term.cols, rows: term.rows }).catch(console.error);
+      } else if (mode.startsWith('run')) {
+        let runningText = 'Starting...';
+        if (mode === 'run-opencode') runningText = 'Starting OpenCode...';
+        if (mode === 'run-hermes') runningText = 'Starting Hermes Agent...';
+        if (mode === 'run-ollama') runningText = 'Chatting with Ollama...';
+        term.writeln(runningText);
+        const dataListener = term.onData((data) => {
+          invoke('write_pty', { data }).catch(console.error);
+        });
+        unlistenOutput = await listen<string>('pty_output', (event) => term.write(event.payload));
+        unlistenExit = await listen<{ exit_code: number }>('pty_exit', (event) => {
+          let name = 'Process';
+          if (mode === 'run-opencode') name = 'OpenCode';
+          if (mode === 'run-hermes') name = 'Hermes';
+          if (mode === 'run-ollama') name = 'Ollama';
+          term.writeln(`\r\n\x1b[32m${name} exited with code ${event.payload.exit_code}\x1b[0m\r\n`);
+        });
+        
+        if (!isMounted) return;
+        if (mode === 'run-opencode') {
+          await invoke('spawn_pty', { command: 'bash', args: ['-c', 'export TERM=xterm-256color && export PATH="$HOME/.opencode/bin:$PATH" && opencode -m litellm/frugallm'] });
+        } else if (mode === 'run-ollama') {
+          await invoke('spawn_pty', { command: 'bash', args: ['-c', 'export TERM=xterm-256color && ollama run frugallm-active'] });
+        } else {
+          await invoke('spawn_pty', { command: 'bash', args: ['-c', 'export TERM=xterm-256color && export PATH="$HOME/.hermes/bin:$PATH" && hermes'] });
+        }
+        invoke('resize_pty', { cols: term.cols, rows: term.rows }).catch(console.error);
+        
+        const cleanup = unlistenExit;
+        unlistenExit = () => {
+          dataListener.dispose();
+          if (cleanup) cleanup();
+        };
+      }
+    };
+    start();
+
+    return () => {
+      isMounted = false;
+      resizeObserver.disconnect();
+      invoke('kill_pty').catch(console.error);
+      if (unlistenOutput) unlistenOutput();
+      if (unlistenExit) unlistenExit();
+      term.dispose();
+    };
+  }, [mode]);
+
+  return (
+    <div style={{ flexGrow: 1, position: 'relative', display: 'flex', flexDirection: 'column', backgroundColor: '#111827', alignItems: 'center', boxSizing: 'border-box', padding: '35px 20px 20px 20px' }}>
+      <button 
+        onClick={onExit}
+        style={{ position: 'absolute', top: '5px', right: '15px', padding: '0', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent', color: 'white', border: 'none', cursor: 'pointer', fontFamily: 'sans-serif', fontWeight: 'bold', fontSize: '20px', zIndex: 10 }}
+      >
+        ✕
+      </button>
+
+      {isProvisioningModel && (
+        <div style={{ width: '100%', padding: '16px', backgroundColor: '#fed7aa', color: '#9a3412', border: '2px solid #9a3412', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '15px' }}>
+           <div style={{ width: '100%' }}>
+             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+               <span style={{ fontWeight: 'bold' }}>Downloading Weights...</span>
+               <span style={{ fontWeight: 'bold' }}>{downloadPercent}%</span>
+             </div>
+             <div style={{ width: '100%', height: '12px', backgroundColor: '#fdba74', borderRadius: '6px', overflow: 'hidden' }}>
+               <div style={{ width: `${downloadPercent}%`, height: '100%', backgroundColor: '#ea580c', transition: 'width 0.2s linear' }} />
+             </div>
+           </div>
+        </div>
+      )}
+
+      <div style={{ width: '100%', flex: 1, border: '4px solid #ea580c', backgroundColor: '#111827', display: 'flex', boxSizing: 'border-box', padding: '10px' }}>
+        <div ref={terminalRef} style={{ flex: 1, overflow: 'hidden' }} />
       </div>
     </div>
   );
@@ -235,46 +579,39 @@ export default function App() {
   const lastPos = useRef({ x: 0, y: 0 });
   const dragDistance = useRef(0);
 
-  // Telemetry state
-  const [streamedResponse, setStreamedResponse] = useState<string[]>([]);
-  const [inputTokens, setInputTokens] = useState(0);
-  const [outputTokens, setOutputTokens] = useState(0);
-  const [cacheReadTokens, setCacheReadTokens] = useState(0);
-  const [parseState, setParseState] = useState('IDLE');
-  
   // UI State
-  const [terminalOpen, setTerminalOpen] = useState(false);
   const [guidesOpen, setGuidesOpen] = useState(false);
-  const terminalEndRef = useRef<HTMLDivElement>(null);
+  const [terminalMode, setTerminalMode] = useState<'install-hermes' | 'run-hermes' | 'install-opencode' | 'run-opencode' | 'install-ollama' | 'run-ollama' | null>(null);
+  const [isHermesInstalled, setIsHermesInstalled] = useState<boolean | null>(null);
+  const [isOpenCodeInstalled, setIsOpenCodeInstalled] = useState<boolean | null>(null);
+  const [isOllamaInstalled, setIsOllamaInstalled] = useState<boolean | null>(null);
+  const [detectedVram, setDetectedVram] = useState<string>('8'); // Default placeholder
 
   useEffect(() => {
-    // Listen for streaming output
-    const unlistenStream = listen<string>('agent-stream', (event) => {
-      setStreamedResponse((prev) => [...prev, event.payload]);
-    });
-
-    // Listen for telemetry
-    const unlistenTelemetry = listen<any>('agent-telemetry', (event) => {
-      const payload = event.payload;
-      if (payload.inputTokens !== undefined) setInputTokens(payload.inputTokens);
-      if (payload.outputTokens !== undefined) setOutputTokens(payload.outputTokens);
-      if (payload.cacheReadTokens !== undefined) setCacheReadTokens(payload.cacheReadTokens);
-      if (payload.parseState !== undefined) setParseState(payload.parseState);
-    });
-
-    return () => {
-      unlistenStream.then(f => f());
-      unlistenTelemetry.then(f => f());
-    };
+    invoke('check_hermes_status').then((installed) => {
+      setIsHermesInstalled(installed as boolean);
+    }).catch(console.error);
+    invoke('check_opencode_status').then((installed) => {
+      setIsOpenCodeInstalled(installed as boolean);
+    }).catch(console.error);
+    invoke('check_ollama_status').then((installed) => {
+      setIsOllamaInstalled(installed as boolean);
+    }).catch(console.error);
+    invoke('detect_vram').then((vram) => {
+      if (vram !== null && vram !== undefined) {
+        const vramGb = Math.round(Number(vram) / 1024);
+        setDetectedVram(String(vramGb));
+      }
+    }).catch(console.error);
   }, []);
 
-  // Auto scroll terminal
-  useEffect(() => {
-    if (terminalOpen && terminalEndRef.current) {
-      terminalEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [streamedResponse, terminalOpen]);
-
+  const handleInitializeHermes = () => setTerminalMode('install-hermes');
+  const handleOpenHermes = () => setTerminalMode('run-hermes');
+  const handleInitializeOpenCode = () => setTerminalMode('install-opencode');
+  const handleOpenOpenCode = () => setTerminalMode('run-opencode');
+  const handleInitializeOllama = () => setTerminalMode('install-ollama');
+  const handleOpenOllama = () => setTerminalMode('run-ollama');
+  const [activeGuide, setActiveGuide] = useState<string | null>(null);
   const handleCanvasMouseDown = (e: any) => {
     setIsDragging(true);
     lastPos.current = { x: e.clientX, y: e.clientY };
@@ -323,8 +660,49 @@ export default function App() {
     setSelectedNodeId(null);
   };
 
-  const handleSaveNodeConfig = (nodeId: string, newConfig: any) => {
-    setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, ...newConfig } } : n));
+  const handleSaveNodeConfig = async (nodeId: string, newConfig: any) => {
+    let finalConfig = { ...newConfig };
+    
+    if (nodeId === 'node-openrouter') {
+      if (finalConfig.apiKey) {
+        try {
+          await invoke('set_credential', { service: 'openrouter', secret: finalConfig.apiKey });
+          finalConfig.status = 'active'; // Once key is provided, assume active. (Ideally we'd test it)
+          confetti({
+            particleCount: 150,
+            spread: 70,
+            origin: { y: 0.6 },
+            colors: ['#ea580c', '#ffffff', '#111827']
+          });
+        } catch (e) {
+          console.error("Failed to save credential", e);
+          finalConfig.status = 'error';
+        }
+        delete finalConfig.apiKey; // Do not save the API key in the generic node data!
+      }
+    }
+    
+    if (nodeId === 'node-ollama') {
+      try {
+        const url = `http://${finalConfig.ip}:${finalConfig.port}/api/version`;
+        const res = await tauriFetch(url, { method: 'GET' });
+        if (res.ok) {
+          finalConfig.status = 'active';
+          confetti({
+            particleCount: 150,
+            spread: 70,
+            origin: { y: 0.6 },
+            colors: ['#ea580c', '#ffffff', '#111827']
+          });
+        } else {
+          finalConfig.status = 'error';
+        }
+      } catch (err) {
+        finalConfig.status = 'error';
+      }
+    }
+    
+    setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, ...finalConfig } } : n));
   };
 
   const renderEdge = (edge: any) => {
@@ -356,29 +734,7 @@ export default function App() {
   };
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
-
-  const handleInitializeExperiment = () => {
-    const agNode = nodes.find(n => n.id === 'node-antigravity');
-    if (agNode) {
-      setTerminalOpen(true);
-      setStreamedResponse(["INITIALIZING ANTIGRAVITY AGENT...", ""]);
-      setParseState("RUNNING");
-      
-      invoke('run_antigravity', {
-        schemaPath: agNode.data.schemaPath,
-        bin: agNode.data.bin,
-        cwd: agNode.data.cwd,
-        extraArgs: (agNode.data.extraArgs || '').split(',').map((s: string) => s.trim()).filter(Boolean),
-        prompt: agNode.data.prompt || ''
-      }).then(() => {
-        setStreamedResponse(prev => [...prev, "", "PROCESS EXITED CLEANLY"]);
-        setParseState("SUCCESS");
-      }).catch(err => {
-        setStreamedResponse(prev => [...prev, "", `ERROR: ${err}`]);
-        setParseState("ERROR");
-      });
-    }
-  };
+  const hasActiveBackend = nodes.some(n => (n.id === 'node-ollama' || n.id === 'node-openrouter') && n.data.status === 'active');
 
   return (
     <div 
@@ -447,24 +803,38 @@ export default function App() {
       </style>
 
       {/* Canvas Area */}
-      <div 
-        onMouseDown={handleCanvasMouseDown}
-        onMouseMove={handleCanvasMouseMove}
-        onMouseUp={handleCanvasMouseUp}
-        onMouseLeave={handleCanvasMouseUp}
-        onClick={handleCanvasClick}
-        onWheel={handleWheel}
-        style={{ 
-          flexGrow: 1, position: 'relative', 
-          cursor: isDragging ? 'grabbing' : 'grab'
-        }}
-      >
-        <div style={{ position: 'absolute', top: 20, left: 20, backgroundColor: '#111827', padding: '12px 20px', border: '2px solid #111827', boxShadow: '4px 4px 0px rgba(0,0,0,0.5)', zIndex: 10 }}>
-          <h1 style={{ margin: '0 0 4px 0', fontSize: '1.2rem', color: '#ffffff', fontWeight: 900, letterSpacing: '1px' }}>TEST PROTOCOL ALPHA</h1>
-          <p style={{ margin: 0, fontSize: '0.8rem', color: '#9ca3af', fontWeight: 700 }}>
-            NEURAL TOPOLOGY <span style={{ backgroundColor: '#374151', color: '#ffffff', padding: '2px 4px' }}>// CENTRAL HUB VIEW</span>
-          </p>
-        </div>
+      {terminalMode ? (
+        <TerminalView 
+          mode={terminalMode} 
+          onExit={() => {
+            setTerminalMode(null);
+            invoke('check_hermes_status').then((installed) => setIsHermesInstalled(installed as boolean));
+            invoke('check_opencode_status').then((installed) => setIsOpenCodeInstalled(installed as boolean));
+            invoke('check_ollama_status').then((installed) => setIsOllamaInstalled(installed as boolean));
+          }}
+          setIsHermesInstalled={setIsHermesInstalled}
+          setIsOpenCodeInstalled={setIsOpenCodeInstalled}
+          setIsOllamaInstalled={setIsOllamaInstalled}
+        />
+      ) : (
+        <div 
+          onMouseDown={handleCanvasMouseDown}
+          onMouseMove={handleCanvasMouseMove}
+          onMouseUp={handleCanvasMouseUp}
+          onMouseLeave={handleCanvasMouseUp}
+          onClick={handleCanvasClick}
+          onWheel={handleWheel}
+          style={{ 
+            flexGrow: 1, position: 'relative', 
+            cursor: isDragging ? 'grabbing' : 'grab'
+          }}
+        >
+          <div style={{ position: 'absolute', top: 20, left: 20, backgroundColor: '#111827', padding: '12px 20px', border: '2px solid #111827', boxShadow: '4px 4px 0px rgba(0,0,0,0.5)', zIndex: 10 }}>
+            <h1 style={{ margin: '0 0 4px 0', fontSize: '1.2rem', color: '#ffffff', fontWeight: 900, letterSpacing: '1px' }}>TEST PROTOCOL ALPHA</h1>
+            <p style={{ margin: 0, fontSize: '0.8rem', color: '#9ca3af', fontWeight: 700 }}>
+              NEURAL TOPOLOGY <span style={{ backgroundColor: '#374151', color: '#ffffff', padding: '2px 4px' }}>// CENTRAL HUB VIEW</span>
+            </p>
+          </div>
 
         <div style={{
           position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
@@ -512,6 +882,12 @@ export default function App() {
                 stateColors.boxShadow = 'none';
                 stateColors.borderStyle = 'dashed';
                 stateColors.borderWidth = '3px';
+              } else if (node.data.status === 'needs_activation') {
+                stateColors.border = '#111827';
+                stateColors.headerBg = '#111827';
+                stateColors.headerText = '#ffffff';
+                stateColors.dot = '#ea580c'; 
+                stateColors.statusText = '#ea580c';
               } else if (node.data.status === 'error') {
                 stateColors.border = '#111827';
                 stateColors.headerBg = '#111827';
@@ -628,53 +1004,11 @@ export default function App() {
           </div>
         </div>
 
-        {/* Sliding Terminal Drawer */}
-        <div 
-          className="terminal-drawer"
-          style={{
-            position: 'absolute',
-            bottom: '36px', // Above the footer
-            left: '20px',
-            right: '20px', // Don't block the right panel completely, or make it span a certain width
-            width: 'calc(100% - 40px)',
-            height: '250px',
-            backgroundColor: '#000000',
-            border: '2px solid #ea580c',
-            borderBottom: 'none',
-            boxShadow: '0 -4px 10px rgba(0,0,0,0.5)',
-            transform: terminalOpen ? 'translateY(0)' : 'translateY(100%)',
-            zIndex: 9,
-            display: 'flex',
-            flexDirection: 'column'
-          }}
-        >
-          <div style={{ backgroundColor: '#111827', padding: '6px 12px', borderBottom: '2px solid #ea580c', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ color: '#ea580c', fontWeight: 700, fontSize: '0.8rem', letterSpacing: '1px' }}>ANTIGRAVITY // EXECUTION LOG</span>
-            <button onClick={() => setTerminalOpen(false)} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer' }}>✕</button>
-          </div>
-          <div style={{ flexGrow: 1, padding: '12px', overflowY: 'auto', color: '#10b981', fontSize: '0.8rem', lineHeight: 1.4 }}>
-            {streamedResponse.map((line, i) => (
-              <div key={i} style={{ wordBreak: 'break-all' }}>{line}</div>
-            ))}
-            <div ref={terminalEndRef} />
-          </div>
-        </div>
-
-        {/* Footer Metrics - Antigravity Telemetry */}
-        <div style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', backgroundColor: '#ea580c', color: '#ffffff', display: 'flex', justifyContent: 'space-between', padding: '8px 20px', boxSizing: 'border-box', borderTop: '2px solid #111827', fontWeight: 700, fontSize: '0.75rem', zIndex: 10 }}>
-          <div>© 1998 BLACK MESA RESEARCH FACILITY // SECTOR C</div>
-          <div style={{ display: 'flex', gap: '20px' }}>
-            <span>TOKENS_IN: <span style={{ color: '#ffedd5' }}>{inputTokens}</span></span>
-            <span>TOKENS_OUT: <span style={{ color: '#ffedd5' }}>{outputTokens}</span></span>
-            <span>CACHE_R: <span style={{ color: '#ffedd5' }}>{cacheReadTokens}</span></span>
-            <span>PARSE_STATE: <span style={{ color: parseState === 'SUCCESS' ? '#111827' : parseState === 'ERROR' ? '#7f1d1d' : '#ffedd5' }}>{parseState}</span></span>
-          </div>
-        </div>
       </div>
-
+      )}
       {/* Side Panel */}
-      {selectedNode && (
-        <NodeConfigPanel node={selectedNode} onClose={() => setSelectedNodeId(null)} onSave={handleSaveNodeConfig} />
+      {selectedNode && !terminalMode && (
+        <NodeConfigPanel node={selectedNode} onClose={() => setSelectedNodeId(null)} onSave={handleSaveNodeConfig} onOpenGuide={setActiveGuide} isHermesInstalled={isHermesInstalled} isOpenCodeInstalled={isOpenCodeInstalled} isOllamaInstalled={isOllamaInstalled} detectedVram={detectedVram} setDetectedVram={setDetectedVram} hasActiveBackend={hasActiveBackend} handleInitializeHermes={handleInitializeHermes} handleOpenHermes={handleOpenHermes} handleInitializeOpenCode={handleInitializeOpenCode} handleOpenOpenCode={handleOpenOpenCode} handleInitializeOllama={handleInitializeOllama} handleOpenOllama={handleOpenOllama} />
       )}
 
       {/* Guides Modal */}
@@ -714,6 +1048,48 @@ export default function App() {
                   <div style={{ fontSize: '0.75rem', color: '#6b7280', fontFamily: 'sans-serif' }}>Route queries dynamically to save costs and avoid rate limits.</div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Markdown Guide Modal */}
+      {activeGuide && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 2000, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setActiveGuide(null)}>
+          <div onClick={e => e.stopPropagation()} style={{ width: '700px', maxHeight: '80vh', backgroundColor: '#ffffff', border: '4px solid #111827', boxShadow: '8px 8px 0px #111827', display: 'flex', flexDirection: 'column', fontFamily: 'sans-serif' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', backgroundColor: '#111827', color: 'white' }}>
+              <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, letterSpacing: '1px', fontFamily: '"Courier New", Courier, monospace' }}>FRUGALLM // GUIDE</h2>
+              <button onClick={() => setActiveGuide(null)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#9ca3af', fontWeight: 'bold' }}>✕</button>
+            </div>
+            
+            <div style={{ padding: '30px', overflowY: 'auto', lineHeight: 1.6, color: '#374151' }}>
+              <ReactMarkdown 
+                components={{
+                  a: ({node, ...props}) => (
+                    <a {...props} onClick={(e) => {
+                      e.preventDefault();
+                      if (props.href) openUrl(props.href);
+                    }} style={{ color: '#ea580c', textDecoration: 'underline', cursor: 'pointer' }} />
+                  ),
+                  h1: ({node, ...props}) => <h1 {...props} style={{ marginTop: 0, borderBottom: '2px solid #e5e7eb', paddingBottom: '10px' }} />,
+                  h2: ({node, ...props}) => <h2 {...props} style={{ marginTop: '1.5em', borderBottom: '1px solid #e5e7eb', paddingBottom: '8px' }} />,
+                  h3: ({node, ...props}) => <h3 {...props} style={{ marginTop: '1.2em' }} />,
+                  code: ({node, className, children, ...props}: any) => {
+                    const match = /language-([a-zA-Z0-9]+)/.exec(className || '')
+                    return !match ? (
+                      <code {...props} style={{ backgroundColor: '#f3f4f6', padding: '2px 4px', borderRadius: '4px', fontFamily: 'monospace', fontSize: '0.9em', color: '#ea580c' }}>
+                        {children}
+                      </code>
+                    ) : (
+                      <div style={{ backgroundColor: '#111827', color: '#f3f4f6', padding: '12px', borderRadius: '4px', overflowX: 'auto', marginBottom: '16px', fontFamily: 'monospace', fontSize: '0.9em' }}>
+                        <code {...props}>{children}</code>
+                      </div>
+                    )
+                  }
+                }}
+              >
+                {GUIDES_MAP[activeGuide]}
+              </ReactMarkdown>
             </div>
           </div>
         </div>
