@@ -1,6 +1,8 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod telemetry;
+
 use std::env;
 use keyring::Entry;
 use tauri::{Manager, State, Emitter};
@@ -98,12 +100,36 @@ fn check_opencode_status(app: tauri::AppHandle) -> bool {
     false
 }
 
-#[tauri::command]
-fn check_ollama_status() -> bool {
-    std::process::Command::new("ollama")
+#[tauri::command(async)]
+async fn check_ollama_status() -> bool {
+    // 1. Check if it's currently running via its local API
+    if reqwest::get("http://127.0.0.1:11434/api/version").await.is_ok() {
+        return true;
+    }
+
+    // 2. Check if the binary is in PATH
+    if std::process::Command::new("ollama")
         .arg("--version")
         .output()
         .is_ok()
+    {
+        return true;
+    }
+    
+    // 3. Fallback: check common installation paths
+    let paths = [
+        "/usr/local/bin/ollama", 
+        "/opt/homebrew/bin/ollama", 
+        "/usr/bin/ollama",
+        "/Applications/Ollama.app/Contents/MacOS/Ollama"
+    ];
+    for p in paths.iter() {
+        if std::path::Path::new(p).exists() {
+            return true;
+        }
+    }
+    
+    false
 }
 
 #[tauri::command(async)]
@@ -811,6 +837,8 @@ fn main() {
             tauri::async_runtime::spawn(async move {
                 start_frugallm_server().await;
             });
+            
+            telemetry::start_telemetry_loop(app.handle().clone());
             
             if env::args().any(|arg| arg == "--wipe") {
                 if let Ok(app_data_dir) = app.path().app_data_dir() {

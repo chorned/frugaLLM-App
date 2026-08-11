@@ -8,6 +8,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import ReactMarkdown from 'react-markdown';
+import { HardwareTelemetryWidget } from './components/HardwareTelemetryWidget';
 import agentsGuide from './guides/agents.md?raw';
 import ollamaGuide from './guides/ollama.md?raw';
 import openrouterGuide from './guides/openrouter.md?raw';
@@ -594,15 +595,47 @@ export default function App() {
     invoke('check_opencode_status').then((installed) => {
       setIsOpenCodeInstalled(installed as boolean);
     }).catch(console.error);
+    
+    // Auto-detect OpenRouter
+    invoke('get_credential', { service: 'openrouter' }).then(() => {
+      setNodes(nds => nds.map(n => n.id === 'node-openrouter' ? { ...n, data: { ...n.data, status: 'active' } } : n));
+    }).catch(() => {});
+    
+    // Auto-detect Ollama and its installation status via backend
     invoke('check_ollama_status').then((installed) => {
       setIsOllamaInstalled(installed as boolean);
     }).catch(console.error);
+
+    // Sync Ollama's active state dynamically from the telemetry stream
+    const setupTelemetryListener = async () => {
+      return await listen<any>('telemetry_update', (event) => {
+        const status = event.payload?.ollama?.status;
+        if (status === 'active' || status === 'idle') {
+          setIsOllamaInstalled(true);
+          setNodes(nds => nds.map(n => n.id === 'node-ollama' && n.data.status !== 'active' ? { ...n, data: { ...n.data, status: 'active' } } : n));
+        } else if (status === 'offline') {
+          setNodes(nds => nds.map(n => n.id === 'node-ollama' && n.data.status !== 'needs_activation' ? { ...n, data: { ...n.data, status: 'needs_activation' } } : n));
+        }
+      });
+    };
+
+    let unlistenTelemetry: (() => void) | null = null;
+    setupTelemetryListener().then(unlisten => {
+      unlistenTelemetry = unlisten;
+    }).catch(console.error);
+
     invoke('detect_vram').then((vram) => {
       if (vram !== null && vram !== undefined) {
         const vramGb = Math.round(Number(vram) / 1024);
         setDetectedVram(String(vramGb));
       }
     }).catch(console.error);
+
+    return () => {
+      if (unlistenTelemetry) {
+        unlistenTelemetry();
+      }
+    };
   }, []);
 
   const handleInitializeHermes = () => setTerminalMode('install-hermes');
@@ -684,8 +717,7 @@ export default function App() {
     
     if (nodeId === 'node-ollama') {
       try {
-        const url = `http://${finalConfig.ip}:${finalConfig.port}/api/version`;
-        const res = await tauriFetch(url, { method: 'GET' });
+        const res = await tauriFetch(`http://${finalConfig.ip}:${finalConfig.port}/api/version`, { method: 'GET' });
         if (res.ok) {
           finalConfig.status = 'active';
           confetti({
@@ -697,7 +729,8 @@ export default function App() {
         } else {
           finalConfig.status = 'error';
         }
-      } catch (err) {
+      } catch (e) {
+        console.error("Failed to connect to Ollama", e);
         finalConfig.status = 'error';
       }
     }
@@ -740,6 +773,9 @@ export default function App() {
     <div 
       style={{ display: 'flex', width: '100%', height: '100vh', fontFamily: '"Courier New", Courier, monospace', backgroundColor: '#f3f4f6', overflow: 'hidden' }}
     >
+      <div style={{ position: 'absolute', top: 20, right: 20, zIndex: 50 }}>
+        <HardwareTelemetryWidget />
+      </div>
       <style>
         {`
           @keyframes flowAnim {
