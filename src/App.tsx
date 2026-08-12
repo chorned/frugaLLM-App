@@ -9,6 +9,7 @@ import '@xterm/xterm/css/xterm.css';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import ReactMarkdown from 'react-markdown';
 import { HardwareTelemetryWidget } from './components/HardwareTelemetryWidget';
+import { StatusLight, CopyableField, HardwareNode, CloudConnectNode } from './components/NodeWidgets';
 import agentsGuide from './guides/agents.md?raw';
 import ollamaGuide from './guides/ollama.md?raw';
 import openrouterGuide from './guides/openrouter.md?raw';
@@ -37,6 +38,9 @@ type NodeData = {
   extraArgs?: string;
   prompt?: string;
   isAgent?: boolean;
+  isGenerating?: boolean;
+  isHardware?: boolean;
+  isCloud?: boolean;
 };
 
 type AppNode = {
@@ -66,7 +70,28 @@ const initialNodes: AppNode[] = [
       description: 'The ultimate gateway to the cloud! OpenRouter acts as a smart multiplexer, automatically routing your requests to the best and cheapest proprietary AI models available.',
       ip: 'api.openrouter.ai', 
       port: '443',
-      status: 'needs_activation'
+      status: 'needs_activation',
+      isGenerating: false
+    }
+  },
+  {
+    id: 'node-hardware',
+    x: 100, y: 0,
+    data: {
+      label: 'LOCAL HARDWARE',
+      description: 'GPU and CPU resources dedicated to local inference.',
+      status: 'active',
+      isHardware: true
+    }
+  },
+  {
+    id: 'node-cloud',
+    x: 700, y: 0,
+    data: {
+      label: 'EXTERNAL CLOUD',
+      description: 'Routing to external API providers.',
+      status: 'active',
+      isCloud: true
     }
   },
   {
@@ -105,6 +130,8 @@ const initialNodes: AppNode[] = [
 ];
 
 const initialEdges = [
+  { id: 'edge-ollama-hardware', source: 'node-ollama', target: 'node-hardware' },
+  { id: 'edge-openrouter-cloud', source: 'node-openrouter', target: 'node-cloud' },
   { id: 'edge-frugallm-ollama', source: 'node-frugallm', target: 'node-ollama' },
   { id: 'edge-frugallm-openrouter', source: 'node-frugallm', target: 'node-openrouter' },
   { id: 'edge-opencode-frugallm', source: 'node-opencode', target: 'node-frugallm' },
@@ -502,7 +529,10 @@ const TerminalView = ({ mode, onExit, setIsHermesInstalled, setIsOpenCodeInstall
         const dataListener = term.onData((data) => {
           invoke('write_pty', { data }).catch(console.error);
         });
-        unlistenOutput = await listen<string>('pty_output', (event) => term.write(event.payload));
+        unlistenOutput = await listen<string>('pty_output', (event) => {
+          term.write(event.payload);
+          window.dispatchEvent(new CustomEvent('pty_bytes', { detail: event.payload.length }));
+        });
         unlistenExit = await listen<{ exit_code: number }>('pty_exit', (event) => {
           let name = 'Process';
           if (mode === 'run-opencode') name = 'OpenCode';
@@ -738,6 +768,8 @@ export default function App() {
     setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, ...finalConfig } } : n));
   };
 
+  const EDGE_OFFSET = 4; // px offset for parallel streams
+
   const renderEdge = (edge: any) => {
     const source = nodes.find(n => n.id === edge.source);
     const target = nodes.find(n => n.id === edge.target);
@@ -748,20 +780,98 @@ export default function App() {
     const tx = target.x + NODE_WIDTH / 2;
     const ty = target.y + NODE_HEIGHT / 2;
 
-    const isDownstream = edge.id.includes('opencode') || edge.id.includes('hermes');
-    const strokeColor = '#9ca3af';
+    // Normal vector math for parallel offset
+    const dx = tx - sx;
+    const dy = ty - sy;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len === 0) return null;
+    const nx = -dy / len;
+    const ny = dx / len;
+
+    // Forward stream (cyan) — offset along +normal
+    const fwd = {
+      x1: sx + nx * EDGE_OFFSET,
+      y1: sy + ny * EDGE_OFFSET,
+      x2: tx + nx * EDGE_OFFSET,
+      y2: ty + ny * EDGE_OFFSET,
+    };
+
+    // Reverse stream (magenta) — offset along -normal
+    const rev = {
+      x1: sx - nx * EDGE_OFFSET,
+      y1: sy - ny * EDGE_OFFSET,
+      x2: tx - nx * EDGE_OFFSET,
+      y2: ty - ny * EDGE_OFFSET,
+    };
+
+    let fwdClass = "edge-stream-forward";
+    let revClass = "edge-stream-reverse";
+
+    // Only animate infrastructure edges when active
+    if (edge.id === 'edge-ollama-hardware') {
+      const isGenerating = source.data.status === 'active';
+      if (!isGenerating) {
+        fwdClass = "";
+        revClass = "";
+      }
+    } else if (edge.id === 'edge-openrouter-cloud') {
+      // Placeholder: No true inference state exists for OpenRouter yet
+      const isGenerating = source.data.isGenerating === true; 
+      if (!isGenerating) {
+        fwdClass = "";
+        revClass = "";
+      }
+    }
 
     return (
       <g key={edge.id}>
-        <line 
+        {/* Layer 1: Dormant base line */}
+        <line
           x1={sx} y1={sy} x2={tx} y2={ty}
-          stroke={strokeColor} 
+          stroke="#374151"
           strokeWidth="3"
-          strokeDasharray="8 8"
-          className={isDownstream ? "animated-flow-line-reverse" : "animated-flow-line"}
+          strokeOpacity="0.3"
+          strokeLinecap="round"
         />
-        <circle cx={sx} cy={sy} r="4" fill="#111827" />
-        <circle cx={tx} cy={ty} r="4" fill="#111827" />
+        {/* Layer 2: Forward glow (wide, faint) + sharp stream (cyan) */}
+        <line
+          x1={fwd.x1} y1={fwd.y1} x2={fwd.x2} y2={fwd.y2}
+          stroke="#22d3ee"
+          strokeWidth="6"
+          strokeOpacity={fwdClass ? "0.15" : "0"}
+          strokeLinecap="round"
+        />
+        <line
+          x1={fwd.x1} y1={fwd.y1} x2={fwd.x2} y2={fwd.y2}
+          stroke="#22d3ee"
+          strokeWidth="2"
+          strokeDasharray="6 4"
+          strokeLinecap="round"
+          className={fwdClass}
+          strokeOpacity={fwdClass ? "1" : "0.3"}
+        />
+        {/* Layer 3: Reverse glow (wide, faint) + sharp stream (magenta) */}
+        <line
+          x1={rev.x1} y1={rev.y1} x2={rev.x2} y2={rev.y2}
+          stroke="#e879f9"
+          strokeWidth="6"
+          strokeOpacity={revClass ? "0.15" : "0"}
+          strokeLinecap="round"
+        />
+        <line
+          x1={rev.x1} y1={rev.y1} x2={rev.x2} y2={rev.y2}
+          stroke="#e879f9"
+          strokeWidth="2"
+          strokeDasharray="6 4"
+          strokeLinecap="round"
+          className={revClass}
+          strokeOpacity={revClass ? "1" : "0.3"}
+        />
+        {/* Endpoint dots — composited glow via layered circles */}
+        <circle cx={sx} cy={sy} r="6" fill="#22d3ee" fillOpacity="0.15" />
+        <circle cx={sx} cy={sy} r="4" fill="#111827" stroke="#22d3ee" strokeWidth="1.5" />
+        <circle cx={tx} cy={ty} r="6" fill="#e879f9" fillOpacity="0.15" />
+        <circle cx={tx} cy={ty} r="4" fill="#111827" stroke="#e879f9" strokeWidth="1.5" />
       </g>
     );
   };
@@ -778,17 +888,19 @@ export default function App() {
       </div>
       <style>
         {`
-          @keyframes flowAnim {
-            to { stroke-dashoffset: -16; }
+          @keyframes streamForward {
+            0% { stroke-dashoffset: 40; }
+            100% { stroke-dashoffset: 0; }
           }
-          @keyframes flowAnimReverse {
-            to { stroke-dashoffset: 16; }
+          @keyframes streamReverse {
+            0% { stroke-dashoffset: 0; }
+            100% { stroke-dashoffset: 40; }
           }
-          .animated-flow-line {
-            animation: flowAnim 1s linear infinite;
+          .edge-stream-forward {
+            animation: streamForward 0.8s linear infinite;
           }
-          .animated-flow-line-reverse {
-            animation: flowAnimReverse 1s linear infinite;
+          .edge-stream-reverse {
+            animation: streamReverse 1.1s linear infinite;
           }
           .retro-node {
             transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s;
@@ -939,6 +1051,36 @@ export default function App() {
               if (node.id === 'node-hermes') Icon = Icons.workflow;
               if (node.data.isAgent) Icon = Icons.agent;
 
+              if (node.data.isHardware) {
+                return (
+                  <div
+                    key={node.id}
+                    style={{ 
+                      position: 'absolute', left: node.x, top: node.y, width: NODE_WIDTH, 
+                      zIndex: 1, backgroundColor: '#111827', border: '2px solid #374151', 
+                      borderRadius: '4px', boxShadow: '4px 4px 0px rgba(0,0,0,0.5)',
+                      fontFamily: '"Courier New", Courier, monospace'
+                    }}
+                  >
+                    <HardwareNode />
+                  </div>
+                );
+              }
+              
+              if (node.data.isCloud) {
+                return (
+                  <div
+                    key={node.id}
+                    style={{ 
+                      position: 'absolute', left: node.x, top: node.y, width: NODE_WIDTH, height: 130, zIndex: 1,
+                      fontFamily: '"Courier New", Courier, monospace'
+                    }}
+                  >
+                    <CloudConnectNode />
+                  </div>
+                );
+              }
+
               return (
                 <div 
                   key={node.id}
@@ -987,11 +1129,11 @@ export default function App() {
                   </div>
                   
                   {/* Body */}
-                  <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: '8px', backgroundColor: stateColors.bodyBg, color: '#111827' }}>
+                  <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: stateColors.bodyBg, color: '#111827' }}>
                     {isCore ? (
                        <div style={{ textAlign: 'center', padding: '4px 0' }}>
-                         <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#4b5563', marginBottom: '8px', borderBottom: '1px solid #d1d5db', paddingBottom: '6px' }}>
-                           CENTRAL INTELLIGENCE HUB
+                         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '6px' }}>
+                           <StatusLight active={true} text="HUB ONLINE" />
                          </div>
                          <button 
                            onClick={(e) => { e.stopPropagation(); setGuidesOpen(true); }}
@@ -1004,33 +1146,13 @@ export default function App() {
                        </div>
                     ) : node.data.isAgent ? (
                       <>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #d1d5db', paddingBottom: '4px' }}>
-                          <span style={{ fontWeight: 700, fontSize: '0.7rem', color: '#4b5563' }}>BIN:</span>
-                          <span style={{ fontWeight: 700, fontSize: '0.7rem', color: '#111827' }}>{node.data.bin}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ fontWeight: 700, fontSize: '0.7rem', color: '#4b5563' }}>STATUS:</span>
-                          <span style={{ fontWeight: 700, fontSize: '0.7rem', color: stateColors.statusText }}>
-                            {node.data.status.toUpperCase()}
-                          </span>
-                        </div>
+                        <StatusLight active={node.data.status === 'active'} text={node.data.status === 'active' ? 'RUNNING' : node.data.status.toUpperCase()} />
+                        <CopyableField label="BINARY" value={node.data.bin || 'N/A'} />
                       </>
                     ) : (
                       <>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed #d1d5db', paddingBottom: '4px' }}>
-                          <span style={{ fontWeight: 700, fontSize: '0.7rem', color: '#4b5563' }}>
-                            {node.id.includes('openrouter') ? 'LATENCY:' : 'PORT:'}
-                          </span>
-                          <span style={{ fontWeight: 700, fontSize: '0.7rem', color: node.data.status === 'inactive' ? '#9ca3af' : '#111827' }}>
-                            {node.id.includes('openrouter') ? '142ms' : node.data.port}
-                          </span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ fontWeight: 700, fontSize: '0.7rem', color: '#4b5563' }}>STATUS:</span>
-                          <span style={{ fontWeight: 700, fontSize: '0.7rem', color: stateColors.statusText }}>
-                            {node.data.status.toUpperCase()}
-                          </span>
-                        </div>
+                        <StatusLight active={node.data.status === 'active'} text={node.data.status === 'active' ? 'CONNECTED' : node.data.status === 'needs_activation' ? 'STANDBY' : node.data.status.toUpperCase()} />
+                        <CopyableField label={node.id.includes('openrouter') ? 'HOST' : 'ENDPOINT'} value={node.id.includes('openrouter') ? `${node.data.ip}:${node.data.port}` : `${node.data.ip}:${node.data.port}`} />
                       </>
                     )}
                   </div>

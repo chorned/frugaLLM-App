@@ -32,4 +32,5 @@ tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "fs", "io
 reqwest = { version = "0.13.4", features = ["json", "stream"] }
 nvml-wrapper = "0.12.1"
 sysinfo = "0.39.6"
+tauri-plugin-clipboard-manager = "2"
 

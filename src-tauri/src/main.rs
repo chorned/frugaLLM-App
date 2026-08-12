@@ -830,6 +830,7 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .manage(PtyState::default())
         .manage(OllamaDaemonState { child: tokio::sync::Mutex::new(None) })
         .setup(|app| {
