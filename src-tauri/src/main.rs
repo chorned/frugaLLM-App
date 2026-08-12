@@ -335,39 +335,139 @@ struct ProxyActivityPayload {
 
 use futures_util::StreamExt;
 
-async fn chat_completions(
-    axum::extract::State(app): axum::extract::State<std::sync::Arc<tauri::AppHandle>>,
-    headers: axum::http::HeaderMap,
-    Json(mut body): Json<Value>
-) -> axum::response::Response {
-    let client = reqwest::Client::new();
-    
-    // Determine if Ollama is viable (skip if CPU-only)
-    let mut ollama_viable = false;
-    let mut ollama_model = "llama3:8b".to_string();
-    
-    if let Ok(ps_res) = client.get("http://127.0.0.1:11434/api/ps").send().await {
-        if let Ok(ps_json) = ps_res.json::<Value>().await {
-            if let Some(models) = ps_json.get("models").and_then(|m| m.as_array()) {
-                if let Some(first) = models.first() {
-                    let size = first.get("size").and_then(|s| s.as_u64()).unwrap_or(0);
-                    let size_vram = first.get("size_vram").and_then(|s| s.as_u64()).unwrap_or(0);
-                    // Only use Ollama if it's using GPU/Hybrid (size_vram > 0) or if size is unknown
-                    if size_vram > 0 || size == 0 {
-                        ollama_viable = true;
-                    }
-                }
+async fn try_ollama(
+    app: &tauri::AppHandle,
+    client: &reqwest::Client,
+    body: &Value,
+    source: &str,
+    ollama_model: &str,
+) -> Result<axum::response::Response, String> {
+    let mut body = body.clone();
+    if let Some(model) = body.get_mut("model") {
+        *model = json!(ollama_model);
+    }
+    if let Some(obj) = body.as_object_mut() {
+        if !obj.contains_key("options") {
+            obj.insert("options".to_string(), json!({ "num_ctx": 131072 }));
+        } else if let Some(options) = obj.get_mut("options").and_then(|o| o.as_object_mut()) {
+            if !options.contains_key("num_ctx") {
+                options.insert("num_ctx".to_string(), json!(131072));
             }
         }
     }
 
-    if ollama_viable {
-        if let Ok(tags_res) = client.get("http://127.0.0.1:11434/api/tags").send().await {
+    let _ = app.emit("proxy_activity", ProxyActivityPayload {
+        source: source.to_string(),
+        target: "ollama".to_string(),
+    });
+
+    let res = client.post("http://127.0.0.1:11434/v1/chat/completions")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {}", e))?;
+
+    if res.status().is_success() {
+        let mut builder = axum::response::Response::builder().status(res.status());
+        for (key, value) in res.headers() {
+            builder = builder.header(key.clone(), value.clone());
+        }
+        let app_clone = app.clone();
+        let source_clone = source.to_string();
+        let stream = res.bytes_stream().inspect(move |_| {
+            let _ = app_clone.emit("proxy_activity", ProxyActivityPayload {
+                source: source_clone.clone(),
+                target: "ollama".to_string(),
+            });
+        });
+        Ok(builder.body(axum::body::Body::from_stream(stream)).unwrap())
+    } else {
+        Err(format!("Ollama API error: HTTP {}", res.status()))
+    }
+}
+
+async fn try_openrouter(
+    app: &tauri::AppHandle,
+    client: &reqwest::Client,
+    body: &Value,
+    source: &str,
+) -> Result<axum::response::Response, String> {
+    let openrouter_key = crate::get_credential("openrouter")
+        .map_err(|_| "OpenRouter API key not found".to_string())?;
+
+    let mut body = body.clone();
+    if let Some(model) = body.get_mut("model") {
+        *model = json!("anthropic/claude-3-haiku");
+    }
+
+    let _ = app.emit("proxy_activity", ProxyActivityPayload {
+        source: source.to_string(),
+        target: "openrouter".to_string(),
+    });
+
+    let res = client.post("https://openrouter.ai/api/v1/chat/completions")
+        .bearer_auth(openrouter_key)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {}", e))?;
+
+    if res.status().is_success() {
+        let mut builder = axum::response::Response::builder().status(res.status());
+        for (key, value) in res.headers() {
+            builder = builder.header(key.clone(), value.clone());
+        }
+        let app_clone = app.clone();
+        let source_clone = source.to_string();
+        let stream = res.bytes_stream().inspect(move |_| {
+            let _ = app_clone.emit("proxy_activity", ProxyActivityPayload {
+                source: source_clone.clone(),
+                target: "openrouter".to_string(),
+            });
+        });
+        Ok(builder.body(axum::body::Body::from_stream(stream)).unwrap())
+    } else {
+        Err(format!("OpenRouter API error: HTTP {}", res.status()))
+    }
+}
+
+async fn chat_completions(
+    axum::extract::State(app): axum::extract::State<std::sync::Arc<tauri::AppHandle>>,
+    headers: axum::http::HeaderMap,
+    Json(body): Json<Value>
+) -> axum::response::Response {
+    let client = reqwest::Client::new();
+    
+    // Determine if Ollama is viable (skip if CPU-only)
+    let mut ollama_running = false;
+    let mut ollama_viable = false;
+    let mut ollama_model = "llama3:8b".to_string();
+    
+    if let Ok(tags_res) = client.get("http://127.0.0.1:11434/api/tags").send().await {
+        if tags_res.status().is_success() {
+            ollama_running = true;
             if let Ok(tags_json) = tags_res.json::<Value>().await {
                 if let Some(models) = tags_json.get("models").and_then(|m| m.as_array()) {
                     if let Some(first_model) = models.first() {
                         if let Some(name) = first_model.get("name").and_then(|n| n.as_str()) {
                             ollama_model = name.to_string();
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    if ollama_running {
+        if let Ok(ps_res) = client.get("http://127.0.0.1:11434/api/ps").send().await {
+            if let Ok(ps_json) = ps_res.json::<Value>().await {
+                if let Some(models) = ps_json.get("models").and_then(|m| m.as_array()) {
+                    if let Some(first) = models.first() {
+                        let size = first.get("size").and_then(|s| s.as_u64()).unwrap_or(0);
+                        let size_vram = first.get("size_vram").and_then(|s| s.as_u64()).unwrap_or(0);
+                        // Only prefer Ollama if it's using GPU/Hybrid (size_vram > 0) or if size is unknown
+                        if size_vram > 0 || size == 0 {
+                            ollama_viable = true;
                         }
                     }
                 }
@@ -384,106 +484,46 @@ async fn chat_completions(
         "hermes".to_string()
     };
 
-    if let Some(model) = body.get_mut("model") {
-        *model = json!(ollama_model);
-    }
-
-    // Inject num_ctx to support 128k context window for Ollama
-    if let Some(obj) = body.as_object_mut() {
-        if !obj.contains_key("options") {
-            obj.insert("options".to_string(), json!({ "num_ctx": 131072 }));
-        } else if let Some(options) = obj.get_mut("options").and_then(|o| o.as_object_mut()) {
-            if !options.contains_key("num_ctx") {
-                options.insert("num_ctx".to_string(), json!(131072));
-            }
-        }
-    }
-    
+    let mut order = Vec::new();
     if ollama_viable {
-        let _ = app.emit("proxy_activity", ProxyActivityPayload {
-            source: source.clone(),
-            target: "ollama".to_string(),
-        });
+        order.push("ollama");
+        order.push("openrouter");
+    } else {
+        order.push("openrouter");
+        // Only fallback to ollama if we know it's running (even if CPU only or idle)
+        if ollama_running {
+            order.push("ollama");
+        }
+    }
 
-        let ollama_res = client.post("http://127.0.0.1:11434/v1/chat/completions")
-            .json(&body)
-            .send()
-            .await;
+    let mut errors = Vec::new();
 
-        if let Ok(response) = ollama_res {
-            if response.status().is_success() {
-                let mut builder = axum::response::Response::builder()
-                    .status(response.status());
-                for (key, value) in response.headers() {
-                    builder = builder.header(key.clone(), value.clone());
+    for provider in order {
+        match provider {
+            "ollama" => {
+                match try_ollama(&app, &client, &body, &source, &ollama_model).await {
+                    Ok(response) => return response,
+                    Err(e) => errors.push(format!("Ollama failed: {}", e)),
                 }
-                let app_clone = app.clone();
-                let source_clone = source.clone();
-                let stream = response.bytes_stream().inspect(move |_| {
-                    let _ = app_clone.emit("proxy_activity", ProxyActivityPayload {
-                        source: source_clone.clone(),
-                        target: "ollama".to_string(),
-                    });
-                });
-                let body = axum::body::Body::from_stream(stream);
-                return builder.body(body).unwrap();
             }
-        }
-    }
-
-    // Fallback to OpenRouter
-    let openrouter_key = match crate::get_credential("openrouter") {
-        Ok(k) => k,
-        Err(_) => return axum::response::Response::builder()
-            .status(500)
-            .body(axum::body::Body::from("OpenRouter API key not found, and Ollama is either not running or was skipped because it is running purely on CPU (too slow for agents). Please connect an OpenRouter API key in the FrugalLLM UI."))
-            .unwrap(),
-    };
-    
-    if let Some(model) = body.get_mut("model") {
-        *model = json!("anthropic/claude-3-haiku");
-    }
-
-    let res = {
-        let _ = app.emit("proxy_activity", ProxyActivityPayload {
-            source: source.clone(),
-            target: "openrouter".to_string(),
-        });
-        
-        client.post("https://openrouter.ai/api/v1/chat/completions")
-            .bearer_auth(openrouter_key)
-            .json(&body)
-            .send()
-            .await
-    };
-
-    match res {
-        Ok(response) => {
-            let mut builder = axum::response::Response::builder()
-                .status(response.status());
-            
-            for (key, value) in response.headers() {
-                builder = builder.header(key.clone(), value.clone());
+            "openrouter" => {
+                match try_openrouter(&app, &client, &body, &source).await {
+                    Ok(response) => return response,
+                    Err(e) => errors.push(format!("OpenRouter failed: {}", e)),
+                }
             }
-            
-            let app_clone = app.clone();
-            let source_clone = source.clone();
-            let stream = response.bytes_stream().inspect(move |_| {
-                let _ = app_clone.emit("proxy_activity", ProxyActivityPayload {
-                    source: source_clone.clone(),
-                    target: "openrouter".to_string(),
-                });
-            });
-            let body = axum::body::Body::from_stream(stream);
-            builder.body(body).unwrap()
-        }
-        Err(e) => {
-            axum::response::Response::builder()
-                .status(500)
-                .body(axum::body::Body::from(format!("Failed to proxy to OpenRouter: {}", e)))
-                .unwrap()
+            _ => {}
         }
     }
+
+    // If both fail, return an aggregated 500 error
+    axum::response::Response::builder()
+        .status(500)
+        .body(axum::body::Body::from(format!(
+            "All upstream providers failed:\n{}",
+            errors.join("\n")
+        )))
+        .unwrap()
 }
 
 async fn start_frugallm_server(app: tauri::AppHandle) {
