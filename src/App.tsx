@@ -156,7 +156,8 @@ const Tooltip = ({ text }: { text: string }) => {
   );
 };
 
-const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled, isOpenCodeInstalled, isOllamaInstalled, detectedVram, setDetectedVram, hasActiveBackend, handleInitializeHermes, handleOpenHermes, handleInitializeOpenCode, handleOpenOpenCode, handleInitializeOllama, handleOpenOllama }: any) => {
+const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled, isOpenCodeInstalled, isOllamaInstalled, detectedVram, setDetectedVram, hasActiveBackend, handleInitializeHermes, handleOpenHermes, handleUninstallHermes, handleInitializeOpenCode, handleOpenOpenCode, handleUninstallOpenCode, handleInitializeOllama, handleOpenOllama, handleUninstallOllama, handleDisconnectOpenRouter }: any) => {
+  const [confirmUninstall, setConfirmUninstall] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     ip: node.data.ip || '',
     port: node.data.port || '',
@@ -279,11 +280,28 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
       {node.id === 'node-hermes' && isHermesInstalled === true && (
         <div style={{ marginTop: '20px', padding: '16px', backgroundColor: '#f0fdf4', border: '2px dashed #16a34a', borderRadius: '8px' }}>
           <h4 style={{ margin: '0 0 10px 0', color: '#166534', fontSize: '0.9rem' }}>HERMES AGENT INSTALLED</h4>
-          <button 
-            onClick={(e) => { e.stopPropagation(); handleOpenHermes(); }}
-            style={{ width: '100%', padding: '12px', backgroundColor: '#16a34a', color: 'white', border: '2px solid #166534', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-            OPEN HERMES
-          </button>
+          {confirmUninstall === 'hermes' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '0.8rem', color: '#9a3412', fontWeight: 700 }}>ARE YOU SURE?</span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={(e) => { e.stopPropagation(); handleUninstallHermes(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: 'white', border: '2px solid #991b1b', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
+                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#e5e7eb', color: '#374151', border: '2px solid #9ca3af', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button 
+                onClick={(e) => { e.stopPropagation(); handleOpenHermes(); }}
+                style={{ width: '100%', padding: '12px', backgroundColor: '#16a34a', color: 'white', border: '2px solid #166534', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                OPEN HERMES
+              </button>
+              <button 
+                onClick={(e) => { e.stopPropagation(); setConfirmUninstall('hermes'); }}
+                style={{ width: '100%', padding: '8px', backgroundColor: 'transparent', color: '#ef4444', border: '2px dashed #ef4444', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
+                UNINSTALL HERMES
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -305,11 +323,28 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
       {node.id === 'node-opencode' && isOpenCodeInstalled === true && (
         <div style={{ marginTop: '20px', padding: '16px', backgroundColor: '#f0fdf4', border: '2px dashed #16a34a', borderRadius: '8px' }}>
           <h4 style={{ margin: '0 0 10px 0', color: '#166534', fontSize: '0.9rem' }}>OPENCODE AGENT INSTALLED</h4>
-          <button 
-            onClick={(e) => { e.stopPropagation(); handleOpenOpenCode(); }}
-            style={{ width: '100%', padding: '12px', backgroundColor: '#16a34a', color: 'white', border: '2px solid #166534', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-            OPEN OPENCODE
-          </button>
+          {confirmUninstall === 'opencode' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '0.8rem', color: '#9a3412', fontWeight: 700 }}>ARE YOU SURE?</span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={(e) => { e.stopPropagation(); handleUninstallOpenCode(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: 'white', border: '2px solid #991b1b', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
+                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#e5e7eb', color: '#374151', border: '2px solid #9ca3af', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button 
+                onClick={(e) => { e.stopPropagation(); handleOpenOpenCode(); }}
+                style={{ width: '100%', padding: '12px', backgroundColor: '#16a34a', color: 'white', border: '2px solid #166534', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                OPEN OPENCODE
+              </button>
+              <button 
+                onClick={(e) => { e.stopPropagation(); setConfirmUninstall('opencode'); }}
+                style={{ width: '100%', padding: '8px', backgroundColor: 'transparent', color: '#ef4444', border: '2px dashed #ef4444', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
+                UNINSTALL OPENCODE
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -340,11 +375,51 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
       {node.id === 'node-ollama' && isOllamaInstalled === true && (
         <div style={{ marginTop: '20px', padding: '16px', backgroundColor: '#f0fdf4', border: '2px dashed #16a34a', borderRadius: '8px' }}>
           <h4 style={{ margin: '0 0 10px 0', color: '#166534', fontSize: '0.9rem' }}>OLLAMA INSTALLED</h4>
-          <button 
-            onClick={(e) => { e.stopPropagation(); handleOpenOllama(); }}
-            style={{ width: '100%', padding: '12px', backgroundColor: '#16a34a', color: 'white', border: '2px solid #166534', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-            CHAT WITH OLLAMA
-          </button>
+          {confirmUninstall === 'ollama' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '0.8rem', color: '#9a3412', fontWeight: 700 }}>ARE YOU SURE?</span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={(e) => { e.stopPropagation(); handleUninstallOllama(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: 'white', border: '2px solid #991b1b', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
+                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#e5e7eb', color: '#374151', border: '2px solid #9ca3af', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button 
+                onClick={(e) => { e.stopPropagation(); handleOpenOllama(); }}
+                style={{ width: '100%', padding: '12px', backgroundColor: '#16a34a', color: 'white', border: '2px solid #166534', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                CHAT WITH OLLAMA
+              </button>
+              <button 
+                onClick={(e) => { e.stopPropagation(); setConfirmUninstall('ollama'); }}
+                style={{ width: '100%', padding: '8px', backgroundColor: 'transparent', color: '#ef4444', border: '2px dashed #ef4444', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
+                UNINSTALL OLLAMA
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      
+      {node.id === 'node-openrouter' && node.data.status === 'active' && (
+        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: '#f0fdf4', border: '2px dashed #16a34a', borderRadius: '8px' }}>
+          <h4 style={{ margin: '0 0 10px 0', color: '#166534', fontSize: '0.9rem' }}>OPENROUTER CONNECTED</h4>
+          {confirmUninstall === 'openrouter' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '0.8rem', color: '#9a3412', fontWeight: 700 }}>ARE YOU SURE?</span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={(e) => { e.stopPropagation(); handleDisconnectOpenRouter(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: 'white', border: '2px solid #991b1b', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
+                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#e5e7eb', color: '#374151', border: '2px solid #9ca3af', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button 
+                onClick={(e) => { e.stopPropagation(); setConfirmUninstall('openrouter'); }}
+                style={{ width: '100%', padding: '8px', backgroundColor: 'transparent', color: '#ef4444', border: '2px dashed #ef4444', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
+                DISCONNECT
+              </button>
+            </div>
+          )}
         </div>
       )}
       </div>
@@ -692,6 +767,24 @@ export default function App() {
   const handleOpenOpenCode = () => setTerminalMode('run-opencode');
   const handleInitializeOllama = () => setTerminalMode('install-ollama');
   const handleOpenOllama = () => setTerminalMode('run-ollama');
+
+  const handleUninstallHermes = async () => {
+    await invoke('spawn_pty', { command: 'bash', args: ['-c', 'rm -rf ~/.hermes'] });
+    setIsHermesInstalled(false);
+  };
+  const handleUninstallOpenCode = async () => {
+    await invoke('spawn_pty', { command: 'bash', args: ['-c', 'rm -rf ~/.opencode'] });
+    setIsOpenCodeInstalled(false);
+  };
+  const handleUninstallOllama = async () => {
+    await invoke('spawn_pty', { command: 'bash', args: ['-c', 'rm -rf /usr/local/bin/ollama ~/.ollama /Applications/Ollama.app'] });
+    setIsOllamaInstalled(false);
+  };
+  const handleDisconnectOpenRouter = async () => {
+    await invoke('wipe_credentials');
+    setNodes(nds => nds.map(n => n.id === 'node-openrouter' ? { ...n, data: { ...n.data, status: 'inactive', apiKey: '' } } : n));
+  };
+
   const [activeGuide, setActiveGuide] = useState<string | null>(null);
   const handleCanvasMouseDown = (e: any) => {
     setIsDragging(true);
@@ -1197,7 +1290,7 @@ export default function App() {
       )}
       {/* Side Panel */}
       {selectedNode && !terminalMode && (
-        <NodeConfigPanel node={selectedNode} onClose={() => setSelectedNodeId(null)} onSave={handleSaveNodeConfig} onOpenGuide={setActiveGuide} isHermesInstalled={isHermesInstalled} isOpenCodeInstalled={isOpenCodeInstalled} isOllamaInstalled={isOllamaInstalled} detectedVram={detectedVram} setDetectedVram={setDetectedVram} hasActiveBackend={hasActiveBackend} handleInitializeHermes={handleInitializeHermes} handleOpenHermes={handleOpenHermes} handleInitializeOpenCode={handleInitializeOpenCode} handleOpenOpenCode={handleOpenOpenCode} handleInitializeOllama={handleInitializeOllama} handleOpenOllama={handleOpenOllama} />
+        <NodeConfigPanel node={selectedNode} onClose={() => setSelectedNodeId(null)} onSave={handleSaveNodeConfig} onOpenGuide={setActiveGuide} isHermesInstalled={isHermesInstalled} isOpenCodeInstalled={isOpenCodeInstalled} isOllamaInstalled={isOllamaInstalled} detectedVram={detectedVram} setDetectedVram={setDetectedVram} hasActiveBackend={hasActiveBackend} handleInitializeHermes={handleInitializeHermes} handleOpenHermes={handleOpenHermes} handleUninstallHermes={handleUninstallHermes} handleInitializeOpenCode={handleInitializeOpenCode} handleOpenOpenCode={handleOpenOpenCode} handleUninstallOpenCode={handleUninstallOpenCode} handleInitializeOllama={handleInitializeOllama} handleOpenOllama={handleOpenOllama} handleUninstallOllama={handleUninstallOllama} handleDisconnectOpenRouter={handleDisconnectOpenRouter} />
       )}
 
       {/* Guides Modal */}
