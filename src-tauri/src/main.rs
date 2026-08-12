@@ -327,24 +327,63 @@ async fn models() -> Json<Value> {
     }))
 }
 
-async fn chat_completions(Json(mut body): Json<Value>) -> axum::response::Response {
+#[derive(serde::Serialize, Clone)]
+struct ProxyActivityPayload {
+    source: String,
+    target: String,
+}
+
+use futures_util::StreamExt;
+
+async fn chat_completions(
+    axum::extract::State(app): axum::extract::State<std::sync::Arc<tauri::AppHandle>>,
+    headers: axum::http::HeaderMap,
+    Json(mut body): Json<Value>
+) -> axum::response::Response {
     let client = reqwest::Client::new();
     
-    // Attempt Ollama first
+    // Determine if Ollama is viable (skip if CPU-only)
+    let mut ollama_viable = false;
     let mut ollama_model = "llama3:8b".to_string();
-    if let Ok(tags_res) = client.get("http://127.0.0.1:11434/api/tags").send().await {
-        if let Ok(tags_json) = tags_res.json::<Value>().await {
-            if let Some(models) = tags_json.get("models").and_then(|m| m.as_array()) {
-                if let Some(first_model) = models.first() {
-                    if let Some(name) = first_model.get("name").and_then(|n| n.as_str()) {
-                        ollama_model = name.to_string();
+    
+    if let Ok(ps_res) = client.get("http://127.0.0.1:11434/api/ps").send().await {
+        if let Ok(ps_json) = ps_res.json::<Value>().await {
+            if let Some(models) = ps_json.get("models").and_then(|m| m.as_array()) {
+                if let Some(first) = models.first() {
+                    let size = first.get("size").and_then(|s| s.as_u64()).unwrap_or(0);
+                    let size_vram = first.get("size_vram").and_then(|s| s.as_u64()).unwrap_or(0);
+                    // Only use Ollama if it's using GPU/Hybrid (size_vram > 0) or if size is unknown
+                    if size_vram > 0 || size == 0 {
+                        ollama_viable = true;
                     }
                 }
             }
         }
     }
 
-    let original_model = body.get("model").cloned().unwrap_or(json!(""));
+    if ollama_viable {
+        if let Ok(tags_res) = client.get("http://127.0.0.1:11434/api/tags").send().await {
+            if let Ok(tags_json) = tags_res.json::<Value>().await {
+                if let Some(models) = tags_json.get("models").and_then(|m| m.as_array()) {
+                    if let Some(first_model) = models.first() {
+                        if let Some(name) = first_model.get("name").and_then(|n| n.as_str()) {
+                            ollama_model = name.to_string();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let original_model = body.get("model").and_then(|m| m.as_str()).unwrap_or("");
+    let user_agent = headers.get("user-agent").and_then(|h| h.to_str().ok()).unwrap_or("").to_lowercase();
+    
+    let source = if original_model.contains("opencode") || original_model.contains("litellm") || user_agent.contains("opencode") || user_agent.contains("openai") {
+        "opencode".to_string()
+    } else {
+        "hermes".to_string()
+    };
+
     if let Some(model) = body.get_mut("model") {
         *model = json!(ollama_model);
     }
@@ -360,21 +399,35 @@ async fn chat_completions(Json(mut body): Json<Value>) -> axum::response::Respon
         }
     }
     
-    let ollama_res = client.post("http://127.0.0.1:11434/v1/chat/completions")
-        .json(&body)
-        .send()
-        .await;
+    if ollama_viable {
+        let _ = app.emit("proxy_activity", ProxyActivityPayload {
+            source: source.clone(),
+            target: "ollama".to_string(),
+        });
 
-    if let Ok(response) = ollama_res {
-        if response.status().is_success() {
-            let mut builder = axum::response::Response::builder()
-                .status(response.status());
-            for (key, value) in response.headers() {
-                builder = builder.header(key.clone(), value.clone());
+        let ollama_res = client.post("http://127.0.0.1:11434/v1/chat/completions")
+            .json(&body)
+            .send()
+            .await;
+
+        if let Ok(response) = ollama_res {
+            if response.status().is_success() {
+                let mut builder = axum::response::Response::builder()
+                    .status(response.status());
+                for (key, value) in response.headers() {
+                    builder = builder.header(key.clone(), value.clone());
+                }
+                let app_clone = app.clone();
+                let source_clone = source.clone();
+                let stream = response.bytes_stream().inspect(move |_| {
+                    let _ = app_clone.emit("proxy_activity", ProxyActivityPayload {
+                        source: source_clone.clone(),
+                        target: "ollama".to_string(),
+                    });
+                });
+                let body = axum::body::Body::from_stream(stream);
+                return builder.body(body).unwrap();
             }
-            let stream = response.bytes_stream();
-            let body = axum::body::Body::from_stream(stream);
-            return builder.body(body).unwrap();
         }
     }
 
@@ -383,7 +436,7 @@ async fn chat_completions(Json(mut body): Json<Value>) -> axum::response::Respon
         Ok(k) => k,
         Err(_) => return axum::response::Response::builder()
             .status(500)
-            .body(axum::body::Body::from("OpenRouter API key not found and Ollama is not running. Please connect a provider in the FrugalLLM UI."))
+            .body(axum::body::Body::from("OpenRouter API key not found, and Ollama is either not running or was skipped because it is running purely on CPU (too slow for agents). Please connect an OpenRouter API key in the FrugalLLM UI."))
             .unwrap(),
     };
     
@@ -391,11 +444,18 @@ async fn chat_completions(Json(mut body): Json<Value>) -> axum::response::Respon
         *model = json!("anthropic/claude-3-haiku");
     }
 
-    let res = client.post("https://openrouter.ai/api/v1/chat/completions")
-        .bearer_auth(openrouter_key)
-        .json(&body)
-        .send()
-        .await;
+    let res = {
+        let _ = app.emit("proxy_activity", ProxyActivityPayload {
+            source: source.clone(),
+            target: "openrouter".to_string(),
+        });
+        
+        client.post("https://openrouter.ai/api/v1/chat/completions")
+            .bearer_auth(openrouter_key)
+            .json(&body)
+            .send()
+            .await
+    };
 
     match res {
         Ok(response) => {
@@ -406,7 +466,14 @@ async fn chat_completions(Json(mut body): Json<Value>) -> axum::response::Respon
                 builder = builder.header(key.clone(), value.clone());
             }
             
-            let stream = response.bytes_stream();
+            let app_clone = app.clone();
+            let source_clone = source.clone();
+            let stream = response.bytes_stream().inspect(move |_| {
+                let _ = app_clone.emit("proxy_activity", ProxyActivityPayload {
+                    source: source_clone.clone(),
+                    target: "openrouter".to_string(),
+                });
+            });
             let body = axum::body::Body::from_stream(stream);
             builder.body(body).unwrap()
         }
@@ -419,10 +486,12 @@ async fn chat_completions(Json(mut body): Json<Value>) -> axum::response::Respon
     }
 }
 
-async fn start_frugallm_server() {
+async fn start_frugallm_server(app: tauri::AppHandle) {
+    let app_state = std::sync::Arc::new(app);
     let app = Router::new()
         .route("/v1/models", get(models))
-        .route("/v1/chat/completions", post(chat_completions));
+        .route("/v1/chat/completions", post(chat_completions))
+        .with_state(app_state);
 
     if let Ok(listener) = TcpListener::bind("127.0.0.1:8080").await {
         println!("FrugalLLM core server listening on 127.0.0.1:8080");
@@ -835,8 +904,9 @@ fn main() {
         .manage(OllamaDaemonState { child: tokio::sync::Mutex::new(None) })
         .setup(|app| {
             // Spawn FrugalLLM Core Server
+            let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                start_frugallm_server().await;
+                start_frugallm_server(app_handle).await;
             });
             
             telemetry::start_telemetry_loop(app.handle().clone());

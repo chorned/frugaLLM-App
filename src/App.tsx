@@ -618,6 +618,9 @@ export default function App() {
   const [isOllamaInstalled, setIsOllamaInstalled] = useState<boolean | null>(null);
   const [detectedVram, setDetectedVram] = useState<string>('8'); // Default placeholder
 
+  const [activeProxyState, setActiveProxyState] = useState<{source: string, target: string} | null>(null);
+  const proxyTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     invoke('check_hermes_status').then((installed) => {
       setIsHermesInstalled(installed as boolean);
@@ -636,9 +639,8 @@ export default function App() {
       setIsOllamaInstalled(installed as boolean);
     }).catch(console.error);
 
-    // Sync Ollama's active state dynamically from the telemetry stream
     const setupTelemetryListener = async () => {
-      return await listen<any>('telemetry_update', (event) => {
+      let unlisten = await listen<any>('telemetry_update', (event) => {
         const status = event.payload?.ollama?.status;
         if (status === 'active' || status === 'idle') {
           setIsOllamaInstalled(true);
@@ -647,11 +649,21 @@ export default function App() {
           setNodes(nds => nds.map(n => n.id === 'node-ollama' && n.data.status !== 'needs_activation' ? { ...n, data: { ...n.data, status: 'needs_activation' } } : n));
         }
       });
+      return unlisten;
     };
 
     let unlistenTelemetry: (() => void) | null = null;
     setupTelemetryListener().then(unlisten => {
       unlistenTelemetry = unlisten;
+    }).catch(console.error);
+
+    let unlistenProxy: (() => void) | null = null;
+    listen<{source: string, target: string}>('proxy_activity', (event) => {
+      setActiveProxyState(event.payload);
+      if (proxyTimeout.current) clearTimeout(proxyTimeout.current);
+      proxyTimeout.current = setTimeout(() => setActiveProxyState(null), 1000);
+    }).then(unlisten => {
+      unlistenProxy = unlisten;
     }).catch(console.error);
 
     invoke('detect_vram').then((vram) => {
@@ -664,6 +676,12 @@ export default function App() {
     return () => {
       if (unlistenTelemetry) {
         unlistenTelemetry();
+      }
+      if (unlistenProxy) {
+        unlistenProxy();
+      }
+      if (proxyTimeout.current) {
+        clearTimeout(proxyTimeout.current);
       }
     };
   }, []);
@@ -807,19 +825,32 @@ export default function App() {
     let fwdClass = "edge-stream-forward";
     let revClass = "edge-stream-reverse";
 
-    // Only animate infrastructure edges when active
-    if (edge.id === 'edge-ollama-hardware') {
-      const isGenerating = source.data.status === 'active';
+    // Conditionally animate edges based strictly on FrugalLM Core proxy state
+    if (edge.id === 'edge-hermes-frugallm') {
+      if (activeProxyState?.source !== 'hermes') {
+        fwdClass = ""; revClass = "";
+      }
+    } else if (edge.id === 'edge-opencode-frugallm') {
+      if (activeProxyState?.source !== 'opencode') {
+        fwdClass = ""; revClass = "";
+      }
+    } else if (edge.id === 'edge-frugallm-ollama') {
+      if (activeProxyState?.target !== 'ollama') {
+        fwdClass = ""; revClass = "";
+      }
+    } else if (edge.id === 'edge-frugallm-openrouter') {
+      if (activeProxyState?.target !== 'openrouter') {
+        fwdClass = ""; revClass = "";
+      }
+    } else if (edge.id === 'edge-ollama-hardware') {
+      const isGenerating = activeProxyState?.target === 'ollama' || terminalMode === 'run-ollama';
       if (!isGenerating) {
-        fwdClass = "";
-        revClass = "";
+        fwdClass = ""; revClass = "";
       }
     } else if (edge.id === 'edge-openrouter-cloud') {
-      // Placeholder: No true inference state exists for OpenRouter yet
-      const isGenerating = source.data.isGenerating === true; 
+      const isGenerating = source.data.isGenerating === true || activeProxyState?.target === 'openrouter'; 
       if (!isGenerating) {
-        fwdClass = "";
-        revClass = "";
+        fwdClass = ""; revClass = "";
       }
     }
 
