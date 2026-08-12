@@ -23,6 +23,15 @@ const GUIDES_MAP: Record<string, string> = {
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 130;
 
+const nodeLayout: Record<string, { rx: number, ry: number }> = {
+  'node-frugallm': { rx: 0, ry: 0.125 },
+  'node-ollama': { rx: -0.3, ry: -0.075 },
+  'node-openrouter': { rx: 0.3, ry: -0.075 },
+  'node-hardware': { rx: -0.3, ry: -0.325 },
+  'node-cloud': { rx: 0.3, ry: -0.325 },
+  'node-opencode': { rx: -0.3, ry: 0.325 },
+  'node-hermes': { rx: 0.3, ry: 0.325 }
+};
 
 
 type NodeData = {
@@ -519,13 +528,28 @@ const TerminalView = ({ mode, onExit, setIsHermesInstalled, setIsOpenCodeInstall
                 }
               }, 1000);
             } else if (mode !== 'install-ollama') {
-              setIsHermesInstalled(true);
               setTimeout(async () => {
                 if (!isMounted) return;
                 try {
                   await invoke('configure_hermes_defaults');
-                  term.writeln(`\r\n\x1b[32mConfiguration applied. Closing...\x1b[0m\r\n`);
-                  setTimeout(() => { if (isMounted) onExit(); }, 1000);
+                  term.writeln(`\r\n\x1b[32mConfiguration applied.\x1b[0m\r\n`);
+                  
+                  term.writeln(`\r\n\x1b[33mTesting Hermes installation...\x1b[0m`);
+                  let installed = false;
+                  for (let i = 0; i < 5; i++) {
+                     installed = await invoke('check_hermes_status');
+                     if (installed) break;
+                     await new Promise(r => setTimeout(r, 1000));
+                  }
+                  
+                  if (installed) {
+                    setIsHermesInstalled(true);
+                    term.writeln(`\r\n\x1b[32mHermes installed successfully!\x1b[0m\r\n`);
+                    confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+                  } else {
+                    term.writeln(`\r\n\x1b[31mHermes installation check failed.\x1b[0m\r\n`);
+                  }
+                  setTimeout(() => { if (isMounted) onExit(); }, 3000);
                 } catch (err) {
                   term.writeln(`\r\n\x1b[31mFailed to configure Hermes: ${err}\x1b[0m\r\n`);
                 }
@@ -684,12 +708,44 @@ export default function App() {
   const lastPos = useRef({ x: 0, y: 0 });
   const dragDistance = useRef(0);
 
-  // UI State
+  const [containerSize, setContainerSize] = useState({ width: 1024, height: 768 });
+  const canvasRef = useRef<HTMLDivElement>(null);
   const [guidesOpen, setGuidesOpen] = useState(false);
   const [terminalMode, setTerminalMode] = useState<'install-hermes' | 'run-hermes' | 'install-opencode' | 'run-opencode' | 'install-ollama' | 'run-ollama' | null>(null);
   const [isHermesInstalled, setIsHermesInstalled] = useState<boolean | null>(null);
   const [isOpenCodeInstalled, setIsOpenCodeInstalled] = useState<boolean | null>(null);
   const [isOllamaInstalled, setIsOllamaInstalled] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerSize({
+          width: entry.contentRect.width,
+          height: entry.contentRect.height
+        });
+      }
+    });
+    ro.observe(canvasRef.current);
+    return () => ro.disconnect();
+  }, [terminalMode]);
+
+  const spreadWidth = Math.max(containerSize.width, 800);
+  const spreadHeight = Math.max(containerSize.height, 600);
+  const autoScale = Math.min(containerSize.width / 800, containerSize.height / 600, 1);
+
+  const renderedNodes = nodes.map(node => {
+    const layout = nodeLayout[node.id] || { rx: 0, ry: 0 };
+    return {
+      ...node,
+      x: (containerSize.width / 2) + (layout.rx * spreadWidth) - (NODE_WIDTH / 2),
+      y: (containerSize.height / 2) + (layout.ry * spreadHeight) - (NODE_HEIGHT / 2)
+    };
+  });
+
+
+  // UI State
+
   const [detectedVram, setDetectedVram] = useState<string>('8'); // Default placeholder
 
   const [activeProxyState, setActiveProxyState] = useState<{source: string, target: string} | null>(null);
@@ -886,8 +942,8 @@ export default function App() {
   const EDGE_OFFSET = 4; // px offset for parallel streams
 
   const renderEdge = (edge: any) => {
-    const source = nodes.find(n => n.id === edge.source);
-    const target = nodes.find(n => n.id === edge.target);
+    const source = renderedNodes.find(n => n.id === edge.source);
+    const target = renderedNodes.find(n => n.id === edge.target);
     if (!source || !target) return null;
 
     const sx = source.x + NODE_WIDTH / 2;
@@ -1091,6 +1147,7 @@ export default function App() {
         />
       ) : (
         <div 
+          ref={canvasRef}
           onMouseDown={handleCanvasMouseDown}
           onMouseMove={handleCanvasMouseMove}
           onMouseUp={handleCanvasMouseUp}
@@ -1106,8 +1163,8 @@ export default function App() {
 
         <div style={{
           position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-          transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-          transformOrigin: '0 0',
+          transform: `scale(${autoScale}) translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+          transformOrigin: 'center center',
           pointerEvents: 'none'
         }}>
           {/* SVG Layer for Connections */}
@@ -1117,7 +1174,7 @@ export default function App() {
 
           {/* Nodes Layer */}
           <div style={{ pointerEvents: 'auto' }}>
-            {nodes.map(node => {
+            {renderedNodes.map(node => {
               const isSelected = selectedNodeId === node.id;
               const isCore = node.id === 'node-frugallm';
               

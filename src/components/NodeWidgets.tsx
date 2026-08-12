@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { listen } from '@tauri-apps/api/event';
-import { Server } from 'lucide-react';
+
 
 interface TelemetryPayload {
   ollama: {
@@ -237,6 +237,7 @@ export const SettingsToggle = ({
 // =============================================================================
 export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean }) => {
   const [telemetry, setTelemetry] = useState<TelemetryPayload | null>(null);
+  const [isCollapsed, setIsCollapsed] = useState(true);
 
   useEffect(() => {
     console.log("HardwareNode isGenerating:", isGenerating);
@@ -337,9 +338,13 @@ export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', padding: '4px' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #374151', paddingBottom: '8px' }}>
+      <div 
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #374151', paddingBottom: '8px', cursor: 'pointer' }}
+        onClick={() => setIsCollapsed(!isCollapsed)}
+      >
         <div style={{ fontWeight: 800, fontSize: '0.8rem', color: '#e5e7eb', display: 'flex', gap: '8px', alignItems: 'center' }}>
           LOCAL HARDWARE
+          <span style={{ fontSize: '0.6rem', color: '#9ca3af' }}>{isCollapsed ? '▼' : '▲'}</span>
           {/* Debug indicator to help diagnose state issues */}
           <span style={{ fontSize: '0.5rem', color: isGenerating ? '#10b981' : '#ef4444' }}>
             [gen:{isGenerating ? 'T' : 'F'} loaded:{isLoaded ? 'T' : 'F'}]
@@ -356,49 +361,53 @@ export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean 
         </span>
       </div>
 
-      {/* Utilization Bar (Load) */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', color: '#9ca3af' }}>
-          <span>{telemetry?.ollama?.location_state === 'cpu' ? 'CPU Load' : 'GPU Load'}</span>
-          <span>{loadPercent.toFixed(1)}%</span>
-        </div>
-        <div style={{ width: '100%', height: '10px', backgroundColor: '#1f2937', borderRadius: '5px', overflow: 'hidden' }}>
-          <div 
-            style={{ 
-              height: '100%', 
-              backgroundColor: telemetry?.ollama?.location_state === 'cpu' ? '#3b82f6' : '#ea580c', 
-              transition: 'width 0.3s ease-out', 
-              width: `${Math.min(100, Math.max(0, loadPercent))}%` 
-            }} 
-          />
-        </div>
-      </div>
+      {!isCollapsed && (
+        <>
+          {/* Utilization Bar (Load) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', color: '#9ca3af' }}>
+              <span>{telemetry?.ollama?.location_state === 'cpu' ? 'CPU Load' : 'GPU Load'}</span>
+              <span>{loadPercent.toFixed(1)}%</span>
+            </div>
+            <div style={{ width: '100%', height: '10px', backgroundColor: '#1f2937', borderRadius: '5px', overflow: 'hidden' }}>
+              <div 
+                style={{ 
+                  height: '100%', 
+                  backgroundColor: telemetry?.ollama?.location_state === 'cpu' ? '#3b82f6' : '#ea580c', 
+                  transition: 'width 0.3s ease-out', 
+                  width: `${Math.min(100, Math.max(0, loadPercent))}%` 
+                }} 
+              />
+            </div>
+          </div>
 
-      {/* Utilization Bar (Memory) */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', color: '#9ca3af' }}>
-          <span>{isCpuMode ? 'RAM Allocation' : 'VRAM Allocation'}</span>
-          <span>{memUsed} / {memTotal} GB</span>
-        </div>
-        <div style={{ width: '100%', height: '10px', backgroundColor: '#1f2937', borderRadius: '5px', overflow: 'hidden' }}>
-          <div 
-            style={{ 
-              height: '100%', 
-              backgroundColor: '#8b5cf6', 
-              transition: 'width 0.3s ease-out', 
-              width: `${Math.min(100, Math.max(0, memPercent))}%` 
-            }} 
-          />
-        </div>
-      </div>
+          {/* Utilization Bar (Memory) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', color: '#9ca3af' }}>
+              <span>{isCpuMode ? 'RAM Allocation' : 'VRAM Allocation'}</span>
+              <span>{memUsed} / {memTotal} GB</span>
+            </div>
+            <div style={{ width: '100%', height: '10px', backgroundColor: '#1f2937', borderRadius: '5px', overflow: 'hidden' }}>
+              <div 
+                style={{ 
+                  height: '100%', 
+                  backgroundColor: '#8b5cf6', 
+                  transition: 'width 0.3s ease-out', 
+                  width: `${Math.min(100, Math.max(0, memPercent))}%` 
+                }} 
+              />
+            </div>
+          </div>
 
-      {/* Throughput Metric */}
-      <div style={{ marginTop: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>Throughput</span>
-        <span style={{ fontSize: '0.85rem', fontWeight: 800, color: isActive ? '#10b981' : '#6b7280' }}>
-          {throughput.toFixed(1)} <span style={{ fontSize: '0.65rem', color: '#9ca3af' }}>t/s</span>
-        </span>
-      </div>
+          {/* Throughput Metric */}
+          <div style={{ marginTop: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>Throughput</span>
+            <span style={{ fontSize: '0.85rem', fontWeight: 800, color: isActive ? '#10b981' : '#6b7280' }}>
+              {throughput.toFixed(1)} <span style={{ fontSize: '0.65rem', color: '#9ca3af' }}>t/s</span>
+            </span>
+          </div>
+        </>
+      )}
     </div>
   );
 };

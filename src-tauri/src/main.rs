@@ -85,6 +85,10 @@ fn wipe_credentials() -> Result<(), String> {
 #[tauri::command]
 fn check_hermes_status(app: tauri::AppHandle) -> bool {
     if let Ok(home) = app.path().home_dir() {
+        let local_bin_hermes = home.join(".local").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" });
+        if local_bin_hermes.exists() {
+            return true;
+        }
         let hermes_path = home.join(".hermes").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" });
         return hermes_path.exists();
     }
@@ -94,6 +98,10 @@ fn check_hermes_status(app: tauri::AppHandle) -> bool {
 #[tauri::command]
 fn check_opencode_status(app: tauri::AppHandle) -> bool {
     if let Ok(home) = app.path().home_dir() {
+        let local_bin_opencode = home.join(".local").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
+        if local_bin_opencode.exists() {
+            return true;
+        }
         let opencode_path = home.join(".opencode").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
         return opencode_path.exists();
     }
@@ -515,7 +523,7 @@ async fn chat_completions(
     let original_model = body.get("model").and_then(|m| m.as_str()).unwrap_or("");
     let user_agent = headers.get("user-agent").and_then(|h| h.to_str().ok()).unwrap_or("").to_lowercase();
     
-    let source = if original_model.contains("opencode") || original_model.contains("litellm") || user_agent.contains("opencode") || user_agent.contains("openai") {
+    let source = if original_model.contains("opencode") || original_model.contains("litellm") || user_agent.contains("opencode") {
         "opencode".to_string()
     } else {
         "hermes".to_string()
@@ -977,6 +985,7 @@ fn main() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(PtyState::default())
         .manage(OllamaDaemonState { child: tokio::sync::Mutex::new(None) })
         .setup(|app| {
@@ -1008,6 +1017,12 @@ fn main() {
                         let _ = std::fs::remove_dir_all(hermes_dir);
                         println!(".hermes directory wiped.");
                     }
+                    
+                    let local_bin_hermes = home.join(".local").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" });
+                    if local_bin_hermes.exists() {
+                        let _ = std::fs::remove_file(local_bin_hermes);
+                        println!("local bin hermes wiped.");
+                    }
 
                     let opencode_dir = home.join(".opencode");
                     if opencode_dir.exists() {
@@ -1018,6 +1033,12 @@ fn main() {
                         
                         let _ = std::fs::remove_dir_all(opencode_dir);
                         println!(".opencode directory wiped.");
+                    }
+                    
+                    let local_bin_opencode = home.join(".local").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
+                    if local_bin_opencode.exists() {
+                        let _ = std::fs::remove_file(local_bin_opencode);
+                        println!("local bin opencode wiped.");
                     }
 
                     let ollama_dir = home.join(".ollama");
