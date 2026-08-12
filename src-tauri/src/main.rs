@@ -331,6 +331,22 @@ async fn models() -> Json<Value> {
 struct ProxyActivityPayload {
     source: String,
     target: String,
+    is_active: bool,
+}
+
+struct NotifyOnDrop {
+    app: tauri::AppHandle,
+    source: String,
+    target: String,
+}
+impl Drop for NotifyOnDrop {
+    fn drop(&mut self) {
+        let _ = self.app.emit("proxy_activity", ProxyActivityPayload {
+            source: self.source.clone(),
+            target: self.target.clone(),
+            is_active: false,
+        });
+    }
 }
 
 use futures_util::StreamExt;
@@ -359,7 +375,14 @@ async fn try_ollama(
     let _ = app.emit("proxy_activity", ProxyActivityPayload {
         source: source.to_string(),
         target: "ollama".to_string(),
+        is_active: true,
     });
+
+    let drop_guard = NotifyOnDrop {
+        app: app.clone(),
+        source: source.to_string(),
+        target: "ollama".to_string(),
+    };
 
     let res = client.post("http://127.0.0.1:11434/v1/chat/completions")
         .json(&body)
@@ -375,9 +398,11 @@ async fn try_ollama(
         let app_clone = app.clone();
         let source_clone = source.to_string();
         let stream = res.bytes_stream().inspect(move |_| {
+            let _ = &drop_guard;
             let _ = app_clone.emit("proxy_activity", ProxyActivityPayload {
                 source: source_clone.clone(),
                 target: "ollama".to_string(),
+                is_active: true,
             });
         });
         Ok(builder.body(axum::body::Body::from_stream(stream)).unwrap())
@@ -403,7 +428,14 @@ async fn try_openrouter(
     let _ = app.emit("proxy_activity", ProxyActivityPayload {
         source: source.to_string(),
         target: "openrouter".to_string(),
+        is_active: true,
     });
+
+    let drop_guard = NotifyOnDrop {
+        app: app.clone(),
+        source: source.to_string(),
+        target: "openrouter".to_string(),
+    };
 
     let res = client.post("https://openrouter.ai/api/v1/chat/completions")
         .bearer_auth(openrouter_key)
@@ -420,9 +452,11 @@ async fn try_openrouter(
         let app_clone = app.clone();
         let source_clone = source.to_string();
         let stream = res.bytes_stream().inspect(move |_| {
+            let _ = &drop_guard;
             let _ = app_clone.emit("proxy_activity", ProxyActivityPayload {
                 source: source_clone.clone(),
                 target: "openrouter".to_string(),
+                is_active: true,
             });
         });
         Ok(builder.body(axum::body::Body::from_stream(stream)).unwrap())
@@ -448,9 +482,12 @@ async fn chat_completions(
             ollama_running = true;
             if let Ok(tags_json) = tags_res.json::<Value>().await {
                 if let Some(models) = tags_json.get("models").and_then(|m| m.as_array()) {
-                    if let Some(first_model) = models.first() {
-                        if let Some(name) = first_model.get("name").and_then(|n| n.as_str()) {
-                            ollama_model = name.to_string();
+                    for model in models {
+                        if let Some(name) = model.get("name").and_then(|n| n.as_str()) {
+                            if !name.contains("frugallm-active") {
+                                ollama_model = name.to_string();
+                                break;
+                            }
                         }
                     }
                 }

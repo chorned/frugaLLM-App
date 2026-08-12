@@ -92,7 +92,13 @@ pub fn start_telemetry_loop(app: AppHandle) {
                     if let Ok(json) = resp.json::<serde_json::Value>().await {
                         new_ollama_state.status = "idle".into();
                         if let Some(models) = json.get("models").and_then(|m| m.as_array()) {
-                            if let Some(model) = models.first() {
+                            // Find the first model that isn't the proxy dummy model
+                            let active_model = models.iter().find(|m| {
+                                let name = m.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                                !name.contains("frugallm-active")
+                            }).or_else(|| models.first());
+
+                            if let Some(model) = active_model {
                                 new_ollama_state.status = "active".into();
                                 new_ollama_state.model_name = model.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown").to_string();
                                 

@@ -8,7 +8,6 @@ import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import ReactMarkdown from 'react-markdown';
-import { HardwareTelemetryWidget } from './components/HardwareTelemetryWidget';
 import { StatusLight, CopyableField, HardwareNode, CloudConnectNode } from './components/NodeWidgets';
 import agentsGuide from './guides/agents.md?raw';
 import ollamaGuide from './guides/ollama.md?raw';
@@ -733,10 +732,15 @@ export default function App() {
     }).catch(console.error);
 
     let unlistenProxy: (() => void) | null = null;
-    listen<{source: string, target: string}>('proxy_activity', (event) => {
-      setActiveProxyState(event.payload);
+    listen<{source: string, target: string, is_active: boolean}>('proxy_activity', (event) => {
       if (proxyTimeout.current) clearTimeout(proxyTimeout.current);
-      proxyTimeout.current = setTimeout(() => setActiveProxyState(null), 1000);
+      if (event.payload.is_active) {
+        setActiveProxyState({ source: event.payload.source, target: event.payload.target });
+        // Fallback timeout in case the drop event is lost
+        proxyTimeout.current = setTimeout(() => setActiveProxyState(null), 120000);
+      } else {
+        setActiveProxyState(null);
+      }
     }).then(unlisten => {
       unlistenProxy = unlisten;
     }).catch(console.error);
@@ -1007,9 +1011,6 @@ export default function App() {
     <div 
       style={{ display: 'flex', width: '100%', height: '100vh', fontFamily: '"Courier New", Courier, monospace', backgroundColor: '#f3f4f6', overflow: 'hidden' }}
     >
-      <div style={{ position: 'absolute', top: 20, right: 20, zIndex: 50 }}>
-        <HardwareTelemetryWidget />
-      </div>
       <style>
         {`
           @keyframes streamForward {
@@ -1101,12 +1102,7 @@ export default function App() {
             cursor: isDragging ? 'grabbing' : 'grab'
           }}
         >
-          <div style={{ position: 'absolute', top: 20, left: 20, backgroundColor: '#111827', padding: '12px 20px', border: '2px solid #111827', boxShadow: '4px 4px 0px rgba(0,0,0,0.5)', zIndex: 10 }}>
-            <h1 style={{ margin: '0 0 4px 0', fontSize: '1.2rem', color: '#ffffff', fontWeight: 900, letterSpacing: '1px' }}>TEST PROTOCOL ALPHA</h1>
-            <p style={{ margin: 0, fontSize: '0.8rem', color: '#9ca3af', fontWeight: 700 }}>
-              NEURAL TOPOLOGY <span style={{ backgroundColor: '#374151', color: '#ffffff', padding: '2px 4px' }}>// CENTRAL HUB VIEW</span>
-            </p>
-          </div>
+
 
         <div style={{
           position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
@@ -1176,6 +1172,7 @@ export default function App() {
               if (node.data.isAgent) Icon = Icons.agent;
 
               if (node.data.isHardware) {
+                const isOllamaGenerating = activeProxyState?.target === 'ollama' || terminalMode === 'run-ollama';
                 return (
                   <div
                     key={node.id}
@@ -1186,21 +1183,24 @@ export default function App() {
                       fontFamily: '"Courier New", Courier, monospace'
                     }}
                   >
-                    <HardwareNode />
+                    <HardwareNode isGenerating={isOllamaGenerating} />
                   </div>
                 );
               }
               
               if (node.data.isCloud) {
+                const isOpenRouterGenerating = activeProxyState?.target === 'openrouter';
                 return (
                   <div
                     key={node.id}
                     style={{ 
-                      position: 'absolute', left: node.x, top: node.y, width: NODE_WIDTH, height: 130, zIndex: 1,
+                      position: 'absolute', left: node.x, top: node.y, width: NODE_WIDTH, 
+                      zIndex: 1, backgroundColor: '#111827', border: '2px solid #374151', 
+                      borderRadius: '4px', boxShadow: '4px 4px 0px rgba(0,0,0,0.5)',
                       fontFamily: '"Courier New", Courier, monospace'
                     }}
                   >
-                    <CloudConnectNode />
+                    <CloudConnectNode isActive={isOpenRouterGenerating} />
                   </div>
                 );
               }
@@ -1275,7 +1275,7 @@ export default function App() {
                       </>
                     ) : (
                       <>
-                        <StatusLight active={node.data.status === 'active'} text={node.data.status === 'active' ? 'CONNECTED' : node.data.status === 'needs_activation' ? 'STANDBY' : node.data.status.toUpperCase()} />
+                        <StatusLight active={node.data.status === 'active'} text={node.data.status === 'active' ? 'CONNECTED' : node.data.status === 'needs_activation' ? (node.id === 'node-ollama' && isOllamaInstalled ? 'STOPPED' : 'STANDBY') : node.data.status.toUpperCase()} />
                         <CopyableField label={node.id.includes('openrouter') ? 'HOST' : 'ENDPOINT'} value={node.id.includes('openrouter') ? `${node.data.ip}:${node.data.port}` : `${node.data.ip}:${node.data.port}`} />
                       </>
                     )}

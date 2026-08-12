@@ -235,8 +235,12 @@ export const SettingsToggle = ({
 // =============================================================================
 // HardwareNode — Infrastructure node for local GPU/CPU telemetry
 // =============================================================================
-export const HardwareNode = () => {
+export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean }) => {
   const [telemetry, setTelemetry] = useState<TelemetryPayload | null>(null);
+
+  useEffect(() => {
+    console.log("HardwareNode isGenerating:", isGenerating);
+  }, [isGenerating]);
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
@@ -319,14 +323,37 @@ export const HardwareNode = () => {
     };
   }, [isActive]);
 
+  const isLoaded = telemetry?.ollama?.status === 'active';
+  const isThinking = (isGenerating && isLoaded) || throughput > 0;
+  const isLoading = isGenerating && !isLoaded;
+
+  let headerStatusText = 'IDLE';
+  if (isLoading) headerStatusText = 'LOADING';
+  else if (isThinking) headerStatusText = 'THINKING';
+  else if (isLoaded) headerStatusText = 'LOADED';
+
+  const isStatusActive = isLoading || isThinking || isLoaded;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', padding: '4px' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #374151', paddingBottom: '8px' }}>
-        <div style={{ fontWeight: 800, fontSize: '0.8rem', color: '#e5e7eb' }}>
+        <div style={{ fontWeight: 800, fontSize: '0.8rem', color: '#e5e7eb', display: 'flex', gap: '8px', alignItems: 'center' }}>
           LOCAL HARDWARE
+          {/* Debug indicator to help diagnose state issues */}
+          <span style={{ fontSize: '0.5rem', color: isGenerating ? '#10b981' : '#ef4444' }}>
+            [gen:{isGenerating ? 'T' : 'F'} loaded:{isLoaded ? 'T' : 'F'}]
+          </span>
         </div>
-        <StatusLight active={isActive} text={isActive ? 'COMPUTING' : 'IDLE'} />
+        <StatusLight active={isStatusActive} text={headerStatusText} />
+      </div>
+
+      {/* Model Name Indicator */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', color: '#9ca3af' }}>Active Model</span>
+        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: isLoaded ? '#e5e7eb' : '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }} title={isLoaded ? telemetry?.ollama?.model_name : 'None'}>
+          {isLoaded ? telemetry?.ollama?.model_name : 'None'}
+        </span>
       </div>
 
       {/* Utilization Bar (Load) */}
@@ -379,28 +406,27 @@ export const HardwareNode = () => {
 // =============================================================================
 // CloudConnectNode — Abstract infrastructure node for external network routing
 // =============================================================================
-export const CloudConnectNode = () => (
-  <div 
-    style={{ 
-      display: 'flex', 
-      flexDirection: 'column', 
-      gap: '8px', 
-      alignItems: 'center', 
-      justifyContent: 'center', 
-      height: '100%',
-      backgroundColor: 'rgba(59, 130, 246, 0.05)',
-      borderRadius: '8px',
-      border: '2px dashed rgba(59, 130, 246, 0.3)',
-      padding: '16px',
-      boxSizing: 'border-box'
-    }}
-  >
-    <Server size={32} color="#60a5fa" style={{ marginBottom: '8px' }} />
-    <div style={{ textAlign: 'center', fontSize: '0.75rem', color: '#93c5fd', fontWeight: 600, lineHeight: 1.4 }}>
-      EXTERNAL CLOUD ZONE
+export const CloudConnectNode = ({ isActive = false }: { isActive?: boolean }) => {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', padding: '4px' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #374151', paddingBottom: '8px' }}>
+        <div style={{ fontWeight: 800, fontSize: '0.8rem', color: '#e5e7eb', display: 'flex', gap: '8px', alignItems: 'center' }}>
+          EXTERNAL CLOUD
+          <span style={{ fontSize: '0.5rem', color: isActive ? '#10b981' : '#6b7280' }}>
+            [proxy:{isActive ? 'ACTV' : 'IDLE'}]
+          </span>
+        </div>
+        <StatusLight active={isActive} text={isActive ? 'ROUTING' : 'IDLE'} />
+      </div>
+
+      {/* Connection Target Indicator */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', color: '#9ca3af' }}>Gateway</span>
+        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#e5e7eb' }}>
+          OpenRouter API
+        </span>
+      </div>
     </div>
-    <div style={{ textAlign: 'center', fontSize: '0.6rem', color: '#475569', fontWeight: 600 }}>
-      Visualizes data packets routing between OpenRouter and external provider APIs.
-    </div>
-  </div>
-);
+  );
+};
