@@ -1,5 +1,6 @@
 # Tauri + React + Typescript
 
+[![Release](https://github.com/chorned/frugallm-app/actions/workflows/release.yml/badge.svg)](https://github.com/chorned/frugallm-app/actions/workflows/release.yml)
 This template should help get you started developing with Tauri, React and Typescript in Vite.
 
 ## Recommended IDE Setup
