@@ -164,7 +164,7 @@ const Tooltip = ({ text }: { text: string }) => {
   );
 };
 
-const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled, isOpenCodeInstalled, isOllamaInstalled, detectedVram, setDetectedVram, hasActiveBackend, handleInitializeHermes, handleOpenHermes, handleUninstallHermes, handleInitializeOpenCode, handleOpenOpenCode, handleUninstallOpenCode, handleInitializeOllama, handleOpenOllama, handleUninstallOllama, handleDisconnectOpenRouter }: any) => {
+const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled, isOpenCodeInstalled, isOllamaInstalled, detectedVram, setDetectedVram, hasActiveBackend, handleInitializeHermes, handleOpenHermes, handleUninstallHermes, handleInitializeOpenCode, handleOpenOpenCode, handleUninstallOpenCode, handleInitializeOllama, handleOpenOllama, handleUninstallOllama, handleDisconnectOpenRouter, frugalConfig, handleOpenHermesDesktop, handleOpenHermesWeb, handleOpenOpenCodeWeb, activeProcesses, handleKillProcess }: any) => {
   const [confirmUninstall, setConfirmUninstall] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     ip: node.data.ip || '',
@@ -175,22 +175,39 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
     bin: node.data.bin || '',
     extraArgs: node.data.extraArgs || '',
     prompt: node.data.prompt || '',
-    apiKey: '' // specifically for openrouter credentials
+    apiKey: '', // specifically for openrouter credentials
+    bind_all_interfaces: false,
+    api_password: '',
+    hermes_workspace: frugalConfig?.hermes_workspace || '',
+    opencode_workspace: frugalConfig?.opencode_workspace || ''
   });
 
   useEffect(() => {
-    setFormData({ 
-      ip: node.data.ip || '', 
-      port: node.data.port || '', 
-      status: node.data.status || 'active',
-      schemaPath: node.data.schemaPath || '',
-      cwd: node.data.cwd || '',
-      bin: node.data.bin || '',
-      extraArgs: node.data.extraArgs || '',
-      prompt: node.data.prompt || '',
-      apiKey: ''
-    });
-  }, [node]);
+    if (node.id === 'node-frugallm') {
+      setFormData(prev => ({
+        ...prev,
+        port: frugalConfig?.port?.toString() || '0',
+        bind_all_interfaces: frugalConfig?.bind_all_interfaces || false,
+        api_password: frugalConfig?.api_password || ''
+      }));
+    } else {
+      setFormData({ 
+        ip: node.data.ip || '', 
+        port: node.data.port || '', 
+        status: node.data.status || 'active',
+        schemaPath: node.data.schemaPath || '',
+        cwd: node.data.cwd || '',
+        bin: node.data.bin || '',
+        extraArgs: node.data.extraArgs || '',
+        prompt: node.data.prompt || '',
+        apiKey: '',
+        bind_all_interfaces: false,
+        api_password: '',
+        hermes_workspace: frugalConfig?.hermes_workspace || '~/Hermes',
+        opencode_workspace: frugalConfig?.opencode_workspace || '~/Opencode',
+      });
+    }
+  }, [node, frugalConfig]);
 
   const handleChange = (e: any) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
   const handleSave = () => onSave(node.id, formData);
@@ -254,6 +271,43 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
                 <input type="text" name="port" value={formData.port} onChange={handleChange}
                   style={{ width: '100%', padding: '10px 12px', border: '2px solid #111827', backgroundColor: '#ffffff', color: '#111827', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: '2px 2px 0px #111827' }} />
               </div>
+              {node.id === 'node-frugallm' && (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' }}>
+                    <input type="checkbox" id="bind_all_interfaces" name="bind_all_interfaces" checked={formData.bind_all_interfaces} onChange={e => setFormData(p => ({...p, bind_all_interfaces: e.target.checked}))} />
+                    <label htmlFor="bind_all_interfaces" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#111827' }}>Make available everywhere <Tooltip text="Making FrugaLLM available everywhere means it will detect traffic from all your network connections. Do not enable this if you only using FrugaLLM on one machine." /></label>
+                  </div>
+                  <div style={{ marginTop: '10px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#111827', marginBottom: '6px' }}>API PASSWORD (OPTIONAL) <Tooltip text="Set an API token to secure your FrugalLM node." /></label>
+                    <input type="password" name="api_password" value={formData.api_password} onChange={handleChange} placeholder="Super secret..."
+                      style={{ width: '100%', padding: '10px 12px', border: '2px solid #111827', backgroundColor: '#ffffff', color: '#111827', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: '2px 2px 0px #111827' }} />
+                  </div>
+                  <div style={{ marginTop: '20px', padding: '12px', backgroundColor: '#f3f4f6', border: '2px dashed #9ca3af', borderRadius: '4px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#4b5563' }}>SESSION TOKENS</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#111827' }}>{frugalConfig?.tokens_used_session || 0}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#4b5563' }}>LIFETIME TOKENS</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#111827' }}>{frugalConfig?.tokens_used_lifetime || 0}</span>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => {
+                       navigator.clipboard.writeText(`http://${formData.bind_all_interfaces ? '0.0.0.0' : '127.0.0.1'}:${formData.port}`);
+                    }}
+                    style={{ marginTop: '15px', width: '100%', padding: '8px', backgroundColor: '#e5e7eb', color: '#111827', border: '2px solid #111827', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '2px 2px 0px #111827' }}>
+                    COPY IP & PORT
+                  </button>
+                  <button 
+                    onClick={() => {
+                       if (formData.api_password) navigator.clipboard.writeText(formData.api_password);
+                    }}
+                    style={{ marginTop: '10px', width: '100%', padding: '8px', backgroundColor: '#e5e7eb', color: '#111827', border: '2px solid #111827', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '2px 2px 0px #111827' }}>
+                    COPY API PASSWORD
+                  </button>
+                </>
+              )}
               {node.id === 'node-openrouter' && (
                 <div>
                   <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#111827', marginBottom: '6px' }}>API KEY <Tooltip text="Your OpenRouter API Key. This will be securely saved into your operating system's native Keychain!" /></label>
@@ -298,10 +352,41 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div>
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#166534', marginBottom: '6px' }}>WORKSPACE FOLDER</label>
+                <input type="text" name="hermes_workspace" value={formData.hermes_workspace || ''} onChange={handleChange}
+                  style={{ width: '100%', padding: '10px 12px', border: '2px solid #166534', backgroundColor: '#ffffff', color: '#166534', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600 }} />
+              </div>
               <button 
                 onClick={(e) => { e.stopPropagation(); handleOpenHermes(); }}
                 style={{ width: '100%', padding: '12px', backgroundColor: '#16a34a', color: 'white', border: '2px solid #166534', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-                OPEN HERMES
+                LAUNCH HERMES
+              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); handleOpenHermesDesktop(); }}
+                  style={{ flex: 1, padding: '8px', backgroundColor: '#dbeafe', color: '#1e3a8a', border: '2px solid #3b82f6', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
+                  LAUNCH DESKTOP
+                </button>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); handleOpenHermesWeb(); }}
+                  style={{ flex: 1, padding: '8px', backgroundColor: '#dbeafe', color: '#1e3a8a', border: '2px solid #3b82f6', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
+                  LAUNCH WEBUI
+                </button>
+              </div>
+              {['run-hermes', 'run-hermes-desktop', 'run-hermes-web'].map(mode => activeProcesses && activeProcesses[mode] && (
+                <div key={mode} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: '#f0fdf4', border: '2px solid #16a34a', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#166534', fontWeight: 700, fontSize: '0.8rem' }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#16a34a', boxShadow: '0 0 4px #16a34a' }} />
+                    {mode.replace('run-', '').toUpperCase()} ACTIVE
+                  </div>
+                  <button onClick={(e) => { e.stopPropagation(); handleKillProcess(mode); }} style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '4px 8px', fontSize: '0.7rem', fontWeight: 'bold', cursor: 'pointer' }}>KILL</button>
+                </div>
+              ))}
+              <button 
+                onClick={(e) => { e.stopPropagation(); invoke('edit_hermes_soul').catch(console.error); }}
+                style={{ width: '100%', padding: '8px', backgroundColor: '#f3f4f6', color: '#374151', border: '2px solid #d1d5db', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
+                EDIT SOUL.MD
               </button>
               <button 
                 onClick={(e) => { e.stopPropagation(); setConfirmUninstall('hermes'); }}
@@ -341,11 +426,30 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div>
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#166534', marginBottom: '6px' }}>WORKSPACE FOLDER</label>
+                <input type="text" name="opencode_workspace" value={formData.opencode_workspace || ''} onChange={handleChange}
+                  style={{ width: '100%', padding: '10px 12px', border: '2px solid #166534', backgroundColor: '#ffffff', color: '#166534', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600 }} />
+              </div>
               <button 
                 onClick={(e) => { e.stopPropagation(); handleOpenOpenCode(); }}
                 style={{ width: '100%', padding: '12px', backgroundColor: '#16a34a', color: 'white', border: '2px solid #166534', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-                OPEN OPENCODE
+                LAUNCH OPENCODE
               </button>
+              <button 
+                onClick={(e) => { e.stopPropagation(); handleOpenOpenCodeWeb(); }}
+                style={{ width: '100%', padding: '8px', backgroundColor: '#dcfce7', color: '#166534', border: '2px solid #16a34a', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
+                LAUNCH WEBUI
+              </button>
+              {['run-opencode', 'run-opencode-web'].map(mode => activeProcesses && activeProcesses[mode] && (
+                <div key={mode} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: '#f0fdf4', border: '2px solid #16a34a', marginBottom: '8px', marginTop: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#166534', fontWeight: 700, fontSize: '0.8rem' }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#16a34a', boxShadow: '0 0 4px #16a34a' }} />
+                    {mode.replace('run-', '').toUpperCase()} ACTIVE
+                  </div>
+                  <button onClick={(e) => { e.stopPropagation(); handleKillProcess(mode); }} style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '4px 8px', fontSize: '0.7rem', fontWeight: 'bold', cursor: 'pointer' }}>KILL</button>
+                </div>
+              ))}
               <button 
                 onClick={(e) => { e.stopPropagation(); setConfirmUninstall('opencode'); }}
                 style={{ width: '100%', padding: '8px', backgroundColor: 'transparent', color: '#ef4444', border: '2px dashed #ef4444', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
@@ -464,7 +568,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
   );
 };
 
-const TerminalView = ({ mode, onExit, setIsHermesInstalled, setIsOpenCodeInstalled, setIsOllamaInstalled }: { mode: 'install-hermes' | 'run-hermes' | 'install-opencode' | 'run-opencode' | 'install-ollama' | 'run-ollama', onExit: () => void, setIsHermesInstalled: (installed: boolean) => void, setIsOpenCodeInstalled: (installed: boolean) => void, setIsOllamaInstalled: (installed: boolean) => void }) => {
+const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, frugalConfig, setIsHermesInstalled, setIsOpenCodeInstalled, setIsOllamaInstalled }: { mode: 'install-hermes' | 'run-hermes' | 'run-hermes-web' | 'run-hermes-desktop' | 'install-opencode' | 'run-opencode' | 'run-opencode-web' | 'install-ollama' | 'run-ollama', sessionId: string, onExit: () => void, onProcessStart?: () => void, onProcessExit?: () => void, frugalConfig?: any, setIsHermesInstalled: (installed: boolean) => void, setIsOpenCodeInstalled: (installed: boolean) => void, setIsOllamaInstalled: (installed: boolean) => void }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const [isProvisioningModel, setIsProvisioningModel] = useState(false);
   const [downloadPercent, setDownloadPercent] = useState<number>(0);
@@ -484,7 +588,7 @@ const TerminalView = ({ mode, onExit, setIsHermesInstalled, setIsOpenCodeInstall
     }
     
     term.onResize(({ cols, rows }) => {
-      invoke('resize_pty', { cols, rows }).catch(console.error);
+      invoke('resize_pty', { sessionId, cols, rows }).catch(console.error);
     });
 
     let fitTimeout: number | undefined;
@@ -511,8 +615,13 @@ const TerminalView = ({ mode, onExit, setIsHermesInstalled, setIsOpenCodeInstall
         if (mode === 'install-hermes') installingText = 'Initializing Hermes Agent environment...';
         if (mode === 'install-ollama') installingText = 'Initializing Ollama installation...';
         term.writeln(installingText);
-        unlistenOutput = await listen<string>('pty_output', (event) => term.write(event.payload));
-        unlistenExit = await listen<{ exit_code: number }>('pty_exit', (event) => {
+        unlistenOutput = await listen<{ session_id: string, data: string }>('pty_output', (event) => {
+          if (event.payload.session_id === sessionId) {
+            term.write(event.payload.data);
+          }
+        });
+        unlistenExit = await listen<{ session_id: string, exit_code: number }>('pty_exit', (event) => {
+          if (event.payload.session_id !== sessionId) return;
           term.writeln(`\r\n\x1b[32mInstallation finished with code ${event.payload.exit_code}\x1b[0m\r\n`);
           if (event.payload.exit_code === 0) {
             if (mode === 'install-opencode') {
@@ -559,8 +668,9 @@ const TerminalView = ({ mode, onExit, setIsHermesInstalled, setIsOpenCodeInstall
         });
         
         if (!isMounted) return;
+        if (onProcessStart) onProcessStart();
         if (mode === 'install-opencode') {
-          await invoke('spawn_pty', { command: 'bash', args: ['-c', 'export TERM=xterm-256color && curl -fsSL https://opencode.ai/install | bash'] });
+          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', 'export TERM=xterm-256color && curl -fsSL https://opencode.ai/install | bash'] });
         } else if (mode === 'install-ollama') {
           const unlisten1 = await listen<{ status: string }>('download_progress', (event) => term.write(event.payload.status));
           const unlisten2 = await listen<string>('installing_ollama', () => term.writeln('Installing Ollama Engine...'));
@@ -615,39 +725,52 @@ const TerminalView = ({ mode, onExit, setIsHermesInstalled, setIsOpenCodeInstall
             unlisten5();
           });
         } else {
-          await invoke('spawn_pty', { command: 'bash', args: ['-c', 'export TERM=xterm-256color && curl -sSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup'] });
+          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', 'export TERM=xterm-256color && curl -sSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup'] });
         }
-        invoke('resize_pty', { cols: term.cols, rows: term.rows }).catch(console.error);
+        invoke('resize_pty', { sessionId, cols: term.cols, rows: term.rows }).catch(console.error);
       } else if (mode.startsWith('run')) {
         let runningText = 'Starting...';
-        if (mode === 'run-opencode') runningText = 'Starting OpenCode...';
-        if (mode === 'run-hermes') runningText = 'Starting Hermes Agent...';
+        if (mode.startsWith('run-opencode')) runningText = 'Starting OpenCode...';
+        if (mode.startsWith('run-hermes')) runningText = 'Starting Hermes Agent...';
         if (mode === 'run-ollama') runningText = 'Chatting with Ollama...';
         term.writeln(runningText);
         const dataListener = term.onData((data) => {
-          invoke('write_pty', { data }).catch(console.error);
+          invoke('write_pty', { sessionId, data }).catch(console.error);
         });
-        unlistenOutput = await listen<string>('pty_output', (event) => {
-          term.write(event.payload);
-          window.dispatchEvent(new CustomEvent('pty_bytes', { detail: event.payload.length }));
+        unlistenOutput = await listen<{ session_id: string, data: string }>('pty_output', (event) => {
+          if (event.payload.session_id === sessionId) {
+            term.write(event.payload.data);
+            window.dispatchEvent(new CustomEvent('pty_bytes', { detail: event.payload.data.length }));
+          }
         });
-        unlistenExit = await listen<{ exit_code: number }>('pty_exit', (event) => {
+        unlistenExit = await listen<{ session_id: string, exit_code: number }>('pty_exit', (event) => {
+          if (event.payload.session_id !== sessionId) return;
+          if (onProcessExit) onProcessExit();
           let name = 'Process';
-          if (mode === 'run-opencode') name = 'OpenCode';
-          if (mode === 'run-hermes') name = 'Hermes';
+          if (mode.startsWith('run-opencode')) name = 'OpenCode';
+          if (mode.startsWith('run-hermes')) name = 'Hermes';
           if (mode === 'run-ollama') name = 'Ollama';
           term.writeln(`\r\n\x1b[32m${name} exited with code ${event.payload.exit_code}\x1b[0m\r\n`);
         });
         
         if (!isMounted) return;
+        if (onProcessStart) onProcessStart();
+        const frugalEnv = `export OPENAI_API_BASE="http://${frugalConfig?.ip || '127.0.0.1'}:${frugalConfig?.port || '61721'}/v1" && export OPENAI_API_KEY="${frugalConfig?.api_password || 'frugallm'}"`;
+        
         if (mode === 'run-opencode') {
-          await invoke('spawn_pty', { command: 'bash', args: ['-c', 'export TERM=xterm-256color && export PATH="$HOME/.opencode/bin:$PATH" && opencode -m litellm/frugallm'] });
+          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && export PATH="$HOME/.opencode/bin:$PATH" && ${frugalEnv} && opencode -m litellm/frugallm`] });
+        } else if (mode === 'run-opencode-web') {
+          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && export PATH="$HOME/.opencode/bin:$PATH" && ${frugalEnv} && opencode web`] });
         } else if (mode === 'run-ollama') {
-          await invoke('spawn_pty', { command: 'bash', args: ['-c', 'export TERM=xterm-256color && ollama run frugallm-active'] });
+          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && ${frugalEnv} && ollama run frugallm-active`] });
+        } else if (mode === 'run-hermes-web') {
+          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && export PATH="$HOME/.hermes/bin:$PATH" && ${frugalEnv} && hermes dashboard`] });
+        } else if (mode === 'run-hermes-desktop') {
+          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && export PATH="$HOME/.hermes/bin:$PATH" && ${frugalEnv} && hermes desktop`] });
         } else {
-          await invoke('spawn_pty', { command: 'bash', args: ['-c', 'export TERM=xterm-256color && export PATH="$HOME/.hermes/bin:$PATH" && hermes'] });
+          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && export PATH="$HOME/.hermes/bin:$PATH" && ${frugalEnv} && hermes`] });
         }
-        invoke('resize_pty', { cols: term.cols, rows: term.rows }).catch(console.error);
+        invoke('resize_pty', { sessionId, cols: term.cols, rows: term.rows }).catch(console.error);
         
         const cleanup = unlistenExit;
         unlistenExit = () => {
@@ -661,7 +784,7 @@ const TerminalView = ({ mode, onExit, setIsHermesInstalled, setIsOpenCodeInstall
     return () => {
       isMounted = false;
       resizeObserver.disconnect();
-      invoke('kill_pty').catch(console.error);
+      invoke('kill_pty', { sessionId }).catch(console.error);
       if (unlistenOutput) unlistenOutput();
       if (unlistenExit) unlistenExit();
       term.dispose();
@@ -711,10 +834,30 @@ export default function App() {
   const [containerSize, setContainerSize] = useState({ width: 1024, height: 768 });
   const canvasRef = useRef<HTMLDivElement>(null);
   const [guidesOpen, setGuidesOpen] = useState(false);
-  const [terminalMode, setTerminalMode] = useState<'install-hermes' | 'run-hermes' | 'install-opencode' | 'run-opencode' | 'install-ollama' | 'run-ollama' | null>(null);
+  const [terminalMode, setTerminalMode] = useState<'install-hermes' | 'run-hermes' | 'run-hermes-web' | 'run-hermes-desktop' | 'install-opencode' | 'run-opencode' | 'run-opencode-web' | 'install-ollama' | 'run-ollama' | null>(null);
   const [isHermesInstalled, setIsHermesInstalled] = useState<boolean | null>(null);
   const [isOpenCodeInstalled, setIsOpenCodeInstalled] = useState<boolean | null>(null);
   const [isOllamaInstalled, setIsOllamaInstalled] = useState<boolean | null>(null);
+
+  const [frugalConfig, setFrugalConfig] = useState<any>(null);
+  const [activeProcesses, setActiveProcesses] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      const unlistenConfig = listen('frugallm_config_updated', () => {
+        invoke('get_frugallm_config').then((conf: any) => setFrugalConfig(conf)).catch(console.error);
+      });
+      const unlistenError = listen('frugallm_port_error', (event: any) => {
+        const port = event.payload;
+        alert(`This port seems taken, please select a new port or disable the service currently using ${port}. Note that changing the port here might disrupt any apps that are already connected.`);
+      });
+      return () => {
+        unlistenConfig.then(f => f());
+        unlistenError.then(f => f());
+      };
+    });
+    invoke('get_frugallm_config').then((conf: any) => setFrugalConfig(conf)).catch(console.error);
+  }, []);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -823,8 +966,11 @@ export default function App() {
 
   const handleInitializeHermes = () => setTerminalMode('install-hermes');
   const handleOpenHermes = () => setTerminalMode('run-hermes');
+  const handleOpenHermesDesktop = () => setTerminalMode('run-hermes-desktop');
+  const handleOpenHermesWeb = () => setTerminalMode('run-hermes-web');
   const handleInitializeOpenCode = () => setTerminalMode('install-opencode');
   const handleOpenOpenCode = () => setTerminalMode('run-opencode');
+  const handleOpenOpenCodeWeb = () => setTerminalMode('run-opencode-web');
   const handleInitializeOllama = () => setTerminalMode('install-ollama');
   const handleOpenOllama = () => setTerminalMode('run-ollama');
 
@@ -833,7 +979,7 @@ export default function App() {
     setIsHermesInstalled(false);
   };
   const handleUninstallOpenCode = async () => {
-    await invoke('spawn_pty', { command: 'bash', args: ['-c', 'rm -rf ~/.opencode'] });
+    await invoke('spawn_pty', { command: 'bash', args: ['-c', 'rm -rf ~/.opencode && rm -rf ~/.config/opencode'] });
     setIsOpenCodeInstalled(false);
   };
   const handleUninstallOllama = async () => {
@@ -896,6 +1042,49 @@ export default function App() {
 
   const handleSaveNodeConfig = async (nodeId: string, newConfig: any) => {
     let finalConfig = { ...newConfig };
+    
+    if (nodeId === 'node-frugallm') {
+      try {
+        const newConf = {
+          port: parseInt(finalConfig.port, 10),
+          bind_all_interfaces: finalConfig.bind_all_interfaces,
+          api_password: finalConfig.api_password || null,
+          tokens_used_session: frugalConfig?.tokens_used_session || 0,
+          tokens_used_lifetime: frugalConfig?.tokens_used_lifetime || 0,
+          hermes_workspace: frugalConfig?.hermes_workspace || null,
+          opencode_workspace: frugalConfig?.opencode_workspace || null,
+        };
+        await invoke('set_frugallm_config', { newConfig: newConf });
+        invoke('get_frugallm_config').then((conf: any) => setFrugalConfig(conf)).catch(console.error);
+        confetti({
+          particleCount: 150,
+          spread: 70,
+          origin: { y: 0.6 },
+          colors: ['#ea580c', '#ffffff', '#111827']
+        });
+      } catch (e: any) {
+        alert("Failed to update FrugalLM config: " + e);
+      }
+      return;
+    }
+    
+    if (nodeId === 'node-hermes' || nodeId === 'node-opencode') {
+      try {
+        const newConf = {
+          port: frugalConfig?.port || 0,
+          bind_all_interfaces: frugalConfig?.bind_all_interfaces || false,
+          api_password: frugalConfig?.api_password || null,
+          tokens_used_session: frugalConfig?.tokens_used_session || 0,
+          tokens_used_lifetime: frugalConfig?.tokens_used_lifetime || 0,
+          hermes_workspace: nodeId === 'node-hermes' ? (finalConfig.hermes_workspace || null) : (frugalConfig?.hermes_workspace || null),
+          opencode_workspace: nodeId === 'node-opencode' ? (finalConfig.opencode_workspace || null) : (frugalConfig?.opencode_workspace || null),
+        };
+        await invoke('set_frugallm_config', { newConfig: newConf });
+        invoke('get_frugallm_config').then((conf: any) => setFrugalConfig(conf)).catch(console.error);
+      } catch (e: any) {
+        console.error("Failed to update config: " + e);
+      }
+    }
     
     if (nodeId === 'node-openrouter') {
       if (finalConfig.apiKey) {
@@ -1132,20 +1321,31 @@ export default function App() {
       </style>
 
       {/* Canvas Area */}
-      {terminalMode ? (
-        <TerminalView 
-          mode={terminalMode} 
-          onExit={() => {
-            setTerminalMode(null);
-            invoke('check_hermes_status').then((installed) => setIsHermesInstalled(installed as boolean));
-            invoke('check_opencode_status').then((installed) => setIsOpenCodeInstalled(installed as boolean));
-            invoke('check_ollama_status').then((installed) => setIsOllamaInstalled(installed as boolean));
-          }}
-          setIsHermesInstalled={setIsHermesInstalled}
-          setIsOpenCodeInstalled={setIsOpenCodeInstalled}
-          setIsOllamaInstalled={setIsOllamaInstalled}
-        />
-      ) : (
+      {(['install-hermes', 'run-hermes', 'run-hermes-web', 'run-hermes-desktop', 'install-opencode', 'run-opencode', 'run-opencode-web', 'install-ollama', 'run-ollama'] as const).map((mode) => {
+        const isActive = activeProcesses[mode] || terminalMode === mode;
+        if (!isActive) return null;
+        return (
+          <div key={mode} style={{ display: terminalMode === mode ? 'flex' : 'none', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, zIndex: 50, backgroundColor: '#111827' }}>
+            <TerminalView
+               mode={mode}
+               sessionId={mode}
+               onExit={() => {
+                 setTerminalMode(null);
+                 invoke('check_hermes_status').then((installed) => setIsHermesInstalled(installed as boolean));
+                 invoke('check_opencode_status').then((installed) => setIsOpenCodeInstalled(installed as boolean));
+                 invoke('check_ollama_status').then((installed) => setIsOllamaInstalled(installed as boolean));
+               }}
+               onProcessStart={() => setActiveProcesses(prev => ({ ...prev, [mode]: true }))}
+               onProcessExit={() => setActiveProcesses(prev => ({ ...prev, [mode]: false }))}
+               frugalConfig={frugalConfig}
+               setIsHermesInstalled={setIsHermesInstalled}
+               setIsOpenCodeInstalled={setIsOpenCodeInstalled}
+               setIsOllamaInstalled={setIsOllamaInstalled}
+            />
+          </div>
+        );
+      })}
+
         <div 
           ref={canvasRef}
           onMouseDown={handleCanvasMouseDown}
@@ -1156,7 +1356,8 @@ export default function App() {
           onWheel={handleWheel}
           style={{ 
             flexGrow: 1, position: 'relative', 
-            cursor: isDragging ? 'grabbing' : 'grab'
+            cursor: isDragging ? 'grabbing' : 'grab',
+            display: terminalMode ? 'none' : 'block'
           }}
         >
 
@@ -1312,19 +1513,10 @@ export default function App() {
                   {/* Body */}
                   <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: stateColors.bodyBg, color: '#111827' }}>
                     {isCore ? (
-                       <div style={{ textAlign: 'center', padding: '4px 0' }}>
-                         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '6px' }}>
-                           <StatusLight active={true} text="HUB ONLINE" />
-                         </div>
-                         <button 
-                           onClick={(e) => { e.stopPropagation(); setGuidesOpen(true); }}
-                           style={{
-                             width: '100%', padding: '8px', backgroundColor: '#ea580c', color: 'white', border: '2px solid #111827',
-                             fontWeight: 700, fontSize: '0.75rem', fontFamily: 'inherit', cursor: 'pointer', boxShadow: '2px 2px 0px #111827'
-                           }}>
-                           GET STARTED
-                         </button>
-                       </div>
+                      <>
+                        <StatusLight active={true} text="HUB ONLINE" />
+                        <CopyableField label="ENDPOINT" value={`${frugalConfig?.bind_all_interfaces ? '0.0.0.0' : '127.0.0.1'}:${frugalConfig?.port || '8080'}`} />
+                      </>
                     ) : node.data.isAgent ? (
                       <>
                         <StatusLight active={node.data.status === 'active'} text={node.data.status === 'active' ? 'RUNNING' : node.data.status.toUpperCase()} />
@@ -1344,10 +1536,9 @@ export default function App() {
         </div>
 
       </div>
-      )}
       {/* Side Panel */}
       {selectedNode && !terminalMode && (
-        <NodeConfigPanel node={selectedNode} onClose={() => setSelectedNodeId(null)} onSave={handleSaveNodeConfig} onOpenGuide={setActiveGuide} isHermesInstalled={isHermesInstalled} isOpenCodeInstalled={isOpenCodeInstalled} isOllamaInstalled={isOllamaInstalled} detectedVram={detectedVram} setDetectedVram={setDetectedVram} hasActiveBackend={hasActiveBackend} handleInitializeHermes={handleInitializeHermes} handleOpenHermes={handleOpenHermes} handleUninstallHermes={handleUninstallHermes} handleInitializeOpenCode={handleInitializeOpenCode} handleOpenOpenCode={handleOpenOpenCode} handleUninstallOpenCode={handleUninstallOpenCode} handleInitializeOllama={handleInitializeOllama} handleOpenOllama={handleOpenOllama} handleUninstallOllama={handleUninstallOllama} handleDisconnectOpenRouter={handleDisconnectOpenRouter} />
+        <NodeConfigPanel node={selectedNode} onClose={() => setSelectedNodeId(null)} onSave={handleSaveNodeConfig} onOpenGuide={setActiveGuide} isHermesInstalled={isHermesInstalled} isOpenCodeInstalled={isOpenCodeInstalled} isOllamaInstalled={isOllamaInstalled} detectedVram={detectedVram} setDetectedVram={setDetectedVram} hasActiveBackend={hasActiveBackend} handleInitializeHermes={handleInitializeHermes} handleOpenHermes={handleOpenHermes} handleUninstallHermes={handleUninstallHermes} handleInitializeOpenCode={handleInitializeOpenCode} handleOpenOpenCode={handleOpenOpenCode} handleUninstallOpenCode={handleUninstallOpenCode} handleInitializeOllama={handleInitializeOllama} handleOpenOllama={handleOpenOllama} handleUninstallOllama={handleUninstallOllama} handleDisconnectOpenRouter={handleDisconnectOpenRouter} frugalConfig={frugalConfig} handleOpenHermesDesktop={handleOpenHermesDesktop} handleOpenHermesWeb={handleOpenHermesWeb} handleOpenOpenCodeWeb={handleOpenOpenCodeWeb} activeProcesses={activeProcesses} handleKillProcess={(mode: string) => invoke('kill_pty', { sessionId: mode }).catch(console.error)} />
       )}
 
       {/* Guides Modal */}

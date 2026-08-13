@@ -14,6 +14,41 @@ struct OllamaDaemonState {
     child: tokio::sync::Mutex<Option<tokio::process::Child>>,
 }
 
+struct DynamicRosterState {
+    fallback_chain: Arc<tokio::sync::RwLock<Vec<serde_json::Value>>>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[serde(default)]
+pub struct FrugalConfig {
+    pub port: u16,
+    pub bind_all_interfaces: bool,
+    pub api_password: Option<String>,
+    pub tokens_used_session: u64,
+    pub tokens_used_lifetime: u64,
+    pub opencode_workspace: Option<String>,
+    pub hermes_workspace: Option<String>,
+}
+
+impl Default for FrugalConfig {
+    fn default() -> Self {
+        Self {
+            port: 0,
+            bind_all_interfaces: false,
+            api_password: None,
+            tokens_used_session: 0,
+            tokens_used_lifetime: 0,
+            opencode_workspace: None,
+            hermes_workspace: None,
+        }
+    }
+}
+
+pub struct FrugalConfigState {
+    pub config: std::sync::Arc<tokio::sync::Mutex<FrugalConfig>>,
+    pub server_abort_handle: std::sync::Arc<tokio::sync::Mutex<Option<tauri::async_runtime::JoinHandle<()>>>>,
+}
+
 #[derive(serde::Serialize)]
 struct LaunchOptions {
     openrouter_key: Option<String>,
@@ -21,17 +56,15 @@ struct LaunchOptions {
 }
 
 struct PtyState {
-    writer: Arc<Mutex<Option<Box<dyn std::io::Write + Send>>>>,
-    master: Arc<Mutex<Option<Box<dyn portable_pty::MasterPty + Send>>>>,
-    child: Arc<Mutex<Option<Box<dyn portable_pty::Child + Send + Sync>>>>,
+    writer: Arc<Mutex<std::collections::HashMap<String, Box<dyn std::io::Write + Send>>>>,
+    master: Arc<Mutex<std::collections::HashMap<String, Box<dyn portable_pty::MasterPty + Send>>>>,
 }
 
 impl Default for PtyState {
     fn default() -> Self {
         Self {
-            writer: Arc::new(Mutex::new(None)),
-            master: Arc::new(Mutex::new(None)),
-            child: Arc::new(Mutex::new(None)),
+            writer: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            master: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
     }
 }
@@ -211,6 +244,7 @@ async fn detect_vram() -> Result<u64, String> {
 fn spawn_pty(
     app: tauri::AppHandle,
     state: State<'_, PtyState>,
+    session_id: String,
     command: Option<String>,
     args: Option<Vec<String>>,
     cols: Option<u16>,
@@ -246,22 +280,24 @@ fn spawn_pty(
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
     
     if let Ok(mut state_writer) = state.writer.lock() {
-        *state_writer = Some(writer);
+        state_writer.insert(session_id.clone(), writer);
     }
     
     if let Ok(mut state_master) = state.master.lock() {
-        *state_master = Some(pair.master);
+        state_master.insert(session_id.clone(), pair.master);
     }
 
     let app_clone = app.clone();
+    let session_id_clone = session_id.clone();
     std::thread::spawn(move || {
         if let Ok(status) = child.wait() {
             let exit_code = if status.success() { 0 } else { 1 };
             #[derive(serde::Serialize, Clone)]
             struct ExitPayload {
+                session_id: String,
                 exit_code: u32,
             }
-            let _ = app_clone.emit("pty_exit", ExitPayload { exit_code });
+            let _ = app_clone.emit("pty_exit", ExitPayload { session_id: session_id_clone, exit_code });
         }
     });
 
@@ -270,7 +306,12 @@ fn spawn_pty(
         while let Ok(n) = reader.read(&mut buf) {
             if n == 0 { break; }
             let s = String::from_utf8_lossy(&buf[..n]);
-            let _ = app.emit("pty_output", s.into_owned());
+            #[derive(serde::Serialize, Clone)]
+            struct OutputPayload {
+                session_id: String,
+                data: String,
+            }
+            let _ = app.emit("pty_output", OutputPayload { session_id: session_id.clone(), data: s.into_owned() });
         }
     });
 
@@ -278,9 +319,9 @@ fn spawn_pty(
 }
 
 #[tauri::command]
-fn write_pty(state: State<'_, PtyState>, data: String) -> Result<(), String> {
-    if let Ok(mut writer_opt) = state.writer.lock() {
-        if let Some(writer) = writer_opt.as_mut() {
+fn write_pty(state: State<'_, PtyState>, session_id: String, data: String) -> Result<(), String> {
+    if let Ok(mut writers) = state.writer.lock() {
+        if let Some(writer) = writers.get_mut(&session_id) {
             writer.write_all(data.as_bytes()).map_err(|e| e.to_string())?;
             writer.flush().map_err(|e| e.to_string())?;
         }
@@ -289,20 +330,20 @@ fn write_pty(state: State<'_, PtyState>, data: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn kill_pty(state: State<'_, PtyState>) -> Result<(), String> {
-    if let Ok(mut writer_opt) = state.writer.lock() {
-        *writer_opt = None;
+fn kill_pty(state: State<'_, PtyState>, session_id: String) -> Result<(), String> {
+    if let Ok(mut writers) = state.writer.lock() {
+        writers.remove(&session_id);
     }
-    if let Ok(mut master_opt) = state.master.lock() {
-        *master_opt = None;
+    if let Ok(mut masters) = state.master.lock() {
+        masters.remove(&session_id);
     }
     Ok(())
 }
 
 #[tauri::command]
-fn resize_pty(state: State<'_, PtyState>, rows: u16, cols: u16) -> Result<(), String> {
-    if let Ok(mut master_opt) = state.master.lock() {
-        if let Some(master) = master_opt.as_mut() {
+fn resize_pty(state: State<'_, PtyState>, session_id: String, rows: u16, cols: u16) -> Result<(), String> {
+    if let Ok(mut masters) = state.master.lock() {
+        if let Some(master) = masters.get_mut(&session_id) {
             master.resize(portable_pty::PtySize {
                 rows,
                 cols,
@@ -346,6 +387,7 @@ struct NotifyOnDrop {
     app: tauri::AppHandle,
     source: String,
     target: String,
+    token_estimate: Arc<std::sync::atomic::AtomicUsize>,
 }
 impl Drop for NotifyOnDrop {
     fn drop(&mut self) {
@@ -354,6 +396,23 @@ impl Drop for NotifyOnDrop {
             target: self.target.clone(),
             is_active: false,
         });
+
+        let tokens = self.token_estimate.load(std::sync::atomic::Ordering::Relaxed);
+        if tokens > 0 {
+            let app_handle = self.app.clone();
+            tauri::async_runtime::spawn(async move {
+                let state = app_handle.state::<FrugalConfigState>();
+                let mut config = state.config.lock().await;
+                config.tokens_used_session += tokens as u64;
+                config.tokens_used_lifetime += tokens as u64;
+                if let Ok(path) = get_config_path(&app_handle) {
+                    if let Ok(json) = serde_json::to_string_pretty(&*config) {
+                        let _ = std::fs::write(path, json);
+                    }
+                }
+                let _ = app_handle.emit("frugallm_config_updated", ());
+            });
+        }
     }
 }
 
@@ -386,10 +445,12 @@ async fn try_ollama(
         is_active: true,
     });
 
+    let token_estimate = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let drop_guard = NotifyOnDrop {
         app: app.clone(),
         source: source.to_string(),
         target: "ollama".to_string(),
+        token_estimate: token_estimate.clone(),
     };
 
     let res = client.post("http://127.0.0.1:11434/v1/chat/completions")
@@ -405,8 +466,12 @@ async fn try_ollama(
         }
         let app_clone = app.clone();
         let source_clone = source.to_string();
-        let stream = res.bytes_stream().inspect(move |_| {
+        let stream = res.bytes_stream().inspect(move |chunk| {
             let _ = &drop_guard;
+            if let Ok(bytes) = chunk {
+                let tokens = bytes.len() / 4;
+                drop_guard.token_estimate.fetch_add(tokens, std::sync::atomic::Ordering::Relaxed);
+            }
             let _ = app_clone.emit("proxy_activity", ProxyActivityPayload {
                 source: source_clone.clone(),
                 target: "ollama".to_string(),
@@ -429,8 +494,20 @@ async fn try_openrouter(
         .map_err(|_| "OpenRouter API key not found".to_string())?;
 
     let mut body = body.clone();
-    if let Some(model) = body.get_mut("model") {
-        *model = json!("anthropic/claude-3-haiku");
+    
+    let fallback_models = {
+        let state = app.state::<DynamicRosterState>();
+        let chain = state.fallback_chain.read().await;
+        chain.clone()
+    };
+    
+    let primary_model = fallback_models.first().cloned().unwrap_or(serde_json::json!("openrouter/auto"));
+    
+    if let Some(obj) = body.as_object_mut() {
+        obj.insert("model".to_string(), primary_model);
+        obj.insert("models".to_string(), serde_json::json!(fallback_models));
+        // Strip reasoning_effort as it causes OpenRouter to return 400 Bad Request for non-reasoning models
+        obj.remove("reasoning_effort");
     }
 
     let _ = app.emit("proxy_activity", ProxyActivityPayload {
@@ -439,10 +516,12 @@ async fn try_openrouter(
         is_active: true,
     });
 
+    let token_estimate = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let drop_guard = NotifyOnDrop {
         app: app.clone(),
         source: source.to_string(),
         target: "openrouter".to_string(),
+        token_estimate: token_estimate.clone(),
     };
 
     let res = client.post("https://openrouter.ai/api/v1/chat/completions")
@@ -459,8 +538,12 @@ async fn try_openrouter(
         }
         let app_clone = app.clone();
         let source_clone = source.to_string();
-        let stream = res.bytes_stream().inspect(move |_| {
+        let stream = res.bytes_stream().inspect(move |chunk| {
             let _ = &drop_guard;
+            if let Ok(bytes) = chunk {
+                let tokens = bytes.len() / 4;
+                drop_guard.token_estimate.fetch_add(tokens, std::sync::atomic::Ordering::Relaxed);
+            }
             let _ = app_clone.emit("proxy_activity", ProxyActivityPayload {
                 source: source_clone.clone(),
                 target: "openrouter".to_string(),
@@ -469,7 +552,15 @@ async fn try_openrouter(
         });
         Ok(builder.body(axum::body::Body::from_stream(stream)).unwrap())
     } else {
-        Err(format!("OpenRouter API error: HTTP {}", res.status()))
+        let status = res.status();
+        let error_body = res.text().await.unwrap_or_else(|_| "Could not read error body".to_string());
+        
+        // Log to file for debugging
+        let debug_info = format!("Status: {}\nRequest Body: {}\nError Body: {}\n", status, serde_json::to_string_pretty(&body).unwrap_or_default(), error_body);
+        let _ = std::fs::write("/tmp/frugallm_openrouter_error.txt", debug_info);
+        
+        println!("OpenRouter API error ({}): {}", status, error_body);
+        Err(format!("OpenRouter API error: HTTP {} - {}", status, error_body))
     }
 }
 
@@ -478,6 +569,23 @@ async fn chat_completions(
     headers: axum::http::HeaderMap,
     Json(body): Json<Value>
 ) -> axum::response::Response {
+    let state = app.state::<FrugalConfigState>();
+    let expected_password = {
+        let config = state.config.lock().await;
+        config.api_password.clone()
+    };
+    if let Some(password) = expected_password {
+        if !password.is_empty() {
+            let auth_header = headers.get("authorization").and_then(|h| h.to_str().ok()).unwrap_or("");
+            if auth_header != format!("Bearer {}", password) {
+                return axum::response::Response::builder()
+                    .status(401)
+                    .body(axum::body::Body::from("Unauthorized"))
+                    .unwrap();
+            }
+        }
+    }
+
     let client = reqwest::Client::new();
     
     // Determine if Ollama is viable (skip if CPU-only)
@@ -571,25 +679,200 @@ async fn chat_completions(
         .unwrap()
 }
 
+fn get_config_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    if !app_data_dir.exists() {
+        std::fs::create_dir_all(&app_data_dir).map_err(|e| e.to_string())?;
+    }
+    Ok(app_data_dir.join("frugal_config.json"))
+}
+
+#[tauri::command]
+async fn get_frugallm_config(state: State<'_, FrugalConfigState>) -> Result<FrugalConfig, String> {
+    let config = state.config.lock().await;
+    Ok(config.clone())
+}
+
+#[tauri::command]
+async fn set_frugallm_config(app: tauri::AppHandle, state: State<'_, FrugalConfigState>, new_config: FrugalConfig) -> Result<(), String> {
+    let mut config = state.config.lock().await;
+    let mut updated_config = new_config.clone();
+    updated_config.tokens_used_lifetime = config.tokens_used_lifetime;
+    updated_config.tokens_used_session = config.tokens_used_session;
+    
+    let port_changed = config.port != updated_config.port;
+    let ip_changed = config.bind_all_interfaces != updated_config.bind_all_interfaces;
+    
+    *config = updated_config.clone();
+    
+    let path = get_config_path(&app)?;
+    if let Ok(json) = serde_json::to_string_pretty(&*config) {
+        let _ = std::fs::write(path, json);
+    }
+
+    if port_changed || ip_changed {
+        if let Some(handle) = state.server_abort_handle.lock().await.take() {
+            handle.abort();
+        }
+        
+        let app_clone = app.clone();
+        let new_abort = tauri::async_runtime::spawn(async move {
+            start_frugallm_server(app_clone).await;
+        });
+        
+        *state.server_abort_handle.lock().await = Some(new_abort);
+    }
+    
+    Ok(())
+}
+
+fn extract_parameter_count(id: &str) -> f64 {
+    let lower = id.to_lowercase();
+    let mut max_params = 0.0;
+    
+    let chars: Vec<char> = lower.chars().collect();
+    for (i, &c) in chars.iter().enumerate() {
+        if c == 'b' && i > 0 {
+            let mut num_str = String::new();
+            let mut j = i - 1;
+            while j < chars.len() && (chars[j].is_ascii_digit() || chars[j] == '.') {
+                num_str.insert(0, chars[j]);
+                if j == 0 { break; }
+                j -= 1;
+            }
+            if let Ok(val) = num_str.parse::<f64>() {
+                let valid_prefix = if num_str.len() == i {
+                    true
+                } else {
+                    let prefix_char = chars[i - num_str.len() - 1];
+                    !prefix_char.is_alphabetic()
+                };
+                
+                if valid_prefix && val > max_params {
+                    max_params = val;
+                }
+            }
+        }
+    }
+    max_params
+}
+
+async fn fetch_dynamic_roster(client: &reqwest::Client) -> Result<Vec<serde_json::Value>, String> {
+    let res = client.get("https://openrouter.ai/api/v1/models").send().await.map_err(|e| e.to_string())?;
+    let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
+    
+    let mut free_models = Vec::new();
+    
+    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
+        for model in data {
+            let is_free = model.get("pricing").and_then(|p| {
+                let prompt = p.get("prompt").and_then(|pr| {
+                    if let Some(s) = pr.as_str() { s.parse::<f64>().ok() }
+                    else if let Some(n) = pr.as_f64() { Some(n) }
+                    else { None }
+                }).unwrap_or(1.0);
+                let completion = p.get("completion").and_then(|c| {
+                    if let Some(s) = c.as_str() { s.parse::<f64>().ok() }
+                    else if let Some(n) = c.as_f64() { Some(n) }
+                    else { None }
+                }).unwrap_or(1.0);
+                Some(prompt == 0.0 && completion == 0.0)
+            }).unwrap_or(false);
+            
+            if !is_free { continue; }
+            
+            let has_tools = model.get("supported_parameters").and_then(|params| params.as_array()).map(|params| {
+                params.iter().any(|p| p.as_str() == Some("tools"))
+            }).unwrap_or(false);
+            
+            if !has_tools { continue; }
+            free_models.push(model.clone());
+        }
+    }
+    
+    free_models.sort_by(|a, b| {
+        let a_id = a.get("id").and_then(|i| i.as_str()).unwrap_or("");
+        let b_id = b.get("id").and_then(|i| i.as_str()).unwrap_or("");
+        
+        let a_params = extract_parameter_count(a_id);
+        let b_params = extract_parameter_count(b_id);
+        
+        match b_params.partial_cmp(&a_params) {
+            Some(std::cmp::Ordering::Equal) | None => {
+                let a_created = a.get("created").and_then(|c| c.as_u64()).unwrap_or(0);
+                let b_created = b.get("created").and_then(|c| c.as_u64()).unwrap_or(0);
+                b_created.cmp(&a_created)
+            }
+            Some(ordering) => ordering,
+        }
+    });
+    
+    let ids: Vec<serde_json::Value> = free_models.into_iter().filter_map(|m| {
+        m.get("id").cloned()
+    }).collect();
+    
+    Ok(ids)
+}
+
+async fn start_dynamic_roster_poll(state: Arc<tokio::sync::RwLock<Vec<serde_json::Value>>>) {
+    let client = reqwest::Client::new();
+    loop {
+        if let Ok(mut roster) = fetch_dynamic_roster(&client).await {
+            if !roster.is_empty() {
+                if !roster.contains(&serde_json::json!("openrouter/auto")) {
+                    roster.push(serde_json::json!("openrouter/auto"));
+                }
+                *state.write().await = roster;
+                println!("Dynamic OpenRouter roster updated.");
+            }
+        }
+        tokio::time::sleep(tokio::time::Duration::from_secs(300)).await;
+    }
+}
+
 async fn start_frugallm_server(app: tauri::AppHandle) {
-    let app_state = std::sync::Arc::new(app);
-    let app = Router::new()
+    let app_state = std::sync::Arc::new(app.clone());
+    let router = Router::new()
         .route("/v1/models", get(models))
         .route("/v1/chat/completions", post(chat_completions))
         .with_state(app_state);
 
-    if let Ok(listener) = TcpListener::bind("127.0.0.1:8080").await {
-        println!("FrugalLLM core server listening on 127.0.0.1:8080");
-        let _ = axum::serve(listener, app).await;
+    let (port, bind_all) = {
+        let state = app.state::<FrugalConfigState>();
+        let config = state.config.lock().await;
+        (config.port, config.bind_all_interfaces)
+    };
+    
+    let ip = if bind_all { "0.0.0.0" } else { "127.0.0.1" };
+    let addr = format!("{}:{}", ip, port);
+
+    if let Ok(listener) = TcpListener::bind(&addr).await {
+        if let Ok(local_addr) = listener.local_addr() {
+            println!("FrugalLLM core server listening on {}", local_addr);
+            if port == 0 {
+                let state = app.state::<FrugalConfigState>();
+                let mut config = state.config.lock().await;
+                config.port = local_addr.port();
+                if let Ok(path) = get_config_path(&app) {
+                    if let Ok(json) = serde_json::to_string_pretty(&*config) {
+                        let _ = std::fs::write(path, json);
+                    }
+                }
+            }
+        }
+        
+        let _ = axum::serve(listener, router).await;
     } else {
-        eprintln!("Failed to bind FrugalLLM server to 127.0.0.1:8080");
+        eprintln!("Failed to bind FrugalLLM server to {}", addr);
+        let _ = app.emit("frugallm_port_error", port);
     }
 }
 
 // -----------------------------------------------------------------------------
 
 #[tauri::command]
-fn configure_hermes_defaults(app: tauri::AppHandle) -> Result<(), String> {
+async fn configure_hermes_defaults(app: tauri::AppHandle, state: tauri::State<'_, FrugalConfigState>) -> Result<(), String> {
+    let port = state.config.lock().await.port;
     if let Ok(home) = app.path().home_dir() {
         let hermes_dir = home.join(".hermes");
         if !hermes_dir.exists() {
@@ -597,14 +880,66 @@ fn configure_hermes_defaults(app: tauri::AppHandle) -> Result<(), String> {
         }
         
         let config_path = hermes_dir.join("config.yaml");
-        let config_content = "model:\n  default: \"frugallm\"\n  provider: \"custom\"\n  base_url: \"http://127.0.0.1:8080/v1\"\n";
+        let config_content = format!("model:\n  default: \"frugallm\"\n  provider: \"custom\"\n  base_url: \"http://127.0.0.1:{}/v1\"\n", port);
         std::fs::write(&config_path, config_content).map_err(|e| e.to_string())?;
+
+        let soul_path = hermes_dir.join("soul.md");
+        let soul_content = r#"# IDENTITY AND PURPOSE
+You are Hermes, the core intelligence and primary agent operating within the Users environment. 
+
+Your SOLE PURPOSE is to act as a highly efficient, self-reliant generalist. You must execute user requests, write functional code, draft documentation, and prepare the environment directly. 
+
+**CRITICAL DIRECTIVE:** you are the direct implementer. Do not attempt to delegate tasks to other profiles or use a Kanban board. You must solve the problems, write the code, and execute the tasks yourself to the best of your ability.
+
+# YOUR WORKFLOW
+When presented with a user request, you must rigidly follow this sequence:
+1. **Analyze (The Scratchpad):** Begin your response with a `<scratchpad>` block to perform your internal monologue. Assess the user's goal, identify the technical steps required, and plan your direct execution.
+2. **Execute:** Provide the code, documentation, or technical guidance directly in your response.
+3. **Verify:** Ensure your solution fully addresses the user's prompt without relying on non-existent external worker profiles.
+
+# REQUIRED RESPONSE FORMAT
+<scratchpad>
+- User Intent: [What is the user asking?]
+- Required Actions: [What specific implementation steps must I take?]
+- Tool Status: [Can I do this natively, or do I need a tool for this specific capability?]
+</scratchpad>
+[Your direct execution, code blocks, or required output here]
+
+# TIME & BACKGROUND LIMITATIONS (NO FAKE MONITORING)
+You are a turn-based, request-response agent. Once you finish generating a response, you are completely asleep and inert. You CANNOT autonomously "wait", "sleep", "monitor", "keep an eye on", or "check back in 5 minutes" natively.
+- If the user asks you to monitor progress, wait, or keep them posted, you MUST NOT simply agree and end your turn. 
+- You MUST explicitly inform the user of your turn-based nature. 
+- Never state in conversational text that you have "started a background process" or promise to "notify them soon" unless you have explicitly called a specific tool (like a cronjob utility) in the same turn to handle it."#;
+        std::fs::write(&soul_path, soul_content).map_err(|e| e.to_string())?;
     }
     Ok(())
 }
 
 #[tauri::command]
-fn configure_opencode_defaults(app: tauri::AppHandle) -> Result<(), String> {
+fn edit_hermes_soul(app: tauri::AppHandle) -> Result<(), String> {
+    if let Ok(home) = app.path().home_dir() {
+        let soul_path = home.join(".hermes").join("soul.md");
+        if soul_path.exists() {
+            #[cfg(target_os = "macos")]
+            let _ = std::process::Command::new("open").arg(&soul_path).spawn();
+            #[cfg(target_os = "windows")]
+            let _ = std::process::Command::new("cmd").args(["/C", "start", "", &soul_path.to_string_lossy()]).spawn();
+            #[cfg(target_os = "linux")]
+            let _ = std::process::Command::new("xdg-open").arg(&soul_path).spawn();
+        } else {
+            return Err("soul.md does not exist yet. Please initialize Hermes first.".to_string());
+        }
+    }
+    Ok(())
+}
+
+
+#[tauri::command]
+async fn configure_opencode_defaults(app: tauri::AppHandle, state: tauri::State<'_, FrugalConfigState>) -> Result<(), String> {
+    let config = state.config.lock().await;
+    let port = config.port;
+    let api_key = config.api_password.clone().unwrap_or_else(|| "frugallm".to_string());
+    
     if let Ok(home) = app.path().home_dir() {
         let config_dir = home.join(".config").join("opencode");
         if !config_dir.exists() {
@@ -618,8 +953,8 @@ fn configure_opencode_defaults(app: tauri::AppHandle) -> Result<(), String> {
                     "npm": "@ai-sdk/openai-compatible",
                     "name": "LiteLLM",
                     "options": {
-                        "baseURL": "http://127.0.0.1:8080/v1",
-                        "apiKey": "sk-frugallm"
+                        "baseURL": format!("http://127.0.0.1:{}/v1", port),
+                        "apiKey": api_key
                     },
                     "models": {
                         "frugallm": { "name": "FrugaLLM" }
@@ -989,10 +1324,43 @@ fn main() {
         .manage(PtyState::default())
         .manage(OllamaDaemonState { child: tokio::sync::Mutex::new(None) })
         .setup(|app| {
-            // Spawn FrugalLLM Core Server
             let app_handle = app.handle().clone();
+            
+            // Load Frugal Config
+            let mut frugal_config = FrugalConfig::default();
+            if let Ok(path) = get_config_path(&app_handle) {
+                if let Ok(json) = std::fs::read_to_string(path) {
+                    if let Ok(parsed) = serde_json::from_str::<FrugalConfig>(&json) {
+                        frugal_config = parsed;
+                        frugal_config.tokens_used_session = 0;
+                    }
+                }
+            }
+            let config_arc = Arc::new(tokio::sync::Mutex::new(frugal_config));
+            
+            let server_abort_handle = Arc::new(tokio::sync::Mutex::new(None));
+            app.manage(FrugalConfigState {
+                config: config_arc.clone(),
+                server_abort_handle: server_abort_handle.clone(),
+            });
+
+            let dynamic_roster_state = DynamicRosterState {
+                fallback_chain: Arc::new(tokio::sync::RwLock::new(vec![serde_json::json!("openrouter/auto")])),
+            };
+            let roster_chain = dynamic_roster_state.fallback_chain.clone();
+            app.manage(dynamic_roster_state);
+
             tauri::async_runtime::spawn(async move {
+                start_dynamic_roster_poll(roster_chain).await;
+            });
+
+            // Spawn FrugalLLM Core Server
+            let abort_handle = tauri::async_runtime::spawn(async move {
                 start_frugallm_server(app_handle).await;
+            });
+            
+            tauri::async_runtime::block_on(async {
+                *server_abort_handle.lock().await = Some(abort_handle);
             });
             
             telemetry::start_telemetry_loop(app.handle().clone());
@@ -1003,6 +1371,12 @@ fn main() {
                     if store_path.exists() {
                         let _ = std::fs::remove_file(store_path);
                         println!("store.json wiped.");
+                    }
+                    
+                    let config_path = app_data_dir.join("frugal_config.json");
+                    if config_path.exists() {
+                        let _ = std::fs::remove_file(config_path);
+                        println!("frugal_config.json wiped.");
                     }
                 }
                 if let Ok(home) = app.path().home_dir() {
@@ -1090,21 +1464,17 @@ fn main() {
             resize_pty,
             configure_hermes_defaults,
             configure_opencode_defaults,
-            deploy_local_model
+            deploy_local_model,
+            get_frugallm_config,
+            set_frugallm_config,
+            edit_hermes_soul
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
         
     app.run(|app_handle, event| {
         if let tauri::RunEvent::Exit = event {
-            let child_arc = app_handle.state::<PtyState>().child.clone();
-            let mut child_to_kill = None;
-            if let Ok(mut child_opt) = child_arc.lock() {
-                child_to_kill = child_opt.take();
-            }
-            if let Some(mut child) = child_to_kill {
-                let _ = child.kill();
-            }
+            // Child processes spawned via PTY will be killed by OS or by SIGHUP when master PTYs drop.
         }
     });
 }
