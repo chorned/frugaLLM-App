@@ -1,0 +1,208 @@
+{
+  "routingGraph": {
+    "nodes": {
+      "ollamaLocal": {
+        "label": "OLLAMA LOCAL",
+        "description": "Your private, local brain! Ollama runs lightweight open-source models right on your machine, keeping your data entirely private and free from cloud costs."
+      },
+      "openRouter": {
+        "label": "OPENROUTER",
+        "description": "The ultimate gateway to the cloud! OpenRouter acts as a smart multiplexer, automatically routing your requests to the best and cheapest proprietary AI models available."
+      },
+      "localHardware": {
+        "label": "LOCAL HARDWARE",
+        "description": "GPU and CPU resources dedicated to local inference."
+      },
+      "externalCloud": {
+        "label": "EXTERNAL CLOUD",
+        "description": "Routing to external API providers."
+      },
+      "frugallmCore": {
+        "label": "FRUGALLM CORE",
+        "description": "The true mastermind of the operation. FrugalLM acts as your central hub, intercepting prompts and dynamically routing them to save you serious money without sacrificing quality!"
+      },
+      "openCode": {
+        "label": "OPENCODE",
+        "description": "Your AI pair programmer, living right inside your IDE! OpenCode connects directly to the hub to give you brilliant, context-aware coding suggestions as you type."
+      },
+      "hermes": {
+        "label": "HERMES",
+        "description": "Say hello to Hermes, your internal AI chat interface! It's not just for chatting; Hermes can kick off complex, multi-step agent workflows to get real work done."
+      }
+    },
+    "nodeConfigPanel": {
+      "inputs": {
+        "schemaPath": {
+          "label": "SCHEMA PATH",
+          "helpText": "Think of this as the agent's strict instruction manual. By giving it a JSON schema, we force the AI to return data in the exact structure your application expects. No more messy text—just clean data!"
+        },
+        "workingDir": {
+          "label": "WORKING DIR (CWD)",
+          "helpText": "Where should the agent live while it works? This is the folder on your computer where the agent will run commands and look for files. It's basically the agent's home base."
+        },
+        "executable": {
+          "label": "EXECUTABLE (BIN)",
+          "helpText": "Which program is actually doing the heavy lifting? This tells the system what tool to launch under the hood. Usually, it's 'agy' for our Antigravity agent, but you can plug in any CLI tool!"
+        },
+        "extraArgs": {
+          "label": "EXTRA ARGS (CSV)",
+          "helpText": "Want to tweak how the agent runs? You can pass secret flags here (like '--verbose' to see its inner thoughts). Just list them out, separated by commas.",
+          "placeholder": "--verbose, --force"
+        },
+        "instructionPrompt": {
+          "label": "INSTRUCTION PROMPT",
+          "helpText": "This is your agent's main mission. Tell it exactly what you want it to accomplish. Be as specific as possible—the better the prompt, the better the results!"
+        },
+        "ipAddress": {
+          "label": "IP ADDRESS / HOST",
+          "helpText": "Where does this service live on the network? Usually, it's right here on your computer ('127.0.0.1' or 'localhost'), but it could be a cloud API halfway across the world!"
+        },
+        "port": {
+          "label": "PORT",
+          "helpText": "Think of the IP address as the building, and the Port as the specific door to knock on. It's how our hub knows exactly where to send its messages."
+        },
+        "bindAllInterfaces": {
+          "label": "Make available everywhere",
+          "helpText": "Making FrugaLLM available everywhere means it will detect traffic from all your network connections. Do not enable this if you only using FrugaLLM on one machine."
+        },
+        "apiPassword": {
+          "label": "API PASSWORD (OPTIONAL)",
+          "helpText": "Set an API token to secure your FrugalLM node.",
+          "placeholder": "Super secret...",
+          "buttons": {
+            "overwrite": "OVERWRITE EXISTING PASSWORD?",
+            "removePrompt": "REMOVE PASSWORD?",
+            "yes": "YES",
+            "no": "NO",
+            "apply": "APPLY PASSWORD",
+            "remove": "REMOVE"
+          }
+        },
+        "openRouterApiKey": {
+          "label": "API KEY",
+          "helpText": "Your OpenRouter API Key. This will be securely saved into your operating system's native Keychain!",
+          "placeholder": "sk-or-v1-..."
+        }
+      },
+      "stats": {
+        "sessionTokens": "SESSION TOKENS",
+        "lifetimeTokens": "LIFETIME TOKENS",
+        "estLifetimeSavings": "EST. LIFETIME SAVINGS",
+        "savingsHelpText": "Estimated savings assuming Claude 3.5 Sonnet pricing ($3.00/1M In, $15.00/1M Out)",
+        "vramDetected": "VRAM DETECTED (GB)",
+        "vramHelpText": "We tried to auto-detect your Video RAM, but you can correct this if it's wrong.",
+        "recommendedModel": "RECOMMENDED MODEL",
+        "recommendedModelHelpText": "Based on your VRAM, we'll pull this model for you!",
+        "unsupportedVram": "Unsupported (< 4GB VRAM)"
+      },
+      "actions": {
+        "copyIpAndPort": "COPY IP & PORT",
+        "disconnect": "DISCONNECT",
+        "updateProtocol": "UPDATE PROTOCOL",
+        "help": "HELP",
+        "hermes": {
+          "missing": "HERMES AGENT MISSING",
+          "prerequisite": "Prerequisite: Connect Ollama or OpenRouter first.",
+          "initialize": "INITIALIZE HERMES",
+          "installed": "HERMES AGENT INSTALLED",
+          "launchDesktop": "LAUNCH DESKTOP",
+          "launchWebUi": "LAUNCH WEBUI",
+          "uninstall": "UNINSTALL HERMES"
+        },
+        "opencode": {
+          "missing": "OPENCODE AGENT MISSING",
+          "initialize": "INITIALIZE OPENCODE",
+          "installed": "OPENCODE AGENT INSTALLED",
+          "launch": "LAUNCH OPENCODE",
+          "uninstall": "UNINSTALL OPENCODE"
+        },
+        "ollama": {
+          "missing": "OLLAMA MISSING",
+          "initialize": "INITIALIZE OLLAMA",
+          "installed": "OLLAMA INSTALLED",
+          "chat": "CHAT WITH OLLAMA",
+          "uninstall": "UNINSTALL OLLAMA"
+        },
+        "openRouter": {
+          "connected": "OPENROUTER CONNECTED"
+        },
+        "common": {
+          "areYouSure": "ARE YOU SURE?",
+          "workspaceFolder": "WORKSPACE FOLDER",
+          "kill": "KILL",
+          "editSoul": "EDIT SOUL.MD"
+        }
+      }
+    },
+    "nodeWidgets": {
+      "common": {
+        "copy": "COPY",
+        "copied": "✓ OK",
+        "idle": "IDLE",
+        "loading": "LOADING",
+        "thinking": "THINKING",
+        "loaded": "LOADED",
+        "planned": "PLANNED",
+        "hubOnline": "HUB ONLINE",
+        "endpoint": "ENDPOINT",
+        "running": "RUNNING",
+        "binary": "BINARY",
+        "connected": "CONNECTED",
+        "stopped": "STOPPED",
+        "standby": "STANDBY",
+        "host": "HOST",
+        "none": "None"
+      },
+      "hardwareNode": {
+        "activeModel": "Active Model",
+        "cpuLoad": "CPU Load",
+        "gpuLoad": "GPU Load",
+        "ramAllocation": "RAM Allocation",
+        "vramAllocation": "VRAM Allocation",
+        "throughput": "Throughput",
+        "tokensPerSecond": "t/s"
+      },
+      "cloudConnectNode": {
+        "routing": "ROUTING",
+        "gateway": "Gateway",
+        "openRouterApi": "OpenRouter API"
+      }
+    },
+    "hardwareTelemetryWidget": {
+      "ollamaDaemonOffline": "Ollama Daemon Offline",
+      "waitingForConnection": "Waiting for connection...",
+      "gpu100": "100% GPU",
+      "hybrid": "HYBRID",
+      "cpuOnly": "CPU ONLY",
+      "unknown": "UNKNOWN",
+      "activeModel": "ACTIVE MODEL",
+      "idle": "Idle",
+      "cpuUtil": "CPU UTIL",
+      "gpuUtil": "GPU UTIL",
+      "vramUsage": "VRAM USAGE",
+      "noModelLoaded": "No model currently loaded in memory."
+    },
+    "terminal": {
+      "confirmClose": "This will terminate the running process. Are you sure?",
+      "yes": "Yes",
+      "cancel": "Cancel",
+      "downloadingWeights": "Downloading Weights...",
+      "starting": "Starting...",
+      "startingOpenCode": "Starting OpenCode...",
+      "startingHermes": "Starting Hermes Agent...",
+      "startingOllama": "Chatting with Ollama...",
+      "exitedWithCode": "{{name}} exited with code {{code}}"
+    },
+    "guides": {
+      "quickstartTitle": "FRUGALLM // QUICKSTART GUIDES",
+      "quickstartSubtitle": "Welcome to the FrugalLLM Central Hub. Select a guide below to learn how to configure your neural topology and orchestrate your AI agents:",
+      "jsonSchemasTitle": "Defining JSON Schemas",
+      "jsonSchemasSubtitle": "Learn how to force agents to return strict data formats.",
+      "ollamaTitle": "Connecting Local Ollama",
+      "ollamaSubtitle": "How to run completely private models locally on port 11434.",
+      "openRouterTitle": "Advanced OpenRouter Multiplexing",
+      "openRouterSubtitle": "Route queries dynamically to save costs and avoid rate limits.",
+      "guideTitle": "FRUGALLM // GUIDE"
+    }
+  }
+}
