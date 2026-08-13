@@ -54,6 +54,13 @@ test.describe('Node Configuration Panel', () => {
     // Reopen and check if saved
     await canvas.clickNode('HERMES');
     await expect(configPanel.port).toHaveValue('3002');
+    
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: './copy-audit/node-config-panel.png', fullPage: true });
+    
+    await page.getByText('HELP').click();
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: './copy-audit/guides.png', fullPage: true });
   });
 
   test('should handle network/service fields and API keys', async ({ page }) => {

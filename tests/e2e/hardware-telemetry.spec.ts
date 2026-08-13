@@ -106,6 +106,9 @@ test.describe('Hardware Telemetry Widget', () => {
 
     await expect(telemetry.memoryLabel).toHaveText('VRAM Allocation');
     await expect(telemetry.memoryValue).toHaveText('4.4 / 8.0 GB');
+
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: './copy-audit/hardware-telemetry-widget.png', fullPage: true });
   });
 
   test('should update throughput when bytes are emitted', async ({ page }) => {

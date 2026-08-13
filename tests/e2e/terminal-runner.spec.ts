@@ -71,6 +71,9 @@ test.describe('Terminal Runner View', () => {
       expect(resizeCall).toBeDefined();
     }).toPass({ timeout: 2000 });
 
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: './copy-audit/terminal.png', fullPage: true });
+
     // Click close
     await terminal.closeButton.click();
 

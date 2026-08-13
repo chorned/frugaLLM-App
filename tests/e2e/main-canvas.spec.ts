@@ -64,6 +64,10 @@ test.describe('Main Canvas Dashboard', () => {
 
     // Test drag node (even if it doesn't move it in v1, we simulate it)
     await canvas.dragNode('FRUGALLM CORE', 50, 50);
+    
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: './copy-audit/main-canvas.png', fullPage: true });
+    await page.screenshot({ path: './copy-audit/node-widgets.png', fullPage: true });
   });
 
   test('should open configuration panel on node click', async ({ page }) => {
