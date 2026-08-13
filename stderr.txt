@@ -1,0 +1,11 @@
+[49257] Using existing client port: 22227
+[49257] Discovering OAuth server configuration...
+[49257] Discovered authorization server: https://mcp.linear.app
+[49257] [49257] Connecting to remote server: https://mcp.linear.app/mcp
+[49257] Using transport strategy: http-first
+[49257] Connected to remote server using StreamableHTTPClientTransport
+[49257] Local STDIO server running
+[49257] Proxy established successfully between local STDIO and remote StreamableHTTPClientTransport
+[49257] Press Ctrl+C to exit
+[49257] 
+Shutting down...
