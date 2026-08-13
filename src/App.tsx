@@ -7,6 +7,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import ReactMarkdown from 'react-markdown';
 import { StatusLight, CopyableField, HardwareNode, CloudConnectNode } from './components/NodeWidgets';
 import agentsGuide from './guides/agents.md?raw';
@@ -166,6 +167,9 @@ const Tooltip = ({ text }: { text: string }) => {
 
 const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled, isOpenCodeInstalled, isOllamaInstalled, detectedVram, setDetectedVram, hasActiveBackend, handleInitializeHermes, handleOpenHermes, handleUninstallHermes, handleInitializeOpenCode, handleOpenOpenCode, handleUninstallOpenCode, handleInitializeOllama, handleOpenOllama, handleUninstallOllama, handleDisconnectOpenRouter, frugalConfig, handleOpenHermesDesktop, handleOpenHermesWeb, handleOpenOpenCodeWeb, activeProcesses, handleKillProcess }: any) => {
   const [confirmUninstall, setConfirmUninstall] = useState<string | null>(null);
+  const [ipCopied, setIpCopied] = useState(false);
+  const [passwordCopied, setPasswordCopied] = useState(false);
+  const [confirmPasswordAction, setConfirmPasswordAction] = useState<'overwrite' | 'remove' | null>(null);
   const [formData, setFormData] = useState({
     ip: node.data.ip || '',
     port: node.data.port || '',
@@ -216,11 +220,12 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
 
   return (
     <div onClick={handlePanelClick} style={{ 
-      width: '320px', 
-      borderLeft: '4px solid #111827', 
+      width: '450px', 
+      maxHeight: '85vh',
+      border: '4px solid #111827', 
       backgroundColor: '#ffffff',
       display: 'flex', flexDirection: 'column',
-      boxShadow: '-10px 0 30px rgba(0,0,0,0.1)',
+      boxShadow: '8px 8px 0px #111827',
       zIndex: 100,
       fontFamily: '"Courier New", Courier, monospace'
     }}>
@@ -263,8 +268,14 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
             <>
               <div>
                 <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#111827', marginBottom: '6px' }}>IP ADDRESS / HOST <Tooltip text="Where does this service live on the network? Usually, it's right here on your computer ('127.0.0.1' or 'localhost'), but it could be a cloud API halfway across the world!" /></label>
-                <input type="text" name="ip" value={formData.ip} onChange={handleChange}
-                  style={{ width: '100%', padding: '10px 12px', border: '2px solid #111827', backgroundColor: '#ffffff', color: '#111827', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: '2px 2px 0px #111827' }} />
+                {node.id === 'node-frugallm' ? (
+                  <div style={{ width: '100%', padding: '10px 12px', border: '2px dashed #9ca3af', backgroundColor: '#f3f4f6', color: '#111827', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, cursor: 'not-allowed' }}>
+                    {formData.bind_all_interfaces ? '0.0.0.0' : '127.0.0.1'}
+                  </div>
+                ) : (
+                  <input type="text" name="ip" value={formData.ip} onChange={handleChange}
+                    style={{ width: '100%', padding: '10px 12px', border: '2px solid #111827', backgroundColor: '#ffffff', color: '#111827', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: '2px 2px 0px #111827' }} />
+                )}
               </div>
               <div>
                 <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#111827', marginBottom: '6px' }}>PORT <Tooltip text="Think of the IP address as the building, and the Port as the specific door to knock on. It's how our hub knows exactly where to send its messages." /></label>
@@ -279,33 +290,93 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
                   </div>
                   <div style={{ marginTop: '10px' }}>
                     <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#111827', marginBottom: '6px' }}>API PASSWORD (OPTIONAL) <Tooltip text="Set an API token to secure your FrugalLM node." /></label>
-                    <input type="password" name="api_password" value={formData.api_password} onChange={handleChange} placeholder="Super secret..."
-                      style={{ width: '100%', padding: '10px 12px', border: '2px solid #111827', backgroundColor: '#ffffff', color: '#111827', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: '2px 2px 0px #111827' }} />
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                      <input type="password" name="api_password" value={formData.api_password} onChange={handleChange} placeholder={frugalConfig?.api_password ? "••••••••" : "Super secret..."}
+                        style={{ flexGrow: 1, padding: '10px 12px', border: '2px solid #111827', backgroundColor: '#ffffff', color: '#111827', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: '2px 2px 0px #111827' }} />
+                      
+                      {frugalConfig?.api_password && (
+                        <button 
+                          onClick={async () => {
+                             try {
+                               await writeText(frugalConfig.api_password);
+                               setPasswordCopied(true);
+                               setTimeout(() => setPasswordCopied(false), 1500);
+                             } catch (err) {
+                               console.error('Clipboard write failed:', err);
+                             }
+                          }}
+                          style={{ padding: '0 12px', backgroundColor: passwordCopied ? '#065f46' : '#e5e7eb', color: passwordCopied ? '#34d399' : '#111827', border: '2px solid #111827', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '2px 2px 0px #111827', transition: 'all 0.15s' }}>
+                          {passwordCopied ? '✓' : 'COPY'}
+                        </button>
+                      )}
+                    </div>
+                    {confirmPasswordAction ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px', backgroundColor: '#fff7ed', border: '2px dashed #ea580c' }}>
+                        <span style={{ fontSize: '0.8rem', color: '#9a3412', fontWeight: 700 }}>
+                          {confirmPasswordAction === 'overwrite' ? 'OVERWRITE EXISTING PASSWORD?' : 'REMOVE PASSWORD?'}
+                        </span>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button onClick={() => {
+                            if (confirmPasswordAction === 'remove') {
+                              setFormData(prev => ({ ...prev, api_password: '' }));
+                              onSave(node.id, { ...formData, api_password: '' });
+                            } else {
+                              onSave(node.id, formData);
+                            }
+                            setConfirmPasswordAction(null);
+                          }} style={{ flex: 1, padding: '6px', backgroundColor: '#ef4444', color: 'white', border: '2px solid #991b1b', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
+                          <button onClick={() => setConfirmPasswordAction(null)} style={{ flex: 1, padding: '6px', backgroundColor: '#ffffff', color: '#111827', border: '2px solid #111827', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button onClick={() => {
+                          if (frugalConfig?.api_password && formData.api_password !== frugalConfig.api_password && formData.api_password !== '') {
+                            setConfirmPasswordAction('overwrite');
+                          } else if (formData.api_password !== '') {
+                            onSave(node.id, formData);
+                          }
+                        }} style={{ flex: 1, padding: '8px', backgroundColor: '#111827', color: 'white', border: '2px solid #111827', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '2px 2px 0px #111827' }}>
+                          APPLY PASSWORD
+                        </button>
+                        {frugalConfig?.api_password && (
+                          <button onClick={() => setConfirmPasswordAction('remove')} style={{ padding: '8px', backgroundColor: '#fef2f2', color: '#ef4444', border: '2px dashed #ef4444', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                            REMOVE
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div style={{ marginTop: '20px', padding: '12px', backgroundColor: '#f3f4f6', border: '2px dashed #9ca3af', borderRadius: '4px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                       <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#4b5563' }}>SESSION TOKENS</span>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#111827' }}>{frugalConfig?.tokens_used_session || 0}</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#111827' }}>{(frugalConfig?.input_tokens_session || 0) + (frugalConfig?.output_tokens_session || 0)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#4b5563' }}>LIFETIME TOKENS</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#111827' }}>{(frugalConfig?.input_tokens_lifetime || 0) + (frugalConfig?.output_tokens_lifetime || 0)}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#4b5563' }}>LIFETIME TOKENS</span>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#111827' }}>{frugalConfig?.tokens_used_lifetime || 0}</span>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#4b5563' }}>EST. LIFETIME SAVINGS <Tooltip text="Estimated savings assuming Claude 3.5 Sonnet pricing ($3.00/1M In, $15.00/1M Out)" /></span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#16a34a' }}>
+                        ${((((frugalConfig?.input_tokens_lifetime || 0) / 1000000) * 3.0) + (((frugalConfig?.output_tokens_lifetime || 0) / 1000000) * 15.0)).toFixed(4)}
+                      </span>
                     </div>
                   </div>
                   <button 
-                    onClick={() => {
-                       navigator.clipboard.writeText(`http://${formData.bind_all_interfaces ? '0.0.0.0' : '127.0.0.1'}:${formData.port}`);
+                    onClick={async () => {
+                       try {
+                         await writeText(`http://${formData.bind_all_interfaces ? '0.0.0.0' : '127.0.0.1'}:${formData.port}`);
+                         setIpCopied(true);
+                         setTimeout(() => setIpCopied(false), 1500);
+                       } catch (err) {
+                         console.error('Clipboard write failed:', err);
+                       }
                     }}
-                    style={{ marginTop: '15px', width: '100%', padding: '8px', backgroundColor: '#e5e7eb', color: '#111827', border: '2px solid #111827', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '2px 2px 0px #111827' }}>
-                    COPY IP & PORT
+                    style={{ marginTop: '15px', width: '100%', padding: '8px', backgroundColor: ipCopied ? '#065f46' : '#e5e7eb', color: ipCopied ? '#34d399' : '#111827', border: '2px solid #111827', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '2px 2px 0px #111827', transition: 'all 0.15s' }}>
+                    {ipCopied ? '✓ OK' : 'COPY IP & PORT'}
                   </button>
-                  <button 
-                    onClick={() => {
-                       if (formData.api_password) navigator.clipboard.writeText(formData.api_password);
-                    }}
-                    style={{ marginTop: '10px', width: '100%', padding: '8px', backgroundColor: '#e5e7eb', color: '#111827', border: '2px solid #111827', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '2px 2px 0px #111827' }}>
-                    COPY API PASSWORD
-                  </button>
+
                 </>
               )}
               {node.id === 'node-openrouter' && (
@@ -572,6 +643,7 @@ const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, 
   const terminalRef = useRef<HTMLDivElement>(null);
   const [isProvisioningModel, setIsProvisioningModel] = useState(false);
   const [downloadPercent, setDownloadPercent] = useState<number>(0);
+  const [showConfirmClose, setShowConfirmClose] = useState(false);
 
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -793,12 +865,23 @@ const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, 
 
   return (
     <div style={{ flexGrow: 1, position: 'relative', display: 'flex', flexDirection: 'column', backgroundColor: '#111827', alignItems: 'center', boxSizing: 'border-box', padding: '35px 20px 20px 20px' }}>
-      <button 
-        onClick={onExit}
-        style={{ position: 'absolute', top: '5px', right: '15px', padding: '0', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent', color: 'white', border: 'none', cursor: 'pointer', fontFamily: 'sans-serif', fontWeight: 'bold', fontSize: '20px', zIndex: 10 }}
-      >
-        ✕
-      </button>
+      {showConfirmClose ? (
+        <div style={{ position: 'absolute', top: '10px', right: '15px', display: 'flex', gap: '10px', alignItems: 'center', backgroundColor: '#ef4444', padding: '8px 12px', borderRadius: '4px', zIndex: 10 }}>
+          <span style={{ color: 'white', fontWeight: 'bold', fontSize: '0.85rem' }}>This will terminate the running process. Are you sure?</span>
+          <button onClick={() => {
+            invoke('kill_pty', { sessionId }).catch(console.error);
+            onExit();
+          }} style={{ padding: '4px 12px', backgroundColor: '#ffffff', color: '#ef4444', border: 'none', fontWeight: 'bold', cursor: 'pointer', borderRadius: '2px' }}>Yes</button>
+          <button onClick={() => setShowConfirmClose(false)} style={{ padding: '4px 12px', backgroundColor: 'transparent', color: 'white', border: '1px solid white', fontWeight: 'bold', cursor: 'pointer', borderRadius: '2px' }}>Cancel</button>
+        </div>
+      ) : (
+        <button 
+          onClick={() => setShowConfirmClose(true)}
+          style={{ position: 'absolute', top: '5px', right: '15px', padding: '0', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent', color: 'white', border: 'none', cursor: 'pointer', fontFamily: 'sans-serif', fontWeight: 'bold', fontSize: '20px', zIndex: 10 }}
+        >
+          ✕
+        </button>
+      )}
 
       {isProvisioningModel && (
         <div style={{ width: '100%', padding: '16px', backgroundColor: '#fed7aa', color: '#9a3412', border: '2px solid #9a3412', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '15px' }}>
@@ -893,6 +976,22 @@ export default function App() {
 
   const [activeProxyState, setActiveProxyState] = useState<{source: string, target: string} | null>(null);
   const proxyTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (isHermesInstalled !== null) {
+      const isRunning = activeProcesses['run-hermes'] || activeProcesses['run-hermes-desktop'] || activeProcesses['run-hermes-web'];
+      const status = isRunning ? 'active' : (isHermesInstalled ? 'needs_activation' : 'inactive');
+      setNodes(nds => nds.map(n => n.id === 'node-hermes' && n.data.status !== status ? { ...n, data: { ...n.data, status } } : n));
+    }
+  }, [isHermesInstalled, activeProcesses]);
+
+  useEffect(() => {
+    if (isOpenCodeInstalled !== null) {
+      const isRunning = activeProcesses['run-opencode'] || activeProcesses['run-opencode-web'];
+      const status = isRunning ? 'active' : (isOpenCodeInstalled ? 'needs_activation' : 'inactive');
+      setNodes(nds => nds.map(n => n.id === 'node-opencode' && n.data.status !== status ? { ...n, data: { ...n.data, status } } : n));
+    }
+  }, [isOpenCodeInstalled, activeProcesses]);
 
   useEffect(() => {
     invoke('check_hermes_status').then((installed) => {
@@ -1049,8 +1148,10 @@ export default function App() {
           port: parseInt(finalConfig.port, 10),
           bind_all_interfaces: finalConfig.bind_all_interfaces,
           api_password: finalConfig.api_password || null,
-          tokens_used_session: frugalConfig?.tokens_used_session || 0,
-          tokens_used_lifetime: frugalConfig?.tokens_used_lifetime || 0,
+          input_tokens_session: frugalConfig?.input_tokens_session || 0,
+          output_tokens_session: frugalConfig?.output_tokens_session || 0,
+          input_tokens_lifetime: frugalConfig?.input_tokens_lifetime || 0,
+          output_tokens_lifetime: frugalConfig?.output_tokens_lifetime || 0,
           hermes_workspace: frugalConfig?.hermes_workspace || null,
           opencode_workspace: frugalConfig?.opencode_workspace || null,
         };
@@ -1074,8 +1175,10 @@ export default function App() {
           port: frugalConfig?.port || 0,
           bind_all_interfaces: frugalConfig?.bind_all_interfaces || false,
           api_password: frugalConfig?.api_password || null,
-          tokens_used_session: frugalConfig?.tokens_used_session || 0,
-          tokens_used_lifetime: frugalConfig?.tokens_used_lifetime || 0,
+          input_tokens_session: frugalConfig?.input_tokens_session || 0,
+          output_tokens_session: frugalConfig?.output_tokens_session || 0,
+          input_tokens_lifetime: frugalConfig?.input_tokens_lifetime || 0,
+          output_tokens_lifetime: frugalConfig?.output_tokens_lifetime || 0,
           hermes_workspace: nodeId === 'node-hermes' ? (finalConfig.hermes_workspace || null) : (frugalConfig?.hermes_workspace || null),
           opencode_workspace: nodeId === 'node-opencode' ? (finalConfig.opencode_workspace || null) : (frugalConfig?.opencode_workspace || null),
         };
@@ -1536,9 +1639,11 @@ export default function App() {
         </div>
 
       </div>
-      {/* Side Panel */}
+      {/* Settings Modal */}
       {selectedNode && !terminalMode && (
-        <NodeConfigPanel node={selectedNode} onClose={() => setSelectedNodeId(null)} onSave={handleSaveNodeConfig} onOpenGuide={setActiveGuide} isHermesInstalled={isHermesInstalled} isOpenCodeInstalled={isOpenCodeInstalled} isOllamaInstalled={isOllamaInstalled} detectedVram={detectedVram} setDetectedVram={setDetectedVram} hasActiveBackend={hasActiveBackend} handleInitializeHermes={handleInitializeHermes} handleOpenHermes={handleOpenHermes} handleUninstallHermes={handleUninstallHermes} handleInitializeOpenCode={handleInitializeOpenCode} handleOpenOpenCode={handleOpenOpenCode} handleUninstallOpenCode={handleUninstallOpenCode} handleInitializeOllama={handleInitializeOllama} handleOpenOllama={handleOpenOllama} handleUninstallOllama={handleUninstallOllama} handleDisconnectOpenRouter={handleDisconnectOpenRouter} frugalConfig={frugalConfig} handleOpenHermesDesktop={handleOpenHermesDesktop} handleOpenHermesWeb={handleOpenHermesWeb} handleOpenOpenCodeWeb={handleOpenOpenCodeWeb} activeProcesses={activeProcesses} handleKillProcess={(mode: string) => invoke('kill_pty', { sessionId: mode }).catch(console.error)} />
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setSelectedNodeId(null)}>
+          <NodeConfigPanel node={selectedNode} onClose={() => setSelectedNodeId(null)} onSave={handleSaveNodeConfig} onOpenGuide={setActiveGuide} isHermesInstalled={isHermesInstalled} isOpenCodeInstalled={isOpenCodeInstalled} isOllamaInstalled={isOllamaInstalled} detectedVram={detectedVram} setDetectedVram={setDetectedVram} hasActiveBackend={hasActiveBackend} handleInitializeHermes={handleInitializeHermes} handleOpenHermes={handleOpenHermes} handleUninstallHermes={handleUninstallHermes} handleInitializeOpenCode={handleInitializeOpenCode} handleOpenOpenCode={handleOpenOpenCode} handleUninstallOpenCode={handleUninstallOpenCode} handleInitializeOllama={handleInitializeOllama} handleOpenOllama={handleOpenOllama} handleUninstallOllama={handleUninstallOllama} handleDisconnectOpenRouter={handleDisconnectOpenRouter} frugalConfig={frugalConfig} handleOpenHermesDesktop={handleOpenHermesDesktop} handleOpenHermesWeb={handleOpenHermesWeb} handleOpenOpenCodeWeb={handleOpenOpenCodeWeb} activeProcesses={activeProcesses} handleKillProcess={(mode: string) => invoke('kill_pty', { sessionId: mode }).catch(console.error)} />
+        </div>
       )}
 
       {/* Guides Modal */}

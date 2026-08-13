@@ -346,9 +346,7 @@ export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean 
           LOCAL HARDWARE
           <span style={{ fontSize: '0.6rem', color: '#9ca3af' }}>{isCollapsed ? '▼' : '▲'}</span>
           {/* Debug indicator to help diagnose state issues */}
-          <span style={{ fontSize: '0.5rem', color: isGenerating ? '#10b981' : '#ef4444' }}>
-            [gen:{isGenerating ? 'T' : 'F'} loaded:{isLoaded ? 'T' : 'F'}]
-          </span>
+
         </div>
         <StatusLight active={isStatusActive} text={headerStatusText} />
       </div>
@@ -366,14 +364,14 @@ export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean 
           {/* Utilization Bar (Load) */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', color: '#9ca3af' }}>
-              <span>{telemetry?.ollama?.location_state === 'cpu' ? 'CPU Load' : 'GPU Load'}</span>
+              <span>{isCpuMode ? 'CPU Load' : 'GPU Load'}</span>
               <span>{loadPercent.toFixed(1)}%</span>
             </div>
             <div style={{ width: '100%', height: '10px', backgroundColor: '#1f2937', borderRadius: '5px', overflow: 'hidden' }}>
               <div 
                 style={{ 
                   height: '100%', 
-                  backgroundColor: telemetry?.ollama?.location_state === 'cpu' ? '#3b82f6' : '#ea580c', 
+                  backgroundColor: isCpuMode ? '#3b82f6' : '#ea580c', 
                   transition: 'width 0.3s ease-out', 
                   width: `${Math.min(100, Math.max(0, loadPercent))}%` 
                 }} 
@@ -422,9 +420,7 @@ export const CloudConnectNode = ({ isActive = false }: { isActive?: boolean }) =
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #374151', paddingBottom: '8px' }}>
         <div style={{ fontWeight: 800, fontSize: '0.8rem', color: '#e5e7eb', display: 'flex', gap: '8px', alignItems: 'center' }}>
           EXTERNAL CLOUD
-          <span style={{ fontSize: '0.5rem', color: isActive ? '#10b981' : '#6b7280' }}>
-            [proxy:{isActive ? 'ACTV' : 'IDLE'}]
-          </span>
+
         </div>
         <StatusLight active={isActive} text={isActive ? 'ROUTING' : 'IDLE'} />
       </div>

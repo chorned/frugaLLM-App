@@ -24,8 +24,10 @@ pub struct FrugalConfig {
     pub port: u16,
     pub bind_all_interfaces: bool,
     pub api_password: Option<String>,
-    pub tokens_used_session: u64,
-    pub tokens_used_lifetime: u64,
+    pub input_tokens_session: u64,
+    pub output_tokens_session: u64,
+    pub input_tokens_lifetime: u64,
+    pub output_tokens_lifetime: u64,
     pub opencode_workspace: Option<String>,
     pub hermes_workspace: Option<String>,
 }
@@ -36,8 +38,10 @@ impl Default for FrugalConfig {
             port: 0,
             bind_all_interfaces: false,
             api_password: None,
-            tokens_used_session: 0,
-            tokens_used_lifetime: 0,
+            input_tokens_session: 0,
+            output_tokens_session: 0,
+            input_tokens_lifetime: 0,
+            output_tokens_lifetime: 0,
             opencode_workspace: None,
             hermes_workspace: None,
         }
@@ -388,6 +392,7 @@ struct NotifyOnDrop {
     source: String,
     target: String,
     token_estimate: Arc<std::sync::atomic::AtomicUsize>,
+    input_tokens: usize,
 }
 impl Drop for NotifyOnDrop {
     fn drop(&mut self) {
@@ -397,14 +402,18 @@ impl Drop for NotifyOnDrop {
             is_active: false,
         });
 
-        let tokens = self.token_estimate.load(std::sync::atomic::Ordering::Relaxed);
-        if tokens > 0 {
+        let output_tokens = self.token_estimate.load(std::sync::atomic::Ordering::Relaxed) / 4;
+        let input_tokens = self.input_tokens / 4;
+        
+        if output_tokens > 0 || input_tokens > 0 {
             let app_handle = self.app.clone();
             tauri::async_runtime::spawn(async move {
                 let state = app_handle.state::<FrugalConfigState>();
                 let mut config = state.config.lock().await;
-                config.tokens_used_session += tokens as u64;
-                config.tokens_used_lifetime += tokens as u64;
+                config.input_tokens_session += input_tokens as u64;
+                config.output_tokens_session += output_tokens as u64;
+                config.input_tokens_lifetime += input_tokens as u64;
+                config.output_tokens_lifetime += output_tokens as u64;
                 if let Ok(path) = get_config_path(&app_handle) {
                     if let Ok(json) = serde_json::to_string_pretty(&*config) {
                         let _ = std::fs::write(path, json);
@@ -445,12 +454,15 @@ async fn try_ollama(
         is_active: true,
     });
 
+    let request_body_size = serde_json::to_string(&body).map(|s| s.len()).unwrap_or(0);
+    
     let token_estimate = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let drop_guard = NotifyOnDrop {
         app: app.clone(),
         source: source.to_string(),
         target: "ollama".to_string(),
         token_estimate: token_estimate.clone(),
+        input_tokens: request_body_size,
     };
 
     let res = client.post("http://127.0.0.1:11434/v1/chat/completions")
@@ -469,8 +481,7 @@ async fn try_ollama(
         let stream = res.bytes_stream().inspect(move |chunk| {
             let _ = &drop_guard;
             if let Ok(bytes) = chunk {
-                let tokens = bytes.len() / 4;
-                drop_guard.token_estimate.fetch_add(tokens, std::sync::atomic::Ordering::Relaxed);
+                drop_guard.token_estimate.fetch_add(bytes.len(), std::sync::atomic::Ordering::Relaxed);
             }
             let _ = app_clone.emit("proxy_activity", ProxyActivityPayload {
                 source: source_clone.clone(),
@@ -516,12 +527,15 @@ async fn try_openrouter(
         is_active: true,
     });
 
+    let request_body_size = serde_json::to_string(&body).map(|s| s.len()).unwrap_or(0);
+    
     let token_estimate = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let drop_guard = NotifyOnDrop {
         app: app.clone(),
         source: source.to_string(),
         target: "openrouter".to_string(),
         token_estimate: token_estimate.clone(),
+        input_tokens: request_body_size,
     };
 
     let res = client.post("https://openrouter.ai/api/v1/chat/completions")
@@ -541,8 +555,7 @@ async fn try_openrouter(
         let stream = res.bytes_stream().inspect(move |chunk| {
             let _ = &drop_guard;
             if let Ok(bytes) = chunk {
-                let tokens = bytes.len() / 4;
-                drop_guard.token_estimate.fetch_add(tokens, std::sync::atomic::Ordering::Relaxed);
+                drop_guard.token_estimate.fetch_add(bytes.len(), std::sync::atomic::Ordering::Relaxed);
             }
             let _ = app_clone.emit("proxy_activity", ProxyActivityPayload {
                 source: source_clone.clone(),
@@ -697,8 +710,10 @@ async fn get_frugallm_config(state: State<'_, FrugalConfigState>) -> Result<Frug
 async fn set_frugallm_config(app: tauri::AppHandle, state: State<'_, FrugalConfigState>, new_config: FrugalConfig) -> Result<(), String> {
     let mut config = state.config.lock().await;
     let mut updated_config = new_config.clone();
-    updated_config.tokens_used_lifetime = config.tokens_used_lifetime;
-    updated_config.tokens_used_session = config.tokens_used_session;
+    updated_config.input_tokens_lifetime = config.input_tokens_lifetime;
+    updated_config.output_tokens_lifetime = config.output_tokens_lifetime;
+    updated_config.input_tokens_session = config.input_tokens_session;
+    updated_config.output_tokens_session = config.output_tokens_session;
     
     let port_changed = config.port != updated_config.port;
     let ip_changed = config.bind_all_interfaces != updated_config.bind_all_interfaces;
@@ -1328,11 +1343,15 @@ fn main() {
             
             // Load Frugal Config
             let mut frugal_config = FrugalConfig::default();
-            if let Ok(path) = get_config_path(&app_handle) {
-                if let Ok(json) = std::fs::read_to_string(path) {
-                    if let Ok(parsed) = serde_json::from_str::<FrugalConfig>(&json) {
-                        frugal_config = parsed;
-                        frugal_config.tokens_used_session = 0;
+            let is_wipe = env::args().any(|arg| arg == "--wipe");
+            if !is_wipe {
+                if let Ok(path) = get_config_path(&app_handle) {
+                    if let Ok(json) = std::fs::read_to_string(path) {
+                        if let Ok(parsed) = serde_json::from_str::<FrugalConfig>(&json) {
+                            frugal_config = parsed;
+                            frugal_config.input_tokens_session = 0;
+                            frugal_config.output_tokens_session = 0;
+                        }
                     }
                 }
             }
