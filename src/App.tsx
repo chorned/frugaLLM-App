@@ -926,19 +926,17 @@ export default function App() {
   const [activeProcesses, setActiveProcesses] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    import('@tauri-apps/api/event').then(({ listen }) => {
-      const unlistenConfig = listen('frugallm_config_updated', () => {
-        invoke('get_frugallm_config').then((conf: any) => setFrugalConfig(conf)).catch(console.error);
-      });
-      const unlistenError = listen('frugallm_port_error', (event: any) => {
-        const port = event.payload;
-        alert(`This port seems taken, please select a new port or disable the service currently using ${port}. Note that changing the port here might disrupt any apps that are already connected.`);
-      });
-      return () => {
-        unlistenConfig.then(f => f());
-        unlistenError.then(f => f());
-      };
+    const unlistenConfig = listen('frugallm_config_updated', () => {
+      invoke('get_frugallm_config').then((conf: any) => setFrugalConfig(conf)).catch(console.error);
     });
+    const unlistenError = listen('frugallm_port_error', (event: any) => {
+      const port = event.payload;
+      alert(`This port seems taken, please select a new port or disable the service currently using ${port}. Note that changing the port here might disrupt any apps that are already connected.`);
+    });
+    return () => {
+      unlistenConfig.then(f => f());
+      unlistenError.then(f => f());
+    };
     invoke('get_frugallm_config').then((conf: any) => setFrugalConfig(conf)).catch(console.error);
   }, []);
 

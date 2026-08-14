@@ -1359,7 +1359,7 @@ dependencies = [
 
 [[package]]
 name = "frugallm-app"
-version = "0.1.0"
+version = "0.0.2"
 dependencies = [
  "axum",
  "futures-util",
@@ -1378,6 +1378,7 @@ dependencies = [
  "tauri-plugin-shell",
  "tauri-plugin-store",
  "tauri-plugin-window-state",
+ "tempfile",
  "tokio",
 ]
 

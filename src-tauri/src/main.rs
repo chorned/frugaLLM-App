@@ -119,28 +119,45 @@ fn wipe_credentials() -> Result<(), String> {
     Ok(())
 }
 
+fn is_hermes_installed(home: &std::path::Path) -> bool {
+    let local_bin_hermes = home.join(".local").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" });
+    if local_bin_hermes.exists() {
+        return true;
+    }
+    let hermes_path = home.join(".hermes").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" });
+    return hermes_path.exists();
+}
+
 #[tauri::command]
 fn check_hermes_status(app: tauri::AppHandle) -> bool {
     if let Ok(home) = app.path().home_dir() {
-        let local_bin_hermes = home.join(".local").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" });
-        if local_bin_hermes.exists() {
-            return true;
-        }
-        let hermes_path = home.join(".hermes").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" });
-        return hermes_path.exists();
+        return is_hermes_installed(&home);
     }
     false
+}
+
+fn is_opencode_installed(home: &std::path::Path) -> bool {
+    let local_bin_opencode = home.join(".local").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
+    if local_bin_opencode.exists() {
+        return true;
+    }
+    let opencode_path = home.join(".opencode").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
+    return opencode_path.exists();
 }
 
 #[tauri::command]
 fn check_opencode_status(app: tauri::AppHandle) -> bool {
     if let Ok(home) = app.path().home_dir() {
-        let local_bin_opencode = home.join(".local").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
-        if local_bin_opencode.exists() {
+        return is_opencode_installed(&home);
+    }
+    false
+}
+
+fn is_ollama_in_paths(paths: &[&str]) -> bool {
+    for p in paths.iter() {
+        if std::path::Path::new(p).exists() {
             return true;
         }
-        let opencode_path = home.join(".opencode").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
-        return opencode_path.exists();
     }
     false
 }
@@ -168,13 +185,7 @@ async fn check_ollama_status() -> bool {
         "/usr/bin/ollama",
         "/Applications/Ollama.app/Contents/MacOS/Ollama"
     ];
-    for p in paths.iter() {
-        if std::path::Path::new(p).exists() {
-            return true;
-        }
-    }
-    
-    false
+    is_ollama_in_paths(&paths)
 }
 
 #[tauri::command(async)]
@@ -1322,6 +1333,11 @@ async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn is_wipe_mode() -> bool {
+    std::env::args().any(|arg| arg == "--wipe")
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     
@@ -1486,14 +1502,124 @@ fn main() {
             deploy_local_model,
             get_frugallm_config,
             set_frugallm_config,
-            edit_hermes_soul
+            edit_hermes_soul,
+            is_wipe_mode
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
         
-    app.run(|app_handle, event| {
+    app.run(|_app_handle, event| {
         if let tauri::RunEvent::Exit = event {
             // Child processes spawned via PTY will be killed by OS or by SIGHUP when master PTYs drop.
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_is_hermes_installed_mocked() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let home = temp_dir.path();
+        
+        // Initially not installed
+        assert_eq!(is_hermes_installed(home), false);
+        
+        // Mock installation in .hermes/bin
+        let bin_dir = home.join(".hermes").join("bin");
+        fs::create_dir_all(&bin_dir).unwrap();
+        
+        let exe_name = if cfg!(windows) { "hermes.exe" } else { "hermes" };
+        let hermes_exe = bin_dir.join(exe_name);
+        fs::File::create(&hermes_exe).unwrap();
+        
+        assert_eq!(is_hermes_installed(home), true);
+    }
+
+    #[test]
+    fn test_is_opencode_installed_mocked() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let home = temp_dir.path();
+        
+        assert_eq!(is_opencode_installed(home), false);
+        
+        let bin_dir = home.join(".local").join("bin");
+        fs::create_dir_all(&bin_dir).unwrap();
+        
+        let exe_name = if cfg!(windows) { "opencode.exe" } else { "opencode" };
+        let opencode_exe = bin_dir.join(exe_name);
+        fs::File::create(&opencode_exe).unwrap();
+        
+        assert_eq!(is_opencode_installed(home), true);
+    }
+
+    #[test]
+    fn test_is_ollama_in_paths() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        
+        let mock_ollama_path = temp_dir.path().join("mock_ollama");
+        fs::File::create(&mock_ollama_path).unwrap();
+        
+        let path_str = mock_ollama_path.to_str().unwrap();
+        let paths = vec![path_str];
+        
+        assert_eq!(is_ollama_in_paths(&paths), true);
+        assert_eq!(is_ollama_in_paths(&["/invalid/nonexistent/path/to/ollama"]), false);
+    }
+
+    #[test]
+    fn test_dummy_pty_execution() {
+        use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
+        use std::io::Read;
+
+        let pty_system = NativePtySystem::default();
+        let pair = pty_system.openpty(PtySize {
+            rows: 24,
+            cols: 80,
+            pixel_width: 0,
+            pixel_height: 0,
+        }).unwrap();
+
+        let mut cmd = if cfg!(windows) {
+            CommandBuilder::new("powershell.exe")
+        } else {
+            CommandBuilder::new("bash")
+        };
+        
+        // Simulating the 'install' command string passed by the frontend
+        if cfg!(windows) {
+            cmd.args(["-Command", "Write-Output 'Installing Ollama...'"]);
+        } else {
+            cmd.args(["-c", "echo 'Installing Ollama...'"]);
+        }
+
+        let mut child = pair.slave.spawn_command(cmd).unwrap();
+        drop(pair.slave); // close slave so reader gets EOF when child exits
+
+        let mut reader = pair.master.try_clone_reader().unwrap();
+        
+        std::thread::spawn(move || {
+            let _ = child.wait();
+        });
+
+        let mut output = String::new();
+        let mut buf = [0u8; 128];
+        for _ in 0..100 {
+            if let Ok(n) = reader.read(&mut buf) {
+                if n > 0 {
+                    output.push_str(&String::from_utf8_lossy(&buf[..n]));
+                    if output.contains("Installing Ollama...") {
+                        break;
+                    }
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        
+        assert!(output.contains("Installing Ollama..."));
+    }
 }
