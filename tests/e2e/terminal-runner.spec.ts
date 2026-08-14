@@ -9,6 +9,7 @@ test.describe('Terminal Runner View', () => {
     page.on('pageerror', error => console.log('PAGE ERROR:', error.message));
 
     await page.addInitScript(() => {
+      window.localStorage.setItem('onboardingState', 'completed');
       window['invokedCommands'] = [];
       Object.defineProperty(window, '__TAURI_INTERNALS__', {
         value: {

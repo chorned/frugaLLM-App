@@ -5,6 +5,7 @@ test.describe('Main Canvas Dashboard', () => {
   test.beforeEach(async ({ page }) => {
     // Mock Tauri IPC
     await page.addInitScript(() => {
+      window.localStorage.setItem('onboardingState', 'completed');
       Object.defineProperty(window, '__TAURI_INTERNALS__', {
         value: {
           invoke: (cmd: string, args: any) => {

@@ -10,6 +10,7 @@ test.describe('Node Configuration Panel', () => {
     
     // Mock Tauri IPC
     await page.addInitScript(() => {
+      window.localStorage.setItem('onboardingState', 'completed');
       window['invokedCommands'] = [];
       Object.defineProperty(window, '__TAURI_INTERNALS__', {
         value: {

@@ -1,4 +1,4 @@
-import React from 'react';
+
 import V1App from '../App';
 import { useOnboarding } from './hooks/useOnboarding';
 import { OnboardingDecision } from './components/OnboardingDecision';

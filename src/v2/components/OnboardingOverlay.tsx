@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 interface OnboardingOverlayProps {
@@ -7,7 +7,7 @@ interface OnboardingOverlayProps {
 
 export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete }) => {
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+
 
   // Continuously track the "LOCAL HARDWARE" node's position
   useEffect(() => {

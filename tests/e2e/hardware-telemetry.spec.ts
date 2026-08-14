@@ -6,6 +6,7 @@ test.describe('Hardware Telemetry Widget', () => {
   test.beforeEach(async ({ page }) => {
     // Inject the enhanced Tauri mock for event listening
     await page.addInitScript(() => {
+      window.localStorage.setItem('onboardingState', 'completed');
       window['invokedCommands'] = [];
       window['tauriEventCallbacks'] = {};
       window['tauriListeners'] = {};
