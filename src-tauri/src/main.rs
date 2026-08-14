@@ -506,6 +506,24 @@ async fn try_ollama(
     }
 }
 
+fn format_openrouter_request(mut body: Value, mut fallback_models: Vec<Value>) -> Value {
+    fallback_models.truncate(3);
+    
+    let primary_model = fallback_models.first().cloned().unwrap_or(serde_json::json!("openrouter/auto"));
+    
+    if let Some(obj) = body.as_object_mut() {
+        obj.insert("model".to_string(), primary_model);
+        if !fallback_models.is_empty() {
+            obj.insert("models".to_string(), serde_json::json!(fallback_models));
+        } else {
+            obj.remove("models");
+        }
+        // Strip reasoning_effort as it causes OpenRouter to return 400 Bad Request for non-reasoning models
+        obj.remove("reasoning_effort");
+    }
+    body
+}
+
 async fn try_openrouter(
     app: &tauri::AppHandle,
     client: &reqwest::Client,
@@ -523,14 +541,7 @@ async fn try_openrouter(
         chain.clone()
     };
     
-    let primary_model = fallback_models.first().cloned().unwrap_or(serde_json::json!("openrouter/auto"));
-    
-    if let Some(obj) = body.as_object_mut() {
-        obj.insert("model".to_string(), primary_model);
-        obj.insert("models".to_string(), serde_json::json!(fallback_models));
-        // Strip reasoning_effort as it causes OpenRouter to return 400 Bad Request for non-reasoning models
-        obj.remove("reasoning_effort");
-    }
+    body = format_openrouter_request(body, fallback_models);
 
     let _ = app.emit("proxy_activity", ProxyActivityPayload {
         source: source.to_string(),
@@ -1621,5 +1632,32 @@ mod tests {
         }
         
         assert!(output.contains("Installing Ollama..."));
+    }
+
+    #[test]
+    fn test_format_openrouter_request() {
+        let body = serde_json::json!({
+            "messages": [{"role": "user", "content": "hello"}],
+            "reasoning_effort": "high",
+            "models": ["old1", "old2"]
+        });
+        
+        let fallbacks = vec![
+            serde_json::json!("model1"),
+            serde_json::json!("model2"),
+            serde_json::json!("model3"),
+            serde_json::json!("model4"),
+            serde_json::json!("model5"),
+        ];
+        
+        let formatted = format_openrouter_request(body, fallbacks);
+        
+        let obj = formatted.as_object().unwrap();
+        assert_eq!(obj.get("model").unwrap(), &serde_json::json!("model1"));
+        let models_array = obj.get("models").unwrap().as_array().unwrap();
+        assert_eq!(models_array.len(), 3);
+        assert_eq!(models_array[0], serde_json::json!("model1"));
+        assert_eq!(models_array[2], serde_json::json!("model3"));
+        assert!(obj.get("reasoning_effort").is_none());
     }
 }
