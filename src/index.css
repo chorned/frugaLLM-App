@@ -3,7 +3,35 @@
 @tailwind utilities;
 
 @layer base {
-  body {
-    @apply bg-neutral-900 text-neutral-100;
+  :root {
+    --zen-canvas: #F9F9F8;
+    --zen-surface: #FFFFFF;
+    --zen-surface-hover: #F3F4F6;
+    --zen-border: #E5E5EA;
+    --zen-text: #2C2C2E;
+    --zen-text-secondary: #8E8E93;
+    --zen-accent: #6B7F99;
+    --zen-accent-hover: #576A82;
+    --zen-success: #A7D4B6;
   }
+
+  body {
+    @apply bg-zen-canvas text-zen-text font-sans antialiased;
+  }
+}
+
+/* Custom scrollbar for webkit to keep it clean */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--zen-border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--zen-text-secondary);
 }

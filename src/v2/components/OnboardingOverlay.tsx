@@ -20,7 +20,7 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete
         // The V1 Hardware node has the text "LOCAL HARDWARE" with a chevron span, so includes is safer
         const elements = Array.from(document.querySelectorAll('div'));
         
-        const heading = elements.find(el => el.textContent?.includes('LOCAL HARDWARE') && el.style.fontWeight === '800');
+        const heading = elements.find(el => el.textContent?.toLowerCase().includes('local hardware') && el.style.fontWeight === '800');
         if (heading) {
           let parent = heading.parentElement;
           while (parent) {
@@ -59,32 +59,32 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete
 
   return createPortal(
     <>
-      <div className="fixed inset-0 z-[9998] bg-black/40 pointer-events-auto" />
+      <div className="fixed inset-0 z-[9998] bg-black/10 backdrop-blur-sm pointer-events-auto" />
       {targetRect && (
         <div 
-          className="absolute z-[9999] pointer-events-none rounded border-2 border-orange-500"
+          className="absolute z-[9999] pointer-events-none rounded-2xl ring-4 ring-black/5"
           style={{
-            top: targetRect.top - 4,
-            left: targetRect.left - 4,
-            width: targetRect.width + 8,
-            height: targetRect.height + 8,
-            boxShadow: '0 0 0 9999px rgba(0,0,0,0.6)'
+            top: targetRect.top - 8,
+            left: targetRect.left - 8,
+            width: targetRect.width + 16,
+            height: targetRect.height + 16,
+            boxShadow: '0 0 0 9999px rgba(0,0,0,0.2)'
           }}
         />
       )}
-      <div style={tooltipStyle} className="pointer-events-auto w-80 bg-neutral-900 border-2 border-orange-500 rounded-lg p-6 shadow-2xl shadow-orange-500/20">
-        <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[12px] border-b-orange-500"></div>
-        <div className="absolute -top-[9px] left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-b-[10px] border-b-neutral-900"></div>
+      <div style={tooltipStyle} className="pointer-events-auto w-80 bg-zen-surface rounded-2xl p-6 shadow-glass transform transition-all border border-zen-border">
+        <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[12px] border-b-zen-border"></div>
+        <div className="absolute -top-[11px] left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[9px] border-l-transparent border-r-[9px] border-r-transparent border-b-[11px] border-b-zen-surface"></div>
         
-        <h3 className="text-xl font-bold text-white mb-2">Local Hardware Node</h3>
-        <p className="text-sm text-neutral-400 mb-6 leading-relaxed">
+        <h3 className="text-xl font-semibold text-zen-text mb-2 tracking-tight">Local Hardware Node</h3>
+        <p className="text-sm text-zen-text-secondary mb-6 leading-relaxed">
           This node represents your machine's physical GPU and CPU. FrugalLLM monitors telemetry in real-time to optimize local AI inference. 
         </p>
         
         <div className="flex justify-end">
           <button 
             onClick={onComplete}
-            className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded transition-colors"
+            className="px-5 py-2.5 bg-zen-surface-hover border border-zen-border hover:border-zen-text text-zen-text text-sm font-medium rounded-xl transition-all"
           >
             Finish Tour
           </button>

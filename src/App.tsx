@@ -155,13 +155,14 @@ const Icons = {
   code: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>,
   workflow: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="6" height="6" rx="1"></rect><rect x="15" y="3" width="6" height="6" rx="1"></rect><rect x="9" y="15" width="6" height="6" rx="1"></rect><path d="M6 9v2a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9"></path><path d="M12 13v2"></path></svg>,
   agent: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a5 5 0 0 1 5 5v2a5 5 0 0 1-10 0V7a5 5 0 0 1 5-5z"></path><path d="M19 15v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v1"></path><path d="M5 22v-3a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3"></path></svg>,
-  settings: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+  settings: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>,
+  info: <svg viewBox="-50 -50 590 590" width="14" height="14" style={{ display: 'block' }} fill="currentColor"><path d="M245.148,0C109.967,0,0.009,109.98,0.009,245.162c0,135.182,109.958,245.156,245.139,245.156 c135.186,0,245.162-109.978,245.162-245.156C490.31,109.98,380.333,0,245.148,0z M245.148,438.415 c-106.555,0-193.234-86.698-193.234-193.253c0-106.555,86.68-193.258,193.234-193.258c106.559,0,193.258,86.703,193.258,193.258 C438.406,351.717,351.706,438.415,245.148,438.415z"/><path d="M270.036,221.352h-49.771c-8.351,0-15.131,6.78-15.131,15.118v147.566c0,8.352,6.78,15.119,15.131,15.119h49.771 c8.351,0,15.131-6.77,15.131-15.119V236.471C285.167,228.133,278.387,221.352,270.036,221.352z"/><path d="M245.148,91.168c-24.48,0-44.336,19.855-44.336,44.336c0,24.484,19.855,44.34,44.336,44.34 c24.485,0,44.342-19.855,44.342-44.34C289.489,111.023,269.634,91.168,245.148,91.168z"/></svg>
 };
 
 const Tooltip = ({ text }: { text: string }) => {
   return (
-    <span className="tooltip-container" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '14px', height: '14px', borderRadius: '50%', border: '1.5px solid #9ca3af', color: '#9ca3af', fontSize: '10px', fontWeight: 'bold', marginLeft: '6px', cursor: 'help', position: 'relative' }}>
-      i
+    <span className="tooltip-container" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '14px', height: '14px', color: '#9ca3af', marginLeft: '6px', cursor: 'help', position: 'relative' }}>
+      {Icons.info}
       <span className="tooltip-text">{text}</span>
     </span>
   );
@@ -224,77 +225,76 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
     <div onClick={handlePanelClick} style={{ 
       width: '450px', 
       maxHeight: '85vh',
-      border: '4px solid #111827', 
-      backgroundColor: '#ffffff',
+      border: '1px solid var(--zen-border)', backgroundColor: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(16px)', borderRadius: '16px',
       display: 'flex', flexDirection: 'column',
-      boxShadow: '8px 8px 0px #111827',
+      boxShadow: '0 24px 48px rgba(0, 0, 0, 0.1)', overflow: 'hidden',
       zIndex: 100,
-      fontFamily: '"Courier New", Courier, monospace'
+      fontFamily: 'inherit'
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', backgroundColor: '#111827', color: 'white' }}>
-        <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, letterSpacing: '1px' }}>{node.data.label}</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', borderBottom: '1px solid var(--zen-border)' }}>
+        <h2 style={{ margin: 0, color: 'var(--zen-text)', fontSize: '1.2rem', fontWeight: 600 }}>{node.data.label}</h2>
         <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: '#9ca3af' }}>✕</button>
       </div>
       
-      <div style={{ padding: '20px', flexGrow: 1, backgroundColor: '#f9fafb', overflowY: 'auto' }}>
+      <div style={{ padding: '20px', flexGrow: 1, backgroundColor: 'transparent', overflowY: 'auto' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {node.data.isAgent ? (
             <>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#111827', marginBottom: '6px' }}>SCHEMA PATH <Tooltip text="Think of this as the agent's strict instruction manual. By giving it a JSON schema, we force the AI to return data in the exact structure your application expects. No more messy text—just clean data!" /></label>
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>SCHEMA PATH <Tooltip text="Think of this as the agent's strict instruction manual. By giving it a JSON schema, we force the AI to return data in the exact structure your application expects. No more messy text—just clean data!" /></label>
                 <input type="text" name="schemaPath" value={formData.schemaPath} onChange={handleChange}
-                  style={{ width: '100%', padding: '10px 12px', border: '2px solid #111827', backgroundColor: '#ffffff', color: '#111827', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: '2px 2px 0px #111827' }} />
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
               </div>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#111827', marginBottom: '6px' }}>WORKING DIR (CWD) <Tooltip text="Where should the agent live while it works? This is the folder on your computer where the agent will run commands and look for files. It's basically the agent's home base." /></label>
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>WORKING DIR (CWD) <Tooltip text="Where should the agent live while it works? This is the folder on your computer where the agent will run commands and look for files. It's basically the agent's home base." /></label>
                 <input type="text" name="cwd" value={formData.cwd} onChange={handleChange}
-                  style={{ width: '100%', padding: '10px 12px', border: '2px solid #111827', backgroundColor: '#ffffff', color: '#111827', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: '2px 2px 0px #111827' }} />
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
               </div>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#111827', marginBottom: '6px' }}>EXECUTABLE (BIN) <Tooltip text="Which program is actually doing the heavy lifting? This tells the system what tool to launch under the hood. Usually, it's 'agy' for our Antigravity agent, but you can plug in any CLI tool!" /></label>
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>EXECUTABLE (BIN) <Tooltip text="Which program is actually doing the heavy lifting? This tells the system what tool to launch under the hood. Usually, it's 'agy' for our Antigravity agent, but you can plug in any CLI tool!" /></label>
                 <input type="text" name="bin" value={formData.bin} onChange={handleChange}
-                  style={{ width: '100%', padding: '10px 12px', border: '2px solid #111827', backgroundColor: '#ffffff', color: '#111827', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: '2px 2px 0px #111827' }} />
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
               </div>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#111827', marginBottom: '6px' }}>EXTRA ARGS (CSV) <Tooltip text="Want to tweak how the agent runs? You can pass secret flags here (like '--verbose' to see its inner thoughts). Just list them out, separated by commas." /></label>
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>EXTRA ARGS (CSV) <Tooltip text="Want to tweak how the agent runs? You can pass secret flags here (like '--verbose' to see its inner thoughts). Just list them out, separated by commas." /></label>
                 <input type="text" name="extraArgs" value={formData.extraArgs} onChange={handleChange} placeholder="--verbose, --force"
-                  style={{ width: '100%', padding: '10px 12px', border: '2px solid #111827', backgroundColor: '#ffffff', color: '#111827', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: '2px 2px 0px #111827' }} />
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
               </div>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#111827', marginBottom: '6px' }}>INSTRUCTION PROMPT <Tooltip text="This is your agent's main mission. Tell it exactly what you want it to accomplish. Be as specific as possible—the better the prompt, the better the results!" /></label>
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>INSTRUCTION PROMPT <Tooltip text="This is your agent's main mission. Tell it exactly what you want it to accomplish. Be as specific as possible—the better the prompt, the better the results!" /></label>
                 <textarea name="prompt" value={formData.prompt} onChange={handleChange}
-                  style={{ width: '100%', minHeight: '80px', padding: '10px 12px', border: '2px solid #111827', backgroundColor: '#ffffff', color: '#111827', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: '2px 2px 0px #111827', resize: 'vertical' }} />
+                  style={{ width: '100%', minHeight: '80px', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none', resize: 'vertical' }} />
               </div>
             </>
           ) : (
             <>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#111827', marginBottom: '6px' }}>IP ADDRESS / HOST <Tooltip text="Where does this service live on the network? Usually, it's right here on your computer ('127.0.0.1' or 'localhost'), but it could be a cloud API halfway across the world!" /></label>
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>IP ADDRESS / HOST <Tooltip text="Where does this service live on the network? Usually, it's right here on your computer ('127.0.0.1' or 'localhost'), but it could be a cloud API halfway across the world!" /></label>
                 {node.id === 'node-frugallm' ? (
-                  <div style={{ width: '100%', padding: '10px 12px', border: '2px dashed #9ca3af', backgroundColor: '#f3f4f6', color: '#111827', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, cursor: 'not-allowed' }}>
+                  <div style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '8px', color: 'var(--zen-text)', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, cursor: 'not-allowed' }}>
                     {formData.bind_all_interfaces ? '0.0.0.0' : '127.0.0.1'}
                   </div>
                 ) : (
                   <input type="text" name="ip" value={formData.ip} onChange={handleChange}
-                    style={{ width: '100%', padding: '10px 12px', border: '2px solid #111827', backgroundColor: '#ffffff', color: '#111827', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: '2px 2px 0px #111827' }} />
+                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
                 )}
               </div>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#111827', marginBottom: '6px' }}>PORT <Tooltip text="Think of the IP address as the building, and the Port as the specific door to knock on. It's how our hub knows exactly where to send its messages." /></label>
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>PORT <Tooltip text="Think of the IP address as the building, and the Port as the specific door to knock on. It's how our hub knows exactly where to send its messages." /></label>
                 <input type="text" name="port" value={formData.port} onChange={handleChange}
-                  style={{ width: '100%', padding: '10px 12px', border: '2px solid #111827', backgroundColor: '#ffffff', color: '#111827', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: '2px 2px 0px #111827' }} />
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
               </div>
               {node.id === 'node-frugallm' && (
                 <>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' }}>
                     <input type="checkbox" id="bind_all_interfaces" name="bind_all_interfaces" checked={formData.bind_all_interfaces} onChange={e => setFormData(p => ({...p, bind_all_interfaces: e.target.checked}))} />
-                    <label htmlFor="bind_all_interfaces" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#111827' }}>Make available everywhere <Tooltip text="Making FrugaLLM available everywhere means it will detect traffic from all your network connections. Do not enable this if you only using FrugaLLM on one machine." /></label>
+                    <label htmlFor="bind_all_interfaces" style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)' }}>Make available everywhere <Tooltip text="Making FrugaLLM available everywhere means it will detect traffic from all your network connections. Do not enable this if you only using FrugaLLM on one machine." /></label>
                   </div>
                   <div style={{ marginTop: '10px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#111827', marginBottom: '6px' }}>API PASSWORD (OPTIONAL) <Tooltip text="Set an API token to secure your FrugalLM node." /></label>
+                    <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>API PASSWORD (OPTIONAL) <Tooltip text="Set an API token to secure your FrugalLM node." /></label>
                     <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
                       <input type="password" name="api_password" value={formData.api_password} onChange={handleChange} placeholder={frugalConfig?.api_password ? "••••••••" : "Super secret..."}
-                        style={{ flexGrow: 1, padding: '10px 12px', border: '2px solid #111827', backgroundColor: '#ffffff', color: '#111827', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: '2px 2px 0px #111827' }} />
+                        style={{ flexGrow: 1, padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
                       
                       {frugalConfig?.api_password && (
                         <button 
@@ -307,14 +307,14 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
                                console.error('Clipboard write failed:', err);
                              }
                           }}
-                          style={{ padding: '0 12px', backgroundColor: passwordCopied ? '#065f46' : '#e5e7eb', color: passwordCopied ? '#34d399' : '#111827', border: '2px solid #111827', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '2px 2px 0px #111827', transition: 'all 0.15s' }}>
+                          style={{ padding: '0 12px', backgroundColor: passwordCopied ? '#065f46' : '#e5e7eb', color: passwordCopied ? '#34d399' : '#111827', border: '1px solid var(--zen-border)', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: 'none', transition: 'all 0.15s' }}>
                           {passwordCopied ? '✓' : 'COPY'}
                         </button>
                       )}
                     </div>
                     {confirmPasswordAction ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px', backgroundColor: '#fff7ed', border: '2px dashed #ea580c' }}>
-                        <span style={{ fontSize: '0.8rem', color: '#9a3412', fontWeight: 700 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)' }}>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--zen-text)', fontWeight: 700 }}>
                           {confirmPasswordAction === 'overwrite' ? 'OVERWRITE EXISTING PASSWORD?' : 'REMOVE PASSWORD?'}
                         </span>
                         <div style={{ display: 'flex', gap: '8px' }}>
@@ -326,8 +326,8 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
                               onSave(node.id, formData);
                             }
                             setConfirmPasswordAction(null);
-                          }} style={{ flex: 1, padding: '6px', backgroundColor: '#ef4444', color: 'white', border: '2px solid #991b1b', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
-                          <button onClick={() => setConfirmPasswordAction(null)} style={{ flex: 1, padding: '6px', backgroundColor: '#ffffff', color: '#111827', border: '2px solid #111827', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
+                          }} style={{ flex: 1, padding: '6px', backgroundColor: '#ef4444', color: '#FFFFFF', border: '2px solid #991b1b', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
+                          <button onClick={() => setConfirmPasswordAction(null)} style={{ flex: 1, padding: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
                         </div>
                       </div>
                     ) : (
@@ -338,7 +338,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
                           } else if (formData.api_password !== '') {
                             onSave(node.id, formData);
                           }
-                        }} style={{ flex: 1, padding: '8px', backgroundColor: '#111827', color: 'white', border: '2px solid #111827', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '2px 2px 0px #111827' }}>
+                        }} style={{ flex: 1, padding: '8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', borderBottom: '1px solid var(--zen-border)', border: '1px solid var(--zen-border)', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: 'none' }}>
                           APPLY PASSWORD
                         </button>
                         {frugalConfig?.api_password && (
@@ -349,18 +349,18 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
                       </div>
                     )}
                   </div>
-                  <div style={{ marginTop: '20px', padding: '12px', backgroundColor: '#f3f4f6', border: '2px dashed #9ca3af', borderRadius: '4px' }}>
+                  <div style={{ marginTop: '20px', padding: '12px', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '8px', border: '1px solid var(--zen-border)', borderRadius: '4px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                       <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#4b5563' }}>SESSION TOKENS</span>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#111827' }}>{(frugalConfig?.input_tokens_session || 0) + (frugalConfig?.output_tokens_session || 0)}</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--zen-text)' }}>{(frugalConfig?.input_tokens_session || 0) + (frugalConfig?.output_tokens_session || 0)}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                       <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#4b5563' }}>LIFETIME TOKENS</span>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#111827' }}>{(frugalConfig?.input_tokens_lifetime || 0) + (frugalConfig?.output_tokens_lifetime || 0)}</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--zen-text)' }}>{(frugalConfig?.input_tokens_lifetime || 0) + (frugalConfig?.output_tokens_lifetime || 0)}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#4b5563' }}>EST. LIFETIME SAVINGS <Tooltip text="Estimated savings assuming Claude 3.5 Sonnet pricing ($3.00/1M In, $15.00/1M Out)" /></span>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#16a34a' }}>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--zen-success)' }}>
                         ${((((frugalConfig?.input_tokens_lifetime || 0) / 1000000) * 3.0) + (((frugalConfig?.output_tokens_lifetime || 0) / 1000000) * 15.0)).toFixed(4)}
                       </span>
                     </div>
@@ -375,7 +375,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
                          console.error('Clipboard write failed:', err);
                        }
                     }}
-                    style={{ marginTop: '15px', width: '100%', padding: '8px', backgroundColor: ipCopied ? '#065f46' : '#e5e7eb', color: ipCopied ? '#34d399' : '#111827', border: '2px solid #111827', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '2px 2px 0px #111827', transition: 'all 0.15s' }}>
+                    style={{ marginTop: '15px', width: '100%', padding: '8px', backgroundColor: ipCopied ? '#065f46' : '#e5e7eb', color: ipCopied ? '#34d399' : '#111827', border: '1px solid var(--zen-border)', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: 'none', transition: 'all 0.15s' }}>
                     {ipCopied ? '✓ OK' : 'COPY IP & PORT'}
                   </button>
 
@@ -383,9 +383,9 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
               )}
               {node.id === 'node-openrouter' && (
                 <div>
-                  <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#111827', marginBottom: '6px' }}>API KEY <Tooltip text="Your OpenRouter API Key. This will be securely saved into your operating system's native Keychain!" /></label>
+                  <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>API KEY <Tooltip text="Your OpenRouter API Key. This will be securely saved into your operating system's native Keychain!" /></label>
                   <input type="password" name="apiKey" value={formData.apiKey} onChange={handleChange} placeholder="sk-or-v1-..."
-                    style={{ width: '100%', padding: '10px 12px', border: '2px solid #111827', backgroundColor: '#ffffff', color: '#111827', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: '2px 2px 0px #111827' }} />
+                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
                 </div>
               )}
             </>
@@ -398,14 +398,14 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
         </p>
 
       {node.id === 'node-hermes' && isHermesInstalled === false && (
-        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: '#fff7ed', border: '2px dashed #ea580c', borderRadius: '8px' }}>
-          <h4 style={{ margin: '0 0 10px 0', color: '#9a3412', fontSize: '0.9rem' }}>HERMES AGENT MISSING</h4>
+        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px' }}>
+          <h4 style={{ margin: '0 0 10px 0', color: 'var(--zen-text)', fontSize: '0.9rem' }}>HERMES AGENT MISSING</h4>
           {!hasActiveBackend ? (
-            <p style={{ fontSize: '0.8rem', color: '#9a3412', margin: 0, fontWeight: 600 }}>Prerequisite: Connect Ollama or OpenRouter first.</p>
+            <p style={{ fontSize: '0.8rem', color: 'var(--zen-text)', margin: 0, fontWeight: 600 }}>Prerequisite: Connect Ollama or OpenRouter first.</p>
           ) : (
             <button 
               onClick={(e) => { e.stopPropagation(); handleInitializeHermes(); }}
-              style={{ width: '100%', padding: '12px', backgroundColor: '#ea580c', color: 'white', border: '2px solid #9a3412', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              style={{ width: '100%', padding: '12px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', border: '2px solid #9a3412', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
               INITIALIZE HERMES
             </button>
           )}
@@ -413,52 +413,52 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
       )}
       
       {node.id === 'node-hermes' && isHermesInstalled === true && (
-        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: '#f0fdf4', border: '2px dashed #16a34a', borderRadius: '8px' }}>
-          <h4 style={{ margin: '0 0 10px 0', color: '#166534', fontSize: '0.9rem' }}>HERMES AGENT INSTALLED</h4>
+        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px' }}>
+          <h4 style={{ margin: '0 0 10px 0', color: 'var(--zen-text)', fontSize: '0.9rem' }}>HERMES AGENT INSTALLED</h4>
           {confirmUninstall === 'hermes' ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <span style={{ fontSize: '0.8rem', color: '#9a3412', fontWeight: 700 }}>ARE YOU SURE?</span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--zen-text)', fontWeight: 700 }}>ARE YOU SURE?</span>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={(e) => { e.stopPropagation(); handleUninstallHermes(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: 'white', border: '2px solid #991b1b', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
+                <button onClick={(e) => { e.stopPropagation(); handleUninstallHermes(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#FFFFFF', border: '2px solid #991b1b', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
                 <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#e5e7eb', color: '#374151', border: '2px solid #9ca3af', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
               </div>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#166534', marginBottom: '6px' }}>WORKSPACE FOLDER</label>
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>WORKSPACE FOLDER</label>
                 <input type="text" name="hermes_workspace" value={formData.hermes_workspace || ''} onChange={handleChange}
-                  style={{ width: '100%', padding: '10px 12px', border: '2px solid #166534', backgroundColor: '#ffffff', color: '#166534', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600 }} />
+                  style={{ width: '100%', padding: '10px 12px', border: '2px solid #166534', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600 }} />
               </div>
               <button 
                 onClick={(e) => { e.stopPropagation(); handleOpenHermes(); }}
-                style={{ width: '100%', padding: '12px', backgroundColor: '#16a34a', color: 'white', border: '2px solid #166534', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                style={{ width: '100%', padding: '12px', backgroundColor: '#16a34a', color: '#FFFFFF', border: '2px solid #166534', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
                 LAUNCH HERMES
               </button>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button 
                   onClick={(e) => { e.stopPropagation(); handleOpenHermesDesktop(); }}
-                  style={{ flex: 1, padding: '8px', backgroundColor: '#dbeafe', color: '#1e3a8a', border: '2px solid #3b82f6', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
+                  style={{ flex: 1, padding: '8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
                   LAUNCH DESKTOP
                 </button>
                 <button 
                   onClick={(e) => { e.stopPropagation(); handleOpenHermesWeb(); }}
-                  style={{ flex: 1, padding: '8px', backgroundColor: '#dbeafe', color: '#1e3a8a', border: '2px solid #3b82f6', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
+                  style={{ flex: 1, padding: '8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
                   LAUNCH WEBUI
                 </button>
               </div>
               {['run-hermes', 'run-hermes-desktop', 'run-hermes-web'].map(mode => activeProcesses && activeProcesses[mode] && (
-                <div key={mode} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: '#f0fdf4', border: '2px solid #16a34a', marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#166534', fontWeight: 700, fontSize: '0.8rem' }}>
+                <div key={mode} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--zen-text)', fontWeight: 700, fontSize: '0.8rem' }}>
                     <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#16a34a', boxShadow: '0 0 4px #16a34a' }} />
                     {mode.replace('run-', '').toUpperCase()} ACTIVE
                   </div>
-                  <button onClick={(e) => { e.stopPropagation(); handleKillProcess(mode); }} style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '4px 8px', fontSize: '0.7rem', fontWeight: 'bold', cursor: 'pointer' }}>KILL</button>
+                  <button onClick={(e) => { e.stopPropagation(); handleKillProcess(mode); }} style={{ backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', padding: '4px 8px', fontSize: '0.7rem', fontWeight: 'bold', cursor: 'pointer' }}>KILL</button>
                 </div>
               ))}
               <button 
                 onClick={(e) => { e.stopPropagation(); invoke('edit_hermes_soul').catch(console.error); }}
-                style={{ width: '100%', padding: '8px', backgroundColor: '#f3f4f6', color: '#374151', border: '2px solid #d1d5db', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
+                style={{ width: '100%', padding: '8px', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '8px', color: '#374151', border: '2px solid #d1d5db', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
                 EDIT SOUL.MD
               </button>
               <button 
@@ -472,14 +472,14 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
       )}
 
       {node.id === 'node-opencode' && isOpenCodeInstalled === false && (
-        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: '#fff7ed', border: '2px dashed #ea580c', borderRadius: '8px' }}>
-          <h4 style={{ margin: '0 0 10px 0', color: '#9a3412', fontSize: '0.9rem' }}>OPENCODE AGENT MISSING</h4>
+        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px' }}>
+          <h4 style={{ margin: '0 0 10px 0', color: 'var(--zen-text)', fontSize: '0.9rem' }}>OPENCODE AGENT MISSING</h4>
           {!hasActiveBackend ? (
-            <p style={{ fontSize: '0.8rem', color: '#9a3412', margin: 0, fontWeight: 600 }}>Prerequisite: Connect Ollama or OpenRouter first.</p>
+            <p style={{ fontSize: '0.8rem', color: 'var(--zen-text)', margin: 0, fontWeight: 600 }}>Prerequisite: Connect Ollama or OpenRouter first.</p>
           ) : (
             <button 
               onClick={(e) => { e.stopPropagation(); handleInitializeOpenCode(); }}
-              style={{ width: '100%', padding: '12px', backgroundColor: '#ea580c', color: 'white', border: '2px solid #9a3412', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              style={{ width: '100%', padding: '12px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', border: '2px solid #9a3412', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
               INITIALIZE OPENCODE
             </button>
           )}
@@ -487,40 +487,40 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
       )}
       
       {node.id === 'node-opencode' && isOpenCodeInstalled === true && (
-        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: '#f0fdf4', border: '2px dashed #16a34a', borderRadius: '8px' }}>
-          <h4 style={{ margin: '0 0 10px 0', color: '#166534', fontSize: '0.9rem' }}>OPENCODE AGENT INSTALLED</h4>
+        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px' }}>
+          <h4 style={{ margin: '0 0 10px 0', color: 'var(--zen-text)', fontSize: '0.9rem' }}>OPENCODE AGENT INSTALLED</h4>
           {confirmUninstall === 'opencode' ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <span style={{ fontSize: '0.8rem', color: '#9a3412', fontWeight: 700 }}>ARE YOU SURE?</span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--zen-text)', fontWeight: 700 }}>ARE YOU SURE?</span>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={(e) => { e.stopPropagation(); handleUninstallOpenCode(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: 'white', border: '2px solid #991b1b', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
+                <button onClick={(e) => { e.stopPropagation(); handleUninstallOpenCode(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#FFFFFF', border: '2px solid #991b1b', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
                 <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#e5e7eb', color: '#374151', border: '2px solid #9ca3af', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
               </div>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#166534', marginBottom: '6px' }}>WORKSPACE FOLDER</label>
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>WORKSPACE FOLDER</label>
                 <input type="text" name="opencode_workspace" value={formData.opencode_workspace || ''} onChange={handleChange}
-                  style={{ width: '100%', padding: '10px 12px', border: '2px solid #166534', backgroundColor: '#ffffff', color: '#166534', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600 }} />
+                  style={{ width: '100%', padding: '10px 12px', border: '2px solid #166534', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600 }} />
               </div>
               <button 
                 onClick={(e) => { e.stopPropagation(); handleOpenOpenCode(); }}
-                style={{ width: '100%', padding: '12px', backgroundColor: '#16a34a', color: 'white', border: '2px solid #166534', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                style={{ width: '100%', padding: '12px', backgroundColor: '#16a34a', color: '#FFFFFF', border: '2px solid #166534', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
                 LAUNCH OPENCODE
               </button>
               <button 
                 onClick={(e) => { e.stopPropagation(); handleOpenOpenCodeWeb(); }}
-                style={{ width: '100%', padding: '8px', backgroundColor: '#dcfce7', color: '#166534', border: '2px solid #16a34a', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
+                style={{ width: '100%', padding: '8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
                 LAUNCH WEBUI
               </button>
               {['run-opencode', 'run-opencode-web'].map(mode => activeProcesses && activeProcesses[mode] && (
-                <div key={mode} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: '#f0fdf4', border: '2px solid #16a34a', marginBottom: '8px', marginTop: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#166534', fontWeight: 700, fontSize: '0.8rem' }}>
+                <div key={mode} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px', marginBottom: '8px', marginTop: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--zen-text)', fontWeight: 700, fontSize: '0.8rem' }}>
                     <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#16a34a', boxShadow: '0 0 4px #16a34a' }} />
                     {mode.replace('run-', '').toUpperCase()} ACTIVE
                   </div>
-                  <button onClick={(e) => { e.stopPropagation(); handleKillProcess(mode); }} style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '4px 8px', fontSize: '0.7rem', fontWeight: 'bold', cursor: 'pointer' }}>KILL</button>
+                  <button onClick={(e) => { e.stopPropagation(); handleKillProcess(mode); }} style={{ backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', padding: '4px 8px', fontSize: '0.7rem', fontWeight: 'bold', cursor: 'pointer' }}>KILL</button>
                 </div>
               ))}
               <button 
@@ -534,37 +534,37 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
       )}
 
       {node.id === 'node-ollama' && isOllamaInstalled === false && (
-        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: '#fff7ed', border: '2px dashed #ea580c', borderRadius: '8px' }}>
-          <h4 style={{ margin: '0 0 10px 0', color: '#9a3412', fontSize: '0.9rem' }}>OLLAMA MISSING</h4>
+        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px' }}>
+          <h4 style={{ margin: '0 0 10px 0', color: 'var(--zen-text)', fontSize: '0.9rem' }}>OLLAMA MISSING</h4>
           
           <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#9a3412', marginBottom: '6px' }}>VRAM DETECTED (GB) <Tooltip text="We tried to auto-detect your Video RAM, but you can correct this if it's wrong." /></label>
+            <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>VRAM DETECTED (GB) <Tooltip text="We tried to auto-detect your Video RAM, but you can correct this if it's wrong." /></label>
             <input type="text" value={detectedVram} onChange={(e) => setDetectedVram(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', border: '2px solid #9a3412', backgroundColor: '#ffffff', color: '#9a3412', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: '2px 2px 0px #9a3412' }} />
+              style={{ width: '100%', padding: '10px 12px', border: '2px solid #9a3412', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: '2px 2px 0px #9a3412' }} />
           </div>
 
           <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#9a3412', marginBottom: '6px' }}>RECOMMENDED MODEL <Tooltip text="Based on your VRAM, we'll pull this model for you!" /></label>
+            <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>RECOMMENDED MODEL <Tooltip text="Based on your VRAM, we'll pull this model for you!" /></label>
             <input type="text" readOnly value={Number(detectedVram) >= 32 ? 'gemma4:31b' : Number(detectedVram) >= 24 ? 'gemma4:26b' : Number(detectedVram) >= 12 ? 'gemma4:12b' : Number(detectedVram) >= 8 ? 'gemma4:e4b' : Number(detectedVram) >= 4 ? 'gemma4:e2b' : 'Unsupported (< 4GB VRAM)'}
-              style={{ width: '100%', padding: '10px 12px', border: '2px solid #9a3412', backgroundColor: '#fed7aa', color: '#9a3412', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, cursor: 'not-allowed' }} />
+              style={{ width: '100%', padding: '10px 12px', border: '2px solid #9a3412', backgroundColor: '#fed7aa', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, cursor: 'not-allowed' }} />
           </div>
 
           <button 
             onClick={(e) => { e.stopPropagation(); handleInitializeOllama(); }}
-            style={{ width: '100%', padding: '12px', backgroundColor: '#ea580c', color: 'white', border: '2px solid #9a3412', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+            style={{ width: '100%', padding: '12px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', border: '2px solid #9a3412', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
             INITIALIZE OLLAMA
           </button>
         </div>
       )}
       
       {node.id === 'node-ollama' && isOllamaInstalled === true && (
-        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: '#f0fdf4', border: '2px dashed #16a34a', borderRadius: '8px' }}>
-          <h4 style={{ margin: '0 0 10px 0', color: '#166534', fontSize: '0.9rem' }}>OLLAMA INSTALLED</h4>
+        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px' }}>
+          <h4 style={{ margin: '0 0 10px 0', color: 'var(--zen-text)', fontSize: '0.9rem' }}>OLLAMA INSTALLED</h4>
           {confirmUninstall === 'ollama' ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <span style={{ fontSize: '0.8rem', color: '#9a3412', fontWeight: 700 }}>ARE YOU SURE?</span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--zen-text)', fontWeight: 700 }}>ARE YOU SURE?</span>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={(e) => { e.stopPropagation(); handleUninstallOllama(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: 'white', border: '2px solid #991b1b', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
+                <button onClick={(e) => { e.stopPropagation(); handleUninstallOllama(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#FFFFFF', border: '2px solid #991b1b', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
                 <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#e5e7eb', color: '#374151', border: '2px solid #9ca3af', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
               </div>
             </div>
@@ -572,7 +572,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <button 
                 onClick={(e) => { e.stopPropagation(); handleOpenOllama(); }}
-                style={{ width: '100%', padding: '12px', backgroundColor: '#16a34a', color: 'white', border: '2px solid #166534', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                style={{ width: '100%', padding: '12px', backgroundColor: '#16a34a', color: '#FFFFFF', border: '2px solid #166534', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
                 CHAT WITH OLLAMA
               </button>
               <button 
@@ -586,13 +586,13 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
       )}
       
       {node.id === 'node-openrouter' && node.data.status === 'active' && (
-        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: '#f0fdf4', border: '2px dashed #16a34a', borderRadius: '8px' }}>
-          <h4 style={{ margin: '0 0 10px 0', color: '#166534', fontSize: '0.9rem' }}>OPENROUTER CONNECTED</h4>
+        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px' }}>
+          <h4 style={{ margin: '0 0 10px 0', color: 'var(--zen-text)', fontSize: '0.9rem' }}>OPENROUTER CONNECTED</h4>
           {confirmUninstall === 'openrouter' ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <span style={{ fontSize: '0.8rem', color: '#9a3412', fontWeight: 700 }}>ARE YOU SURE?</span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--zen-text)', fontWeight: 700 }}>ARE YOU SURE?</span>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={(e) => { e.stopPropagation(); handleDisconnectOpenRouter(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: 'white', border: '2px solid #991b1b', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
+                <button onClick={(e) => { e.stopPropagation(); handleDisconnectOpenRouter(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#FFFFFF', border: '2px solid #991b1b', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
                 <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#e5e7eb', color: '#374151', border: '2px solid #9ca3af', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
               </div>
             </div>
@@ -609,14 +609,14 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
       )}
       </div>
       
-      <div style={{ padding: '20px', borderTop: '2px dashed #d1d5db', backgroundColor: '#ffffff', display: 'flex', gap: '10px' }}>
+      <div style={{ padding: '20px', borderTop: '1px solid var(--zen-border)', backgroundColor: '#ffffff', display: 'flex', gap: '10px' }}>
         <button onClick={handleSave} style={{ 
-          flex: 1, padding: '12px', backgroundColor: '#ea580c', color: 'white', 
-          border: '2px solid #111827', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '1px',
-          boxShadow: '3px 3px 0px #111827', transition: 'all 0.1s'
+          flex: 1, padding: '12px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', 
+          border: '1px solid var(--zen-border)', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', 
+          boxShadow: 'none', borderRadius: '8px', transition: 'all 0.1s'
         }}
-        onMouseDown={e => { e.currentTarget.style.transform = 'translate(2px, 2px)'; e.currentTarget.style.boxShadow = '1px 1px 0px #111827'; }}
-        onMouseUp={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '3px 3px 0px #111827'; }}
+        onMouseDown={e => { e.currentTarget.style.transform = 'translate(2px, 2px)'; e.currentTarget.style.opacity = '0.9'; }}
+        onMouseUp={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.opacity = '1'; }}
         >
           UPDATE PROTOCOL
         </button>
@@ -626,12 +626,12 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
           const guide = guideMap[node.id] || 'agents';
           onOpenGuide(guide);
         }} style={{ 
-          padding: '12px 20px', backgroundColor: '#ffffff', color: '#111827', 
-          border: '2px solid #111827', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '1px',
-          boxShadow: '3px 3px 0px #111827', transition: 'all 0.1s', display: 'flex', alignItems: 'center', gap: '8px'
+          padding: '12px 20px', backgroundColor: '#ffffff', color: 'var(--zen-text)', 
+          border: '1px solid var(--zen-border)', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', 
+          boxShadow: 'none', borderRadius: '8px', transition: 'all 0.1s', display: 'flex', alignItems: 'center', gap: '8px'
         }}
-        onMouseDown={e => { e.currentTarget.style.transform = 'translate(2px, 2px)'; e.currentTarget.style.boxShadow = '1px 1px 0px #111827'; }}
-        onMouseUp={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '3px 3px 0px #111827'; }}
+        onMouseDown={e => { e.currentTarget.style.transform = 'translate(2px, 2px)'; e.currentTarget.style.opacity = '0.9'; }}
+        onMouseUp={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.opacity = '1'; }}
         >
           <span>HELP</span>
           <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>?</span>
@@ -649,7 +649,16 @@ const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, 
 
   useEffect(() => {
     if (!terminalRef.current) return;
-    const term = new Terminal({ theme: { background: '#111827' } });
+    const term = new Terminal({ 
+      fontFamily: 'system-ui, -apple-system, Inter, "SF Pro", sans-serif',
+      fontSize: 14,
+      theme: { 
+        background: '#FFFFFF', // Matches var(--zen-surface) in light mode
+        foreground: '#2C2C2E', // Matches var(--zen-text)
+        cursor: '#6B7F99',     // Matches var(--zen-accent)
+        selectionBackground: 'rgba(107, 127, 153, 0.2)'
+      } 
+    });
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.open(terminalRef.current);
@@ -866,41 +875,53 @@ const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, 
   }, [mode]);
 
   return (
-    <div style={{ flexGrow: 1, position: 'relative', display: 'flex', flexDirection: 'column', backgroundColor: '#111827', alignItems: 'center', boxSizing: 'border-box', padding: '35px 20px 20px 20px' }}>
-      {showConfirmClose ? (
-        <div style={{ position: 'absolute', top: '10px', right: '15px', display: 'flex', gap: '10px', alignItems: 'center', backgroundColor: '#ef4444', padding: '8px 12px', borderRadius: '4px', zIndex: 10 }}>
-          <span style={{ color: 'white', fontWeight: 'bold', fontSize: '0.85rem' }}>This will terminate the running process. Are you sure?</span>
-          <button onClick={() => {
-            invoke('kill_pty', { sessionId }).catch(console.error);
-            onExit();
-          }} style={{ padding: '4px 12px', backgroundColor: '#ffffff', color: '#ef4444', border: 'none', fontWeight: 'bold', cursor: 'pointer', borderRadius: '2px' }}>Yes</button>
-          <button onClick={() => setShowConfirmClose(false)} style={{ padding: '4px 12px', backgroundColor: 'transparent', color: 'white', border: '1px solid white', fontWeight: 'bold', cursor: 'pointer', borderRadius: '2px' }}>Cancel</button>
-        </div>
-      ) : (
-        <button 
-          onClick={() => setShowConfirmClose(true)}
-          style={{ position: 'absolute', top: '5px', right: '15px', padding: '0', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent', color: 'white', border: 'none', cursor: 'pointer', fontFamily: 'sans-serif', fontWeight: 'bold', fontSize: '20px', zIndex: 10 }}
-        >
-          ✕
-        </button>
-      )}
+    <div style={{ 
+      position: 'absolute', top: '10vh', left: '50%', transform: 'translateX(-50%)',
+      width: '80%', maxWidth: '800px', height: '60vh',
+      backgroundColor: 'var(--zen-surface)', color: 'var(--zen-text)',
+      borderRadius: '16px', boxShadow: '0 24px 48px rgba(0, 0, 0, 0.15)',
+      border: '1px solid var(--zen-border)',
+      display: 'flex', flexDirection: 'column', overflow: 'hidden', zIndex: 1000
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid var(--zen-border)', backgroundColor: 'var(--zen-surface-hover)' }}>
+        <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600, color: 'var(--zen-text)' }}>
+          {mode.includes('opencode') ? 'OpenCode' : mode.includes('hermes') ? 'Hermes' : 'Ollama'}
+        </h2>
+        {showConfirmClose ? (
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <span style={{ color: '#ef4444', fontWeight: 600, fontSize: '0.85rem' }}>This will terminate the running process. Are you sure?</span>
+            <button onClick={() => {
+              invoke('kill_pty', { sessionId }).catch(console.error);
+              onExit();
+            }} style={{ padding: '6px 12px', backgroundColor: '#ef4444', color: '#ffffff', border: 'none', fontWeight: 600, cursor: 'pointer', borderRadius: '8px' }}>Yes</button>
+            <button onClick={() => setShowConfirmClose(false)} style={{ padding: '6px 12px', backgroundColor: 'transparent', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', fontWeight: 600, cursor: 'pointer', borderRadius: '8px' }}>Cancel</button>
+          </div>
+        ) : (
+          <button 
+            onClick={() => setShowConfirmClose(true)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          >
+            ✕
+          </button>
+        )}
+      </div>
 
       {isProvisioningModel && (
-        <div style={{ width: '100%', padding: '16px', backgroundColor: '#fed7aa', color: '#9a3412', border: '2px solid #9a3412', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '15px' }}>
+        <div style={{ padding: '16px 24px', backgroundColor: 'var(--zen-surface-hover)', borderBottom: '1px solid var(--zen-border)', display: 'flex', alignItems: 'center', gap: '15px' }}>
            <div style={{ width: '100%' }}>
              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-               <span style={{ fontWeight: 'bold' }}>Downloading Weights...</span>
-               <span style={{ fontWeight: 'bold' }}>{downloadPercent}%</span>
+               <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--zen-text)' }}>Downloading Weights...</span>
+               <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--zen-accent)' }}>{downloadPercent}%</span>
              </div>
-             <div style={{ width: '100%', height: '12px', backgroundColor: '#fdba74', borderRadius: '6px', overflow: 'hidden' }}>
-               <div style={{ width: `${downloadPercent}%`, height: '100%', backgroundColor: '#ea580c', transition: 'width 0.2s linear' }} />
+             <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--zen-border)', borderRadius: '3px', overflow: 'hidden' }}>
+               <div style={{ width: `${downloadPercent}%`, height: '100%', backgroundColor: 'var(--zen-accent)', transition: 'width 0.2s linear' }} />
              </div>
            </div>
         </div>
       )}
 
-      <div style={{ width: '100%', flex: 1, border: '4px solid #ea580c', backgroundColor: '#111827', display: 'flex', boxSizing: 'border-box', padding: '10px' }}>
-        <div ref={terminalRef} style={{ flex: 1, overflow: 'hidden' }} />
+      <div style={{ flex: 1, backgroundColor: 'var(--zen-surface)', padding: '16px 24px', overflow: 'hidden' }}>
+        <div ref={terminalRef} style={{ width: '100%', height: '100%' }} />
       </div>
     </div>
   );
@@ -1199,111 +1220,47 @@ export default function App() {
     const tx = target.x + NODE_WIDTH / 2;
     const ty = target.y + NODE_HEIGHT / 2;
 
-    // Normal vector math for parallel offset
     const dx = tx - sx;
     const dy = ty - sy;
-    const len = Math.sqrt(dx * dx + dy * dy);
-    if (len === 0) return null;
-    const nx = -dy / len;
-    const ny = dx / len;
-
-    // Forward stream (cyan) — offset along +normal
-    const fwd = {
-      x1: sx + nx * EDGE_OFFSET,
-      y1: sy + ny * EDGE_OFFSET,
-      x2: tx + nx * EDGE_OFFSET,
-      y2: ty + ny * EDGE_OFFSET,
-    };
-
-    // Reverse stream (magenta) — offset along -normal
-    const rev = {
-      x1: sx - nx * EDGE_OFFSET,
-      y1: sy - ny * EDGE_OFFSET,
-      x2: tx - nx * EDGE_OFFSET,
-      y2: ty - ny * EDGE_OFFSET,
-    };
-
-    let fwdClass = "edge-stream-forward";
-    let revClass = "edge-stream-reverse";
-
-    // Conditionally animate edges based strictly on FrugalLM Core proxy state
-    if (edge.id === 'edge-hermes-frugallm') {
-      if (activeProxyState?.source !== 'hermes') {
-        fwdClass = ""; revClass = "";
-      }
-    } else if (edge.id === 'edge-opencode-frugallm') {
-      if (activeProxyState?.source !== 'opencode') {
-        fwdClass = ""; revClass = "";
-      }
-    } else if (edge.id === 'edge-frugallm-ollama') {
-      if (activeProxyState?.target !== 'ollama') {
-        fwdClass = ""; revClass = "";
-      }
-    } else if (edge.id === 'edge-frugallm-openrouter') {
-      if (activeProxyState?.target !== 'openrouter') {
-        fwdClass = ""; revClass = "";
-      }
-    } else if (edge.id === 'edge-ollama-hardware') {
-      const isGenerating = activeProxyState?.target === 'ollama' || terminalMode === 'run-ollama';
-      if (!isGenerating) {
-        fwdClass = ""; revClass = "";
-      }
-    } else if (edge.id === 'edge-openrouter-cloud') {
-      const isGenerating = source.data.isGenerating === true || activeProxyState?.target === 'openrouter'; 
-      if (!isGenerating) {
-        fwdClass = ""; revClass = "";
-      }
-    }
+    
+    // Control points for smooth bezier curve
+    const cx1 = sx + dx * 0.5;
+    const cy1 = sy;
+    const cx2 = tx - dx * 0.5;
+    const cy2 = ty;
+    
+    const pathD = `M ${sx} ${sy} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${tx} ${ty}`;
+    
+    let isGenerating = false;
+    if (edge.id === 'edge-hermes-frugallm') isGenerating = activeProxyState?.source === 'hermes';
+    else if (edge.id === 'edge-opencode-frugallm') isGenerating = activeProxyState?.source === 'opencode';
+    else if (edge.id === 'edge-frugallm-ollama') isGenerating = activeProxyState?.target === 'ollama';
+    else if (edge.id === 'edge-frugallm-openrouter') isGenerating = activeProxyState?.target === 'openrouter';
+    else if (edge.id === 'edge-ollama-hardware') isGenerating = activeProxyState?.target === 'ollama' || terminalMode === 'run-ollama';
+    else if (edge.id === 'edge-openrouter-cloud') isGenerating = source.data.isGenerating === true || activeProxyState?.target === 'openrouter';
 
     return (
       <g key={edge.id}>
-        {/* Layer 1: Dormant base line */}
-        <line
-          x1={sx} y1={sy} x2={tx} y2={ty}
-          stroke="#374151"
+        {/* Base line */}
+        <path
+          d={pathD}
+          fill="none"
+          stroke="var(--zen-border)"
           strokeWidth="3"
-          strokeOpacity="0.3"
+          strokeOpacity="1"
           strokeLinecap="round"
         />
-        {/* Layer 2: Forward glow (wide, faint) + sharp stream (cyan) */}
-        <line
-          x1={fwd.x1} y1={fwd.y1} x2={fwd.x2} y2={fwd.y2}
-          stroke="#22d3ee"
-          strokeWidth="6"
-          strokeOpacity={fwdClass ? "0.15" : "0"}
+        {/* Animated active state */}
+        <path
+          d={pathD}
+          fill="none"
+          stroke="var(--zen-accent)"
+          strokeWidth="3"
+          strokeOpacity={isGenerating ? "1" : "0"}
+          strokeDasharray="8 8"
           strokeLinecap="round"
+          className={isGenerating ? "edge-stream-forward" : ""}
         />
-        <line
-          x1={fwd.x1} y1={fwd.y1} x2={fwd.x2} y2={fwd.y2}
-          stroke="#22d3ee"
-          strokeWidth="2"
-          strokeDasharray="6 4"
-          strokeLinecap="round"
-          className={fwdClass}
-          strokeOpacity={fwdClass ? "1" : "0.3"}
-        />
-        {/* Layer 3: Reverse glow (wide, faint) + sharp stream (magenta) */}
-        <line
-          x1={rev.x1} y1={rev.y1} x2={rev.x2} y2={rev.y2}
-          stroke="#e879f9"
-          strokeWidth="6"
-          strokeOpacity={revClass ? "0.15" : "0"}
-          strokeLinecap="round"
-        />
-        <line
-          x1={rev.x1} y1={rev.y1} x2={rev.x2} y2={rev.y2}
-          stroke="#e879f9"
-          strokeWidth="2"
-          strokeDasharray="6 4"
-          strokeLinecap="round"
-          className={revClass}
-          strokeOpacity={revClass ? "1" : "0.3"}
-        />
-        {/* Endpoint dots — composited glow via layered circles */}
-        <circle cx={sx} cy={sy} r="6" fill="#22d3ee" fillOpacity="0.15" />
-        <circle cx={sx} cy={sy} r="4" fill="#111827" stroke="#22d3ee" strokeWidth="1.5" />
-        <circle cx={tx} cy={ty} r="6" fill="#e879f9" fillOpacity="0.15" />
-        <circle cx={tx} cy={ty} r="4" fill="#111827" stroke="#e879f9" strokeWidth="1.5" />
       </g>
     );
   };
@@ -1313,7 +1270,7 @@ export default function App() {
 
   return (
     <div 
-      style={{ display: 'flex', width: '100%', height: '100vh', fontFamily: '"Courier New", Courier, monospace', backgroundColor: '#f3f4f6', overflow: 'hidden' }}
+      style={{ display: 'flex', width: '100%', height: '100vh', fontFamily: 'inherit', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '8px', overflow: 'hidden' }}
     >
       <style>
         {`
@@ -1384,7 +1341,7 @@ export default function App() {
         const isActive = activeProcesses[mode] || terminalMode === mode;
         if (!isActive) return null;
         return (
-          <div key={mode} style={{ display: terminalMode === mode ? 'flex' : 'none', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, zIndex: 50, backgroundColor: '#111827' }}>
+          <div key={mode} style={{ display: terminalMode === mode ? 'flex' : 'none', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, zIndex: 50, backgroundColor: 'var(--zen-accent)' }}>
             <TerminalView
                mode={mode}
                sessionId={mode}
@@ -1439,15 +1396,15 @@ export default function App() {
               const isCore = node.id === 'node-frugallm';
               
               let stateColors = {
-                border: '#111827',
-                headerBg: '#111827', 
-                headerText: '#ffffff',
-                bodyBg: '#ffffff',
-                dot: '#0ea5e9',
-                statusText: '#0ea5e9',
-                boxShadow: '6px 6px 0px rgba(17, 24, 39, 1)',
+                border: 'var(--zen-border)',
+                headerBg: 'var(--zen-surface-hover)', 
+                headerText: 'var(--zen-text)',
+                bodyBg: 'var(--zen-surface)',
+                dot: 'var(--zen-success)',
+                statusText: 'var(--zen-text-secondary)',
+                boxShadow: 'var(--tw-shadow-glass)',
                 borderStyle: 'solid',
-                borderWidth: '2px'
+                borderWidth: '1px'
               };
 
               let Icon = Icons.cpu;
@@ -1461,12 +1418,14 @@ export default function App() {
                 return (
                   <div
                     key={node.id}
+                    id={node.id}
                     style={{ 
                       position: 'absolute', left: node.x, top: node.y, width: NODE_WIDTH, 
-                      zIndex: 1, backgroundColor: '#111827', border: '2px solid #374151', 
-                      borderRadius: '4px', boxShadow: '4px 4px 0px rgba(0,0,0,0.5)',
-                      fontFamily: '"Courier New", Courier, monospace'
+                      zIndex: 1, backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '16px', boxShadow: 'var(--tw-shadow-glass)',
+                      fontFamily: 'inherit'
                     }}
+                    onMouseDown={(e) => handleCanvasMouseDown(e, node.id)}
+                    onClick={(e) => handleNodeClick(e, node.id)}
                   >
                     <HardwareNode isGenerating={isOllamaGenerating} />
                   </div>
@@ -1478,12 +1437,14 @@ export default function App() {
                 return (
                   <div
                     key={node.id}
+                    id={node.id}
                     style={{ 
                       position: 'absolute', left: node.x, top: node.y, width: NODE_WIDTH, 
-                      zIndex: 1, backgroundColor: '#111827', border: '2px solid #374151', 
-                      borderRadius: '4px', boxShadow: '4px 4px 0px rgba(0,0,0,0.5)',
-                      fontFamily: '"Courier New", Courier, monospace'
+                      zIndex: 1, backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '16px', boxShadow: 'var(--tw-shadow-glass)',
+                      fontFamily: 'inherit'
                     }}
+                    onMouseDown={(e) => handleCanvasMouseDown(e, node.id)}
+                    onClick={(e) => handleNodeClick(e, node.id)}
                   >
                     <CloudConnectNode isActive={isOpenRouterGenerating} />
                   </div>
@@ -1509,6 +1470,8 @@ export default function App() {
                     flexDirection: 'column',
                     userSelect: 'none'
                   }}
+                  onMouseDown={(e) => handleCanvasMouseDown(e, node.id)}
+                  onClick={(e) => handleNodeClick(e, node.id)}
                 >
                   {/* Header */}
                   <div style={{ 
@@ -1548,7 +1511,7 @@ export default function App() {
                   </div>
                   
                   {/* Body */}
-                  <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: stateColors.bodyBg, color: '#111827' }}>
+                  <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: stateColors.bodyBg, color: 'var(--zen-text)' }}>
                     {isCore ? (
                       <>
                         <StatusLight active={true} text="HUB ONLINE" />
@@ -1561,7 +1524,7 @@ export default function App() {
                       </>
                     ) : (
                       <>
-                        <StatusLight active={node.data.status === 'active'} text={node.data.status === 'active' ? 'CONNECTED' : node.data.status === 'needs_activation' ? (node.id === 'node-ollama' && isOllamaInstalled ? 'STOPPED' : 'STANDBY') : node.data.status.toUpperCase()} />
+                        <StatusLight active={node.data.status === 'active'} text={node.data.status === 'active' ? 'Connected' : node.data.status === 'needs_activation' ? (node.id === 'node-ollama' && isOllamaInstalled ? 'Stopped' : 'Standby') : (node.data.status.charAt(0).toUpperCase() + node.data.status.slice(1))} />
                         {(node.id === 'node-hermes' || node.id === 'node-opencode') ? (
                           <button 
                             onClick={(e) => { 
@@ -1577,7 +1540,7 @@ export default function App() {
                               fontSize: '0.7rem', 
                               fontWeight: 700, 
                               cursor: 'pointer', 
-                              fontFamily: '"Courier New", Courier, monospace', 
+                              fontFamily: 'inherit', 
                               width: '100%', 
                               textAlign: 'center',
                               transition: 'all 0.15s'
@@ -1616,10 +1579,10 @@ export default function App() {
       {/* Guides Modal */}
       {guidesOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setGuidesOpen(false)}>
-          <div onClick={e => e.stopPropagation()} style={{ width: '500px', backgroundColor: '#ffffff', border: '4px solid #111827', boxShadow: '8px 8px 0px #111827', padding: '30px', display: 'flex', flexDirection: 'column', fontFamily: '"Courier New", Courier, monospace' }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: '500px', backgroundColor: '#ffffff', border: '4px solid #111827', boxShadow: '0 24px 48px rgba(0, 0, 0, 0.1)', overflow: 'hidden', padding: '30px', display: 'flex', flexDirection: 'column', fontFamily: 'inherit' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #111827', paddingBottom: '10px' }}>
               <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, letterSpacing: '1px' }}>FRUGALLM // QUICKSTART GUIDES</h2>
-              <button onClick={() => setGuidesOpen(false)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#111827', fontWeight: 'bold' }}>✕</button>
+              <button onClick={() => setGuidesOpen(false)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: 'var(--zen-text)', fontWeight: 'bold' }}>✕</button>
             </div>
             
             <p style={{ fontSize: '0.9rem', color: '#4b5563', marginBottom: '24px', fontFamily: 'sans-serif', lineHeight: 1.5 }}>
@@ -1627,26 +1590,26 @@ export default function App() {
             </p>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ padding: '16px', border: '2px solid #111827', backgroundColor: '#f9fafb', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '2px 2px 0px #111827', transition: 'transform 0.1s' }} onMouseDown={e => { e.currentTarget.style.transform = 'translate(2px, 2px)'; e.currentTarget.style.boxShadow = 'none'; }} onMouseUp={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '2px 2px 0px #111827'; }}>
-                <div style={{ width: '32px', height: '32px', backgroundColor: '#ea580c', color: 'white', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 'bold', fontSize: '1.2rem', borderRadius: '4px' }}>1</div>
+              <div style={{ padding: '16px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: 'none', transition: 'transform 0.1s' }} onMouseDown={e => { e.currentTarget.style.transform = 'translate(2px, 2px)'; e.currentTarget.style.boxShadow = 'none'; }} onMouseUp={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '2px 2px 0px #111827'; }}>
+                <div style={{ width: '32px', height: '32px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 'bold', fontSize: '1.2rem', borderRadius: '4px' }}>1</div>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827', marginBottom: '4px' }}>Defining JSON Schemas</div>
+                  <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--zen-text)', marginBottom: '4px' }}>Defining JSON Schemas</div>
                   <div style={{ fontSize: '0.75rem', color: '#6b7280', fontFamily: 'sans-serif' }}>Learn how to force agents to return strict data formats.</div>
                 </div>
               </div>
               
-              <div style={{ padding: '16px', border: '2px solid #111827', backgroundColor: '#f9fafb', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '2px 2px 0px #111827', transition: 'transform 0.1s' }} onMouseDown={e => { e.currentTarget.style.transform = 'translate(2px, 2px)'; e.currentTarget.style.boxShadow = 'none'; }} onMouseUp={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '2px 2px 0px #111827'; }}>
-                <div style={{ width: '32px', height: '32px', backgroundColor: '#ea580c', color: 'white', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 'bold', fontSize: '1.2rem', borderRadius: '4px' }}>2</div>
+              <div style={{ padding: '16px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: 'none', transition: 'transform 0.1s' }} onMouseDown={e => { e.currentTarget.style.transform = 'translate(2px, 2px)'; e.currentTarget.style.boxShadow = 'none'; }} onMouseUp={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '2px 2px 0px #111827'; }}>
+                <div style={{ width: '32px', height: '32px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 'bold', fontSize: '1.2rem', borderRadius: '4px' }}>2</div>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827', marginBottom: '4px' }}>Connecting Local Ollama</div>
+                  <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--zen-text)', marginBottom: '4px' }}>Connecting Local Ollama</div>
                   <div style={{ fontSize: '0.75rem', color: '#6b7280', fontFamily: 'sans-serif' }}>How to run completely private models locally on port 11434.</div>
                 </div>
               </div>
               
-              <div style={{ padding: '16px', border: '2px solid #111827', backgroundColor: '#f9fafb', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '2px 2px 0px #111827', transition: 'transform 0.1s' }} onMouseDown={e => { e.currentTarget.style.transform = 'translate(2px, 2px)'; e.currentTarget.style.boxShadow = 'none'; }} onMouseUp={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '2px 2px 0px #111827'; }}>
-                <div style={{ width: '32px', height: '32px', backgroundColor: '#ea580c', color: 'white', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 'bold', fontSize: '1.2rem', borderRadius: '4px' }}>3</div>
+              <div style={{ padding: '16px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: 'none', transition: 'transform 0.1s' }} onMouseDown={e => { e.currentTarget.style.transform = 'translate(2px, 2px)'; e.currentTarget.style.boxShadow = 'none'; }} onMouseUp={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '2px 2px 0px #111827'; }}>
+                <div style={{ width: '32px', height: '32px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 'bold', fontSize: '1.2rem', borderRadius: '4px' }}>3</div>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827', marginBottom: '4px' }}>Advanced OpenRouter Multiplexing</div>
+                  <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--zen-text)', marginBottom: '4px' }}>Advanced OpenRouter Multiplexing</div>
                   <div style={{ fontSize: '0.75rem', color: '#6b7280', fontFamily: 'sans-serif' }}>Route queries dynamically to save costs and avoid rate limits.</div>
                 </div>
               </div>
@@ -1658,9 +1621,9 @@ export default function App() {
       {/* Markdown Guide Modal */}
       {activeGuide && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 2000, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setActiveGuide(null)}>
-          <div onClick={e => e.stopPropagation()} style={{ width: '700px', maxHeight: '80vh', backgroundColor: '#ffffff', border: '4px solid #111827', boxShadow: '8px 8px 0px #111827', display: 'flex', flexDirection: 'column', fontFamily: 'sans-serif' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', backgroundColor: '#111827', color: 'white' }}>
-              <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, letterSpacing: '1px', fontFamily: '"Courier New", Courier, monospace' }}>FRUGALLM // GUIDE</h2>
+          <div onClick={e => e.stopPropagation()} style={{ width: '700px', maxHeight: '80vh', backgroundColor: '#ffffff', border: '4px solid #111827', boxShadow: '0 24px 48px rgba(0, 0, 0, 0.1)', overflow: 'hidden', display: 'flex', flexDirection: 'column', fontFamily: 'sans-serif' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', borderBottom: '1px solid var(--zen-border)' }}>
+              <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700,  fontFamily: 'inherit' }}>FRUGALLM // GUIDE</h2>
               <button onClick={() => setActiveGuide(null)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#9ca3af', fontWeight: 'bold' }}>✕</button>
             </div>
             
@@ -1679,11 +1642,11 @@ export default function App() {
                   code: ({node, className, children, ...props}: any) => {
                     const match = /language-([a-zA-Z0-9]+)/.exec(className || '')
                     return !match ? (
-                      <code {...props} style={{ backgroundColor: '#f3f4f6', padding: '2px 4px', borderRadius: '4px', fontFamily: 'monospace', fontSize: '0.9em', color: '#ea580c' }}>
+                      <code {...props} style={{ backgroundColor: 'var(--zen-surface-hover)', borderRadius: '8px', padding: '2px 4px', borderRadius: '4px', fontFamily: 'monospace', fontSize: '0.9em', color: '#ea580c' }}>
                         {children}
                       </code>
                     ) : (
-                      <div style={{ backgroundColor: '#111827', color: '#f3f4f6', padding: '12px', borderRadius: '4px', overflowX: 'auto', marginBottom: '16px', fontFamily: 'monospace', fontSize: '0.9em' }}>
+                      <div style={{ backgroundColor: 'var(--zen-accent)', color: '#f3f4f6', padding: '12px', borderRadius: '4px', overflowX: 'auto', marginBottom: '16px', fontFamily: 'monospace', fontSize: '0.9em' }}>
                         <code {...props}>{children}</code>
                       </div>
                     )

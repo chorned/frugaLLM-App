@@ -5,6 +5,8 @@ import { MainCanvasPage } from '../pages/MainCanvas';
 test.describe('Hardware Telemetry Widget', () => {
   test.beforeEach(async ({ page }) => {
     // Inject the enhanced Tauri mock for event listening
+    page.on('console', msg => console.log('PAGE LOG:', msg.text()));
+    page.on('pageerror', err => console.log('PAGE ERROR:', err));
     await page.addInitScript(() => {
       window.localStorage.setItem('onboardingState', 'completed');
       window['invokedCommands'] = [];
@@ -13,7 +15,7 @@ test.describe('Hardware Telemetry Widget', () => {
       let nextId = 1;
 
       Object.defineProperty(window, '__TAURI_INTERNALS__', {
-        value: {
+        value: { transformCallback: () => 1234,
           transformCallback: (callback: any) => {
              const id = nextId++;
              window['tauriEventCallbacks'][id] = callback;
@@ -59,7 +61,7 @@ test.describe('Hardware Telemetry Widget', () => {
     const telemetry = new HardwareTelemetryPage(page);
     
     // Header should show IDLE
-    await expect(telemetry.statusLight).toHaveText('IDLE');
+    await expect(telemetry.statusLight).toHaveText('Standby');
     await expect(telemetry.activeModel).toHaveText('None');
 
     // Expand the widget
@@ -98,7 +100,7 @@ test.describe('Hardware Telemetry Widget', () => {
     });
 
     // Header should update to LOADED (since it's active but not generating)
-    await expect(telemetry.statusLight).toHaveText('LOADED');
+    await expect(telemetry.statusLight).toHaveText('Loaded');
     await expect(telemetry.activeModel).toHaveText('llama3:8b-instruct-q4_0');
 
     // Should switch to GPU labels
@@ -122,7 +124,7 @@ test.describe('Hardware Telemetry Widget', () => {
       hardware: { cpu_utilization: 10, vram_total: 0 }
     });
     
-    await expect(telemetry.statusLight).toHaveText('LOADED');
+    await expect(telemetry.statusLight).toHaveText('Loaded');
 
     // Throughput is calculated using a custom DOM event 'pty_bytes'
     // in NodeWidgets.tsx: window.addEventListener('pty_bytes', handleBytes);
@@ -139,7 +141,7 @@ test.describe('Hardware Telemetry Widget', () => {
     });
     
     // It should now transition to THINKING since throughput > 0
-    await expect(telemetry.statusLight).toHaveText('THINKING');
+    await expect(telemetry.statusLight).toHaveText('Thinking');
     
     // Throughput should be calculated (not 0.0)
     await expect(telemetry.throughputValue).not.toContainText('0.0');
@@ -148,7 +150,7 @@ test.describe('Hardware Telemetry Widget', () => {
     await page.waitForTimeout(1100);
     
     // Should go back to LOADED and throughput 0.0
-    await expect(telemetry.statusLight).toHaveText('LOADED');
+    await expect(telemetry.statusLight).toHaveText('Loaded');
     await expect(telemetry.throughputValue).toContainText('0.0');
   });
 });

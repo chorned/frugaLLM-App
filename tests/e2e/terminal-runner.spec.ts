@@ -12,7 +12,7 @@ test.describe('Terminal Runner View', () => {
       window.localStorage.setItem('onboardingState', 'completed');
       window['invokedCommands'] = [];
       Object.defineProperty(window, '__TAURI_INTERNALS__', {
-        value: {
+        value: { transformCallback: () => 1234,
           transformCallback: () => 1234,
           invoke: (cmd: string, args: any) => {
             window['invokedCommands'].push({ cmd, args });

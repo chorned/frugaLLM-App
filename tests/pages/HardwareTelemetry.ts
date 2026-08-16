@@ -24,23 +24,23 @@ export class HardwareTelemetryPage {
     
     // The container can be found by text "LOCAL HARDWARE" which is unique to this widget.
     // However, it's safer to scope it. It's the only one with LOCAL HARDWARE.
-    this.container = page.locator('div').filter({ hasText: /^LOCAL HARDWARE(▼|▲)?.*$/ }).first();
+    this.container = page.locator('#node-hardware');
     
-    this.headerTitle = this.container.locator('text=LOCAL HARDWARE');
+    this.headerTitle = this.container.getByText('Local Hardware', { exact: false }).first();
     this.toggleButton = this.container.locator('text=▼').or(this.container.locator('text=▲'));
     
     // Status light text is inside the header
-    this.statusLight = this.container.locator('div > span').filter({ hasText: /^(IDLE|LOADING|THINKING|LOADED|ROUTING)$/ });
+    this.statusLight = this.container.locator('span').filter({ hasText: /^(Standby|Loading|Thinking|Loaded|llama.*)$/i }).first();
     
-    this.activeModel = page.locator('div').filter({ hasText: /^Active Model.*$/ }).locator('span').last();
+    this.activeModel = this.container.locator('div').filter({ hasText: /^Active Model.*$/ }).locator('span').last();
     
-    this.loadLabel = page.locator('div').filter({ hasText: /^(CPU Load|GPU Load).*$/ }).locator('span').first();
-    this.loadValue = page.locator('div').filter({ hasText: /^(CPU Load|GPU Load).*$/ }).locator('span').last();
+    this.loadLabel = this.container.locator('div').filter({ hasText: /^(CPU|GPU|CPU Load|GPU Load).*$/ }).locator('span').first();
+    this.loadValue = this.container.locator('div').filter({ hasText: /^(CPU|GPU|CPU Load|GPU Load).*$/ }).locator('span').last();
     
-    this.memoryLabel = page.locator('div').filter({ hasText: /^(RAM Allocation|VRAM Allocation).*$/ }).locator('span').first();
-    this.memoryValue = page.locator('div').filter({ hasText: /^(RAM Allocation|VRAM Allocation).*$/ }).locator('span').last();
+    this.memoryLabel = this.container.locator('div').filter({ hasText: /^(Memory|RAM Allocation|VRAM Allocation).*$/ }).locator('span').first();
+    this.memoryValue = this.container.locator('div').filter({ hasText: /^(Memory|RAM Allocation|VRAM Allocation).*$/ }).locator('span').last();
     
-    this.throughputLabel = page.locator('text=Throughput');
+    this.throughputLabel = this.container.locator('text=Throughput');
     this.throughputValue = this.throughputLabel.locator('..').locator('span').nth(1); // The value span next to it
   }
 

@@ -13,9 +13,10 @@ test.describe('Node Configuration Panel', () => {
       window.localStorage.setItem('onboardingState', 'completed');
       window['invokedCommands'] = [];
       Object.defineProperty(window, '__TAURI_INTERNALS__', {
-        value: {
+        value: { transformCallback: () => 1234,
           invoke: (cmd: string, args: any) => {
             window['invokedCommands'].push({ cmd, args });
+            if (cmd === 'plugin:event|listen') return Promise.resolve(1234);
             if (cmd === 'check_ollama_status') return Promise.resolve(true);
             if (cmd === 'check_hermes_status') return Promise.resolve(false);
             if (cmd === 'check_opencode_status') return Promise.resolve(false);

@@ -7,9 +7,10 @@ test.describe('Main Canvas Dashboard', () => {
     await page.addInitScript(() => {
       window.localStorage.setItem('onboardingState', 'completed');
       Object.defineProperty(window, '__TAURI_INTERNALS__', {
-        value: {
+        value: { transformCallback: () => 1234,
           invoke: (cmd: string, args: any) => {
             console.log('IPC Invoke:', cmd, args);
+            if (cmd === 'plugin:event|listen') return Promise.resolve(1234);
             if (cmd === 'check_ollama_status') return Promise.resolve(true);
             if (cmd === 'check_hermes_status') return Promise.resolve(false);
             if (cmd === 'check_opencode_status') return Promise.resolve(false);
