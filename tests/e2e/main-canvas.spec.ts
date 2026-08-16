@@ -26,7 +26,7 @@ test.describe('Main Canvas Dashboard', () => {
     });
   });
 
-  test('should render canvas, nodes, and allow panning/zooming', async ({ page }) => {
+  test('should render canvas, nodes, and prevent panning/zooming', async ({ page }) => {
     const canvas = new MainCanvas(page);
     await canvas.goto();
 
@@ -47,20 +47,19 @@ test.describe('Main Canvas Dashboard', () => {
     
     // Test zooming
     const transformBefore = await canvas.page.locator('div[style*="transform: scale"]').first().getAttribute('style');
-    await canvas.zoomCanvas(-500); // zoom in
+    await canvas.zoomCanvas(-500); // attempt zoom in
     
     await expect(async () => {
       const transformAfter = await canvas.page.locator('div[style*="transform: scale"]').first().getAttribute('style');
-      expect(transformAfter).not.toEqual(transformBefore);
+      expect(transformAfter).toEqual(transformBefore); // Should not change
     }).toPass();
 
     // Test panning
-    const transformAfterZoom = await canvas.page.locator('div[style*="transform: scale"]').first().getAttribute('style');
     await canvas.panCanvas(100, 100);
     
     await expect(async () => {
       const transformPan = await canvas.page.locator('div[style*="transform: scale"]').first().getAttribute('style');
-      expect(transformPan).not.toEqual(transformAfterZoom);
+      expect(transformPan).toEqual(transformBefore); // Should not change
     }).toPass();
 
     // Test drag node (even if it doesn't move it in v1, we simulate it)

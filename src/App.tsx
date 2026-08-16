@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useCanvasLogic } from './v2/hooks/useCanvasLogic';
 import { invoke } from '@tauri-apps/api/core';
 import confetti from 'canvas-confetti';
 import { listen } from '@tauri-apps/api/event';
@@ -9,7 +10,7 @@ import '@xterm/xterm/css/xterm.css';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import ReactMarkdown from 'react-markdown';
-import { StatusLight, CopyableField, HardwareNode, CloudConnectNode } from './components/NodeWidgets';
+import { StatusLight, CopyableField, InfoField, HardwareNode, CloudConnectNode } from './components/NodeWidgets';
 import agentsGuide from './guides/agents.md?raw';
 import ollamaGuide from './guides/ollama.md?raw';
 import openrouterGuide from './guides/openrouter.md?raw';
@@ -153,7 +154,8 @@ const Icons = {
   terminal: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>,
   code: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>,
   workflow: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="6" height="6" rx="1"></rect><rect x="15" y="3" width="6" height="6" rx="1"></rect><rect x="9" y="15" width="6" height="6" rx="1"></rect><path d="M6 9v2a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9"></path><path d="M12 13v2"></path></svg>,
-  agent: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a5 5 0 0 1 5 5v2a5 5 0 0 1-10 0V7a5 5 0 0 1 5-5z"></path><path d="M19 15v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v1"></path><path d="M5 22v-3a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3"></path></svg>
+  agent: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a5 5 0 0 1 5 5v2a5 5 0 0 1-10 0V7a5 5 0 0 1 5-5z"></path><path d="M19 15v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v1"></path><path d="M5 22v-3a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3"></path></svg>,
+  settings: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
 };
 
 const Tooltip = ({ text }: { text: string }) => {
@@ -908,14 +910,23 @@ export default function App() {
   const [nodes, setNodes] = useState(initialNodes);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
-  const [isDragging, setIsDragging] = useState(false);
-  const lastPos = useRef({ x: 0, y: 0 });
-  const dragDistance = useRef(0);
-
-  const [containerSize, setContainerSize] = useState({ width: 1024, height: 768 });
   const canvasRef = useRef<HTMLDivElement>(null);
+  
+  const {
+    pan,
+    zoom,
+    isDragging,
+    containerSize,
+    handleCanvasMouseDown,
+    handleCanvasMouseMove,
+    handleCanvasMouseUp,
+    handleCanvasClick,
+    handleWheel,
+  } = useCanvasLogic(canvasRef, (e, nodeId) => {
+    setSelectedNodeId(nodeId);
+  }, () => {
+    setSelectedNodeId(null);
+  });
   const [guidesOpen, setGuidesOpen] = useState(false);
   const [terminalMode, setTerminalMode] = useState<'install-hermes' | 'run-hermes' | 'run-hermes-web' | 'run-hermes-desktop' | 'install-opencode' | 'run-opencode' | 'run-opencode-web' | 'install-ollama' | 'run-ollama' | null>(null);
   const [isHermesInstalled, setIsHermesInstalled] = useState<boolean | null>(null);
@@ -941,17 +952,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!canvasRef.current) return;
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setContainerSize({
-          width: entry.contentRect.width,
-          height: entry.contentRect.height
-        });
-      }
-    });
-    ro.observe(canvasRef.current);
-    return () => ro.disconnect();
+    // Resize observer logic moved to useCanvasLogic
   }, [terminalMode]);
 
   const spreadWidth = Math.max(containerSize.width, 800);
@@ -1089,52 +1090,9 @@ export default function App() {
   };
 
   const [activeGuide, setActiveGuide] = useState<string | null>(null);
-  const handleCanvasMouseDown = (e: any) => {
-    setIsDragging(true);
-    lastPos.current = { x: e.clientX, y: e.clientY };
-    dragDistance.current = 0;
-  };
-
-  const handleWheel = (e: any) => {
-    const zoomSensitivity = 0.002;
-    const zoomDelta = -e.deltaY * zoomSensitivity;
-    const newZoom = Math.min(Math.max(0.2, zoom + zoomDelta), 3);
-    
-    // Calculate mouse position relative to canvas
-    const mouseX = e.clientX;
-    const mouseY = e.clientY;
-    
-    // Adjust pan so the zoom centers on the cursor
-    const scaleRatio = newZoom / zoom;
-    setPan(prev => ({
-        x: mouseX - (mouseX - prev.x) * scaleRatio,
-        y: mouseY - (mouseY - prev.y) * scaleRatio
-    }));
-    setZoom(newZoom);
-  };
-
-  const handleCanvasMouseMove = (e: any) => {
-    if (!isDragging) return;
-    const dx = e.clientX - lastPos.current.x;
-    const dy = e.clientY - lastPos.current.y;
-    dragDistance.current += Math.abs(dx) + Math.abs(dy);
-
-    setPan(prev => ({ x: prev.x + dx, y: prev.y + dy }));
-    lastPos.current = { x: e.clientX, y: e.clientY };
-  };
-
-  const handleCanvasMouseUp = () => {
-    setIsDragging(false);
-  };
-
   const handleNodeClick = (e: any, nodeId: string) => {
     e.stopPropagation();
     setSelectedNodeId(nodeId);
-  };
-
-  const handleCanvasClick = () => {
-    if (dragDistance.current > 5) return; // Distinguish between drag and click
-    setSelectedNodeId(null);
   };
 
   const handleSaveNodeConfig = async (nodeId: string, newConfig: any) => {
@@ -1492,38 +1450,6 @@ export default function App() {
                 borderWidth: '2px'
               };
 
-              if (isCore) {
-                stateColors.border = '#ea580c';
-                stateColors.headerBg = '#ea580c';
-                stateColors.headerText = '#ffffff';
-                stateColors.dot = '#ffffff';
-                stateColors.boxShadow = '6px 6px 0px rgba(234, 88, 12, 1)';
-                stateColors.borderWidth = '4px';
-              } else if (node.data.status === 'inactive') {
-                stateColors.border = '#9ca3af';
-                stateColors.headerBg = '#e5e7eb';
-                stateColors.headerText = '#6b7280';
-                stateColors.bodyBg = '#f3f4f6';
-                stateColors.dot = '#d1d5db';
-                stateColors.statusText = '#9ca3af';
-                stateColors.boxShadow = 'none';
-                stateColors.borderStyle = 'dashed';
-                stateColors.borderWidth = '3px';
-              } else if (node.data.status === 'needs_activation') {
-                stateColors.border = '#111827';
-                stateColors.headerBg = '#111827';
-                stateColors.headerText = '#ffffff';
-                stateColors.dot = '#ea580c'; 
-                stateColors.statusText = '#ea580c';
-              } else if (node.data.status === 'error') {
-                stateColors.border = '#111827';
-                stateColors.headerBg = '#111827';
-                stateColors.headerText = '#ffffff';
-                stateColors.dot = '#eab308'; 
-                stateColors.statusText = '#eab308';
-                stateColors.boxShadow = '6px 6px 0px rgba(239, 68, 68, 1)'; // Red shadow to indicate error
-              }
-
               let Icon = Icons.cpu;
               if (node.id.includes('openrouter')) Icon = Icons.cloud;
               if (node.id === 'node-opencode') Icon = Icons.code;
@@ -1568,7 +1494,6 @@ export default function App() {
                 <div 
                   key={node.id}
                   className="retro-node"
-                  onClick={(e) => handleNodeClick(e, node.id)}
                   style={{
                     position: 'absolute',
                     left: node.x,
@@ -1600,14 +1525,25 @@ export default function App() {
                       {node.data.label}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      {node.data.status === 'inactive' && (
-                        <span style={{ fontSize: '0.65rem', backgroundColor: '#9ca3af', color: '#ffffff', padding: '2px 6px', borderRadius: '2px', fontWeight: 800 }}>PLANNED</span>
-                      )}
-                      <span style={{ 
-                        display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%',
-                        backgroundColor: stateColors.dot,
-                        boxShadow: `0 0 4px ${stateColors.dot}`
-                      }} />
+                      <div 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleNodeClick(e, node.id);
+                        }}
+                        style={{
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: stateColors.dot,
+                          transition: 'opacity 0.2s',
+                          opacity: 0.8
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                        onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
+                      >
+                        {Icons.settings}
+                      </div>
                     </div>
                   </div>
                   
@@ -1626,7 +1562,40 @@ export default function App() {
                     ) : (
                       <>
                         <StatusLight active={node.data.status === 'active'} text={node.data.status === 'active' ? 'CONNECTED' : node.data.status === 'needs_activation' ? (node.id === 'node-ollama' && isOllamaInstalled ? 'STOPPED' : 'STANDBY') : node.data.status.toUpperCase()} />
-                        <CopyableField label={node.id.includes('openrouter') ? 'HOST' : 'ENDPOINT'} value={node.id.includes('openrouter') ? `${node.data.ip}:${node.data.port}` : `${node.data.ip}:${node.data.port}`} />
+                        {(node.id === 'node-hermes' || node.id === 'node-opencode') ? (
+                          <button 
+                            onClick={(e) => { 
+                              e.stopPropagation(); 
+                              if (node.id === 'node-hermes') handleOpenHermes(); 
+                              else handleOpenOpenCode(); 
+                            }} 
+                            style={{ 
+                              padding: '4px 10px', 
+                              backgroundColor: '#1f2937', 
+                              color: '#34d399', 
+                              border: '1.5px solid #374151', 
+                              fontSize: '0.7rem', 
+                              fontWeight: 700, 
+                              cursor: 'pointer', 
+                              fontFamily: '"Courier New", Courier, monospace', 
+                              width: '100%', 
+                              textAlign: 'center',
+                              transition: 'all 0.15s'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = '#374151';
+                              e.currentTarget.style.color = '#ffffff';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = '#1f2937';
+                              e.currentTarget.style.color = '#34d399';
+                            }}
+                          >
+                            LAUNCH APP
+                          </button>
+                        ) : (
+                          <InfoField label={node.id.includes('openrouter') ? 'HOST' : 'ENDPOINT'} value={node.id.includes('openrouter') ? `${node.data.ip}:${node.data.port}` : `${node.data.ip}:${node.data.port}`} />
+                        )}
                       </>
                     )}
                   </div>

@@ -167,6 +167,58 @@ export const CopyableField = ({
 };
 
 // =============================================================================
+// InfoField — Read-only info text without copy button
+// =============================================================================
+export const InfoField = ({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) => {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', width: '100%' }}>
+      <span
+        style={{
+          fontSize: '0.6rem',
+          fontWeight: 800,
+          textTransform: 'uppercase',
+          color: '#6b7280',
+          letterSpacing: '0.5px',
+        }}
+      >
+        {label}
+      </span>
+      <div
+        style={{
+          display: 'flex',
+          backgroundColor: '#111827',
+          border: '1.5px solid #374151',
+          overflow: 'hidden',
+          padding: '4px 8px',
+        }}
+      >
+        <span
+          style={{
+            color: '#22d3ee',
+            fontSize: '0.7rem',
+            fontWeight: 600,
+            fontFamily: '"Courier New", Courier, monospace',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            width: '100%',
+          }}
+        >
+          {value}
+        </span>
+      </div>
+    </div>
+  );
+};
+
+
+// =============================================================================
 // SettingsToggle — Boolean toggle for Tauri IPC settings
 // =============================================================================
 export const SettingsToggle = ({
@@ -237,7 +289,7 @@ export const SettingsToggle = ({
 // =============================================================================
 export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean }) => {
   const [telemetry, setTelemetry] = useState<TelemetryPayload | null>(null);
-  const [isCollapsed, setIsCollapsed] = useState(true);
+  const [showPanel, setShowPanel] = useState(false);
 
   useEffect(() => {
     console.log("HardwareNode isGenerating:", isGenerating);
@@ -328,85 +380,97 @@ export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean 
   const isThinking = (isGenerating && isLoaded) || throughput > 0;
   const isLoading = isGenerating && !isLoaded;
 
-  let headerStatusText = 'IDLE';
-  if (isLoading) headerStatusText = 'LOADING';
-  else if (isThinking) headerStatusText = 'THINKING';
-  else if (isLoaded) headerStatusText = 'LOADED';
-
-  const isStatusActive = isLoading || isThinking || isLoaded;
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', padding: '4px' }}>
-      {/* Header */}
-      <div 
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #374151', paddingBottom: '8px', cursor: 'pointer' }}
-        onClick={() => setIsCollapsed(!isCollapsed)}
-      >
-        <div style={{ fontWeight: 800, fontSize: '0.8rem', color: '#e5e7eb', display: 'flex', gap: '8px', alignItems: 'center' }}>
-          LOCAL HARDWARE
-          <span style={{ fontSize: '0.6rem', color: '#9ca3af' }}>{isCollapsed ? '▼' : '▲'}</span>
-          {/* Debug indicator to help diagnose state issues */}
-
+    <>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', padding: '4px' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #374151', paddingBottom: '8px' }}>
+          <div style={{ fontWeight: 800, fontSize: '0.8rem', color: '#e5e7eb', display: 'flex', gap: '8px', alignItems: 'center' }}>
+            LOCAL HARDWARE
+          </div>
+          <span 
+            onClick={(e) => { e.stopPropagation(); setShowPanel(true); }}
+            style={{ 
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', 
+              width: '14px', height: '14px', borderRadius: '50%', 
+              border: '1.5px solid #9ca3af', color: '#9ca3af', 
+              fontSize: '10px', fontWeight: 'bold', cursor: 'pointer' 
+            }}
+          >
+            i
+          </span>
         </div>
-        <StatusLight active={isStatusActive} text={headerStatusText} />
+
+        {/* Model Name Indicator */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', color: '#9ca3af' }}>Active Model</span>
+          <span style={{ fontSize: '0.75rem', fontWeight: 800, color: isLoaded ? '#e5e7eb' : '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }} title={isLoaded ? telemetry?.ollama?.model_name : 'None'}>
+            {isLoaded ? telemetry?.ollama?.model_name : 'None'}
+          </span>
+        </div>
       </div>
 
-      {/* Model Name Indicator */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', color: '#9ca3af' }}>Active Model</span>
-        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: isLoaded ? '#e5e7eb' : '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }} title={isLoaded ? telemetry?.ollama?.model_name : 'None'}>
-          {isLoaded ? telemetry?.ollama?.model_name : 'None'}
-        </span>
-      </div>
-
-      {!isCollapsed && (
-        <>
-          {/* Utilization Bar (Load) */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', color: '#9ca3af' }}>
-              <span>{isCpuMode ? 'CPU Load' : 'GPU Load'}</span>
-              <span>{loadPercent.toFixed(1)}%</span>
+      {showPanel && (
+        <div 
+          style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'default' }} 
+          onClick={(e) => { e.stopPropagation(); setShowPanel(false); }}
+        >
+          <div 
+            style={{ width: '350px', backgroundColor: '#111827', border: '2px solid #374151', borderRadius: '4px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }} 
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #374151', paddingBottom: '8px' }}>
+              <span style={{ fontWeight: 800, color: '#e5e7eb', fontSize: '1rem' }}>HARDWARE TELEMETRY</span>
+              <span onClick={() => setShowPanel(false)} style={{ color: '#9ca3af', cursor: 'pointer', fontWeight: 'bold' }}>✕</span>
             </div>
-            <div style={{ width: '100%', height: '10px', backgroundColor: '#1f2937', borderRadius: '5px', overflow: 'hidden' }}>
-              <div 
-                style={{ 
-                  height: '100%', 
-                  backgroundColor: isCpuMode ? '#3b82f6' : '#ea580c', 
-                  transition: 'width 0.3s ease-out', 
-                  width: `${Math.min(100, Math.max(0, loadPercent))}%` 
-                }} 
-              />
+            
+            {/* Utilization Bar (Load) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', color: '#9ca3af' }}>
+                <span>{isCpuMode ? 'CPU Load' : 'GPU Load'}</span>
+                <span>{loadPercent.toFixed(1)}%</span>
+              </div>
+              <div style={{ width: '100%', height: '10px', backgroundColor: '#1f2937', borderRadius: '5px', overflow: 'hidden' }}>
+                <div 
+                  style={{ 
+                    height: '100%', 
+                    backgroundColor: isCpuMode ? '#3b82f6' : '#ea580c', 
+                    transition: 'width 0.3s ease-out', 
+                    width: `${Math.min(100, Math.max(0, loadPercent))}%` 
+                  }} 
+                />
+              </div>
+            </div>
+
+            {/* Utilization Bar (Memory) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', color: '#9ca3af' }}>
+                <span>{isCpuMode ? 'RAM Allocation' : 'VRAM Allocation'}</span>
+                <span>{memUsed} / {memTotal} GB</span>
+              </div>
+              <div style={{ width: '100%', height: '10px', backgroundColor: '#1f2937', borderRadius: '5px', overflow: 'hidden' }}>
+                <div 
+                  style={{ 
+                    height: '100%', 
+                    backgroundColor: '#8b5cf6', 
+                    transition: 'width 0.3s ease-out', 
+                    width: `${Math.min(100, Math.max(0, memPercent))}%` 
+                  }} 
+                />
+              </div>
+            </div>
+
+            {/* Throughput Metric */}
+            <div style={{ marginTop: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>Throughput</span>
+              <span style={{ fontSize: '0.85rem', fontWeight: 800, color: isActive ? '#10b981' : '#6b7280' }}>
+                {throughput.toFixed(1)} <span style={{ fontSize: '0.65rem', color: '#9ca3af' }}>t/s</span>
+              </span>
             </div>
           </div>
-
-          {/* Utilization Bar (Memory) */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', color: '#9ca3af' }}>
-              <span>{isCpuMode ? 'RAM Allocation' : 'VRAM Allocation'}</span>
-              <span>{memUsed} / {memTotal} GB</span>
-            </div>
-            <div style={{ width: '100%', height: '10px', backgroundColor: '#1f2937', borderRadius: '5px', overflow: 'hidden' }}>
-              <div 
-                style={{ 
-                  height: '100%', 
-                  backgroundColor: '#8b5cf6', 
-                  transition: 'width 0.3s ease-out', 
-                  width: `${Math.min(100, Math.max(0, memPercent))}%` 
-                }} 
-              />
-            </div>
-          </div>
-
-          {/* Throughput Metric */}
-          <div style={{ marginTop: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>Throughput</span>
-            <span style={{ fontSize: '0.85rem', fontWeight: 800, color: isActive ? '#10b981' : '#6b7280' }}>
-              {throughput.toFixed(1)} <span style={{ fontSize: '0.65rem', color: '#9ca3af' }}>t/s</span>
-            </span>
-          </div>
-        </>
+        </div>
       )}
-    </div>
+    </>
   );
 };
 
@@ -422,7 +486,12 @@ export const CloudConnectNode = ({ isActive = false }: { isActive?: boolean }) =
           EXTERNAL CLOUD
 
         </div>
-        <StatusLight active={isActive} text={isActive ? 'ROUTING' : 'IDLE'} />
+        <span style={{ 
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', 
+          width: '14px', height: '14px', borderRadius: '50%', 
+          border: '1.5px solid #9ca3af', color: '#9ca3af', 
+          fontSize: '10px', fontWeight: 'bold' 
+        }}>i</span>
       </div>
 
       {/* Connection Target Indicator */}
