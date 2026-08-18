@@ -2,7 +2,7 @@
 description: Analyze staged changes and generate a semantic git commit.
 ---
 
-When the user types `/commit`, orchestrate the action using the `@engineer` persona.
+When the user types `/commit`, orchestrate this action:
 
 ### Execution Sequence:
 
