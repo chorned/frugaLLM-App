@@ -14,8 +14,14 @@ struct OllamaDaemonState {
     child: tokio::sync::Mutex<Option<tokio::process::Child>>,
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
+pub struct CloudModel {
+    pub model: String,
+    pub provider: String,
+}
+
 struct DynamicRosterState {
-    fallback_chain: Arc<tokio::sync::RwLock<Vec<serde_json::Value>>>,
+    fallback_chain: Arc<tokio::sync::RwLock<Vec<CloudModel>>>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -403,7 +409,9 @@ struct NotifyOnDrop {
     source: String,
     target: String,
     token_estimate: Arc<std::sync::atomic::AtomicUsize>,
-    input_tokens: usize,
+    exact_output_tokens: Arc<std::sync::atomic::AtomicUsize>,
+    exact_input_tokens: Arc<std::sync::atomic::AtomicUsize>,
+    input_tokens_estimate: usize,
 }
 impl Drop for NotifyOnDrop {
     fn drop(&mut self) {
@@ -413,8 +421,11 @@ impl Drop for NotifyOnDrop {
             is_active: false,
         });
 
-        let output_tokens = self.token_estimate.load(std::sync::atomic::Ordering::Relaxed) / 4;
-        let input_tokens = self.input_tokens / 4;
+        let exact_out = self.exact_output_tokens.load(std::sync::atomic::Ordering::Relaxed);
+        let output_tokens = if exact_out > 0 { exact_out } else { self.token_estimate.load(std::sync::atomic::Ordering::Relaxed) / 4 };
+        
+        let exact_in = self.exact_input_tokens.load(std::sync::atomic::Ordering::Relaxed);
+        let input_tokens = if exact_in > 0 { exact_in } else { self.input_tokens_estimate / 4 };
         
         if output_tokens > 0 || input_tokens > 0 {
             let app_handle = self.app.clone();
@@ -468,12 +479,16 @@ async fn try_ollama(
     let request_body_size = serde_json::to_string(&body).map(|s| s.len()).unwrap_or(0);
     
     let token_estimate = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let exact_output_tokens = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let exact_input_tokens = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let drop_guard = NotifyOnDrop {
         app: app.clone(),
         source: source.to_string(),
         target: "ollama".to_string(),
         token_estimate: token_estimate.clone(),
-        input_tokens: request_body_size,
+        exact_output_tokens: exact_output_tokens.clone(),
+        exact_input_tokens: exact_input_tokens.clone(),
+        input_tokens_estimate: request_body_size,
     };
 
     let res = client.post("http://127.0.0.1:11434/v1/chat/completions")
@@ -506,62 +521,64 @@ async fn try_ollama(
     }
 }
 
-fn format_openrouter_request(mut body: Value, mut fallback_models: Vec<Value>) -> Value {
-    fallback_models.truncate(3);
-    
-    let primary_model = fallback_models.first().cloned().unwrap_or(serde_json::json!("openrouter/auto"));
-    
-    if let Some(obj) = body.as_object_mut() {
-        obj.insert("model".to_string(), primary_model);
-        if !fallback_models.is_empty() {
-            obj.insert("models".to_string(), serde_json::json!(fallback_models));
-        } else {
-            obj.remove("models");
-        }
-        // Strip reasoning_effort as it causes OpenRouter to return 400 Bad Request for non-reasoning models
-        obj.remove("reasoning_effort");
-    }
-    body
-}
-
-async fn try_openrouter(
+async fn try_cloud_provider(
     app: &tauri::AppHandle,
     client: &reqwest::Client,
     body: &Value,
     source: &str,
+    cloud_model: &CloudModel,
 ) -> Result<axum::response::Response, String> {
-    let openrouter_key = crate::get_credential("openrouter")
-        .map_err(|_| "OpenRouter API key not found".to_string())?;
-
     let mut body = body.clone();
     
-    let fallback_models = {
-        let state = app.state::<DynamicRosterState>();
-        let chain = state.fallback_chain.read().await;
-        chain.clone()
+    let (url, auth_header) = match cloud_model.provider.as_str() {
+        "google" => {
+            let key = crate::get_credential("google")
+                .map_err(|_| "Google AI Studio API key not found".to_string())?;
+            let url = "https://generativelanguage.googleapis.com/v1beta/chat/completions".to_string();
+            let auth = format!("Bearer {}", key);
+            if let Some(obj) = body.as_object_mut() {
+                obj.insert("model".to_string(), json!(cloud_model.model));
+            }
+            (url, auth)
+        },
+        _ => {
+            let key = crate::get_credential("openrouter")
+                .map_err(|_| "OpenRouter API key not found".to_string())?;
+            let url = "https://openrouter.ai/api/v1/chat/completions".to_string();
+            let auth = format!("Bearer {}", key);
+            if let Some(obj) = body.as_object_mut() {
+                obj.insert("model".to_string(), json!(cloud_model.model));
+                obj.remove("models");
+                obj.remove("reasoning_effort");
+            }
+            (url, auth)
+        }
     };
-    
-    body = format_openrouter_request(body, fallback_models);
 
     let _ = app.emit("proxy_activity", ProxyActivityPayload {
         source: source.to_string(),
-        target: "openrouter".to_string(),
+        target: cloud_model.provider.clone(),
         is_active: true,
     });
 
     let request_body_size = serde_json::to_string(&body).map(|s| s.len()).unwrap_or(0);
     
     let token_estimate = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let exact_output_tokens = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let exact_input_tokens = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    
     let drop_guard = NotifyOnDrop {
         app: app.clone(),
         source: source.to_string(),
-        target: "openrouter".to_string(),
+        target: cloud_model.provider.clone(),
         token_estimate: token_estimate.clone(),
-        input_tokens: request_body_size,
+        exact_output_tokens: exact_output_tokens.clone(),
+        exact_input_tokens: exact_input_tokens.clone(),
+        input_tokens_estimate: request_body_size,
     };
 
-    let res = client.post("https://openrouter.ai/api/v1/chat/completions")
-        .bearer_auth(openrouter_key)
+    let res = client.post(&url)
+        .header("Authorization", auth_header)
         .json(&body)
         .send()
         .await
@@ -574,14 +591,36 @@ async fn try_openrouter(
         }
         let app_clone = app.clone();
         let source_clone = source.to_string();
+        let provider_clone = cloud_model.provider.clone();
+        
         let stream = res.bytes_stream().inspect(move |chunk| {
             let _ = &drop_guard;
             if let Ok(bytes) = chunk {
                 drop_guard.token_estimate.fetch_add(bytes.len(), std::sync::atomic::Ordering::Relaxed);
+                
+                if let Ok(text) = std::str::from_utf8(bytes) {
+                    for line in text.lines() {
+                        if line.starts_with("data: ") {
+                            let data_str = &line[6..];
+                            if data_str != "[DONE]" {
+                                if let Ok(json) = serde_json::from_str::<Value>(data_str) {
+                                    if let Some(usage) = json.get("usage").and_then(|u| u.as_object()) {
+                                        if let Some(prompt) = usage.get("prompt_tokens").and_then(|t| t.as_u64()) {
+                                            drop_guard.exact_input_tokens.store(prompt as usize, std::sync::atomic::Ordering::Relaxed);
+                                        }
+                                        if let Some(completion) = usage.get("completion_tokens").and_then(|t| t.as_u64()) {
+                                            drop_guard.exact_output_tokens.store(completion as usize, std::sync::atomic::Ordering::Relaxed);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
             let _ = app_clone.emit("proxy_activity", ProxyActivityPayload {
                 source: source_clone.clone(),
-                target: "openrouter".to_string(),
+                target: provider_clone.clone(),
                 is_active: true,
             });
         });
@@ -590,12 +629,11 @@ async fn try_openrouter(
         let status = res.status();
         let error_body = res.text().await.unwrap_or_else(|_| "Could not read error body".to_string());
         
-        // Log to file for debugging
         let debug_info = format!("Status: {}\nRequest Body: {}\nError Body: {}\n", status, serde_json::to_string_pretty(&body).unwrap_or_default(), error_body);
-        let _ = std::fs::write("/tmp/frugallm_openrouter_error.txt", debug_info);
+        let _ = std::fs::write(format!("/tmp/frugallm_{}_error.txt", cloud_model.provider), debug_info);
         
-        println!("OpenRouter API error ({}): {}", status, error_body);
-        Err(format!("OpenRouter API error: HTTP {} - {}", status, error_body))
+        println!("{} API error ({}): {}", cloud_model.provider, status, error_body);
+        Err(format!("{} API error: HTTP {} - {}", cloud_model.provider, status, error_body))
     }
 }
 
@@ -675,10 +713,9 @@ async fn chat_completions(
     let mut order = Vec::new();
     if ollama_viable {
         order.push("ollama");
-        order.push("openrouter");
+        order.push("cloud");
     } else {
-        order.push("openrouter");
-        // Only fallback to ollama if we know it's running (even if CPU only or idle)
+        order.push("cloud");
         if ollama_running {
             order.push("ollama");
         }
@@ -694,10 +731,31 @@ async fn chat_completions(
                     Err(e) => errors.push(format!("Ollama failed: {}", e)),
                 }
             }
-            "openrouter" => {
-                match try_openrouter(&app, &client, &body, &source).await {
-                    Ok(response) => return response,
-                    Err(e) => errors.push(format!("OpenRouter failed: {}", e)),
+            "cloud" => {
+                let chain = {
+                    let fallback_chain = app.state::<DynamicRosterState>().fallback_chain.clone();
+                    let guard = fallback_chain.read().await;
+                    guard.clone()
+                };
+                
+                let mut skip_google = false;
+                
+                for cloud_model in chain {
+                    if skip_google && cloud_model.provider == "google" {
+                        continue;
+                    }
+                    match try_cloud_provider(&app, &client, &body, &source, &cloud_model).await {
+                        Ok(response) => return response,
+                        Err(e) => {
+                            errors.push(format!("{} ({}) failed: {}", cloud_model.provider, cloud_model.model, e));
+                            if e.contains("HTTP 429") {
+                                if cloud_model.provider == "google" && (e.contains("quota metric") || e.contains("free_tier_requests") || e.contains("Quota exceeded")) {
+                                    skip_google = true;
+                                }
+                                continue;
+                            }
+                        }
+                    }
                 }
             }
             _ => {}
@@ -763,108 +821,118 @@ async fn set_frugallm_config(app: tauri::AppHandle, state: State<'_, FrugalConfi
     Ok(())
 }
 
-fn extract_parameter_count(id: &str) -> f64 {
-    let lower = id.to_lowercase();
-    let mut max_params = 0.0;
-    
-    let chars: Vec<char> = lower.chars().collect();
-    for (i, &c) in chars.iter().enumerate() {
-        if c == 'b' && i > 0 {
-            let mut num_str = String::new();
-            let mut j = i - 1;
-            while j < chars.len() && (chars[j].is_ascii_digit() || chars[j] == '.') {
-                num_str.insert(0, chars[j]);
-                if j == 0 { break; }
-                j -= 1;
-            }
-            if let Ok(val) = num_str.parse::<f64>() {
-                let valid_prefix = if num_str.len() == i {
-                    true
-                } else {
-                    let prefix_char = chars[i - num_str.len() - 1];
-                    !prefix_char.is_alphabetic()
-                };
-                
-                if valid_prefix && val > max_params {
-                    max_params = val;
+
+
+#[tauri::command]
+async fn get_routing_chain(state: State<'_, DynamicRosterState>) -> Result<Vec<CloudModel>, String> {
+    let chain = state.fallback_chain.read().await;
+    Ok(chain.clone())
+}
+
+#[tauri::command]
+async fn set_routing_chain(state: State<'_, DynamicRosterState>, new_chain: Vec<CloudModel>) -> Result<(), String> {
+    let mut chain = state.fallback_chain.write().await;
+    *chain = new_chain;
+    Ok(())
+}
+
+#[tauri::command]
+async fn fetch_live_routing_chain() -> Vec<CloudModel> {
+    let mut new_chain: Vec<CloudModel> = Vec::new();
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build() {
+            Ok(c) => c,
+            Err(_) => return new_chain,
+        };
+
+    // 1. Fetch from Ollama
+    if let Ok(resp) = client.get("http://127.0.0.1:11434/api/tags").send().await {
+        if let Ok(json) = resp.json::<serde_json::Value>().await {
+            if let Some(models) = json.get("models").and_then(|m| m.as_array()) {
+                for m in models {
+                    if let Some(name) = m.get("name").and_then(|n| n.as_str()) {
+                        new_chain.push(CloudModel {
+                            model: name.to_string(),
+                            provider: "ollama".to_string(),
+                        });
+                    }
                 }
             }
         }
     }
-    max_params
-}
 
-async fn fetch_dynamic_roster(client: &reqwest::Client) -> Result<Vec<serde_json::Value>, String> {
-    let res = client.get("https://openrouter.ai/api/v1/models").send().await.map_err(|e| e.to_string())?;
-    let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
-    
-    let mut free_models = Vec::new();
-    
-    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
-        for model in data {
-            let is_free = model.get("pricing").and_then(|p| {
-                let prompt = p.get("prompt").and_then(|pr| {
-                    if let Some(s) = pr.as_str() { s.parse::<f64>().ok() }
-                    else if let Some(n) = pr.as_f64() { Some(n) }
-                    else { None }
-                }).unwrap_or(1.0);
-                let completion = p.get("completion").and_then(|c| {
-                    if let Some(s) = c.as_str() { s.parse::<f64>().ok() }
-                    else if let Some(n) = c.as_f64() { Some(n) }
-                    else { None }
-                }).unwrap_or(1.0);
-                Some(prompt == 0.0 && completion == 0.0)
-            }).unwrap_or(false);
-            
-            if !is_free { continue; }
-            
-            let has_tools = model.get("supported_parameters").and_then(|params| params.as_array()).map(|params| {
-                params.iter().any(|p| p.as_str() == Some("tools"))
-            }).unwrap_or(false);
-            
-            if !has_tools { continue; }
-            free_models.push(model.clone());
-        }
-    }
-    
-    free_models.sort_by(|a, b| {
-        let a_id = a.get("id").and_then(|i| i.as_str()).unwrap_or("");
-        let b_id = b.get("id").and_then(|i| i.as_str()).unwrap_or("");
-        
-        let a_params = extract_parameter_count(a_id);
-        let b_params = extract_parameter_count(b_id);
-        
-        match b_params.partial_cmp(&a_params) {
-            Some(std::cmp::Ordering::Equal) | None => {
-                let a_created = a.get("created").and_then(|c| c.as_u64()).unwrap_or(0);
-                let b_created = b.get("created").and_then(|c| c.as_u64()).unwrap_or(0);
-                b_created.cmp(&a_created)
-            }
-            Some(ordering) => ordering,
-        }
-    });
-    
-    let ids: Vec<serde_json::Value> = free_models.into_iter().filter_map(|m| {
-        m.get("id").cloned()
-    }).collect();
-    
-    Ok(ids)
-}
-
-async fn start_dynamic_roster_poll(state: Arc<tokio::sync::RwLock<Vec<serde_json::Value>>>) {
-    let client = reqwest::Client::new();
-    loop {
-        if let Ok(mut roster) = fetch_dynamic_roster(&client).await {
-            if !roster.is_empty() {
-                if !roster.contains(&serde_json::json!("openrouter/auto")) {
-                    roster.push(serde_json::json!("openrouter/auto"));
+    // 2. Fetch from Google AI Studio
+    if let Ok(key) = crate::get_credential("google") {
+        let url = format!("https://generativelanguage.googleapis.com/v1beta/models?key={}", key);
+        if let Ok(resp) = client.get(&url).send().await {
+            if let Ok(json) = resp.json::<serde_json::Value>().await {
+                if let Some(models) = json.get("models").and_then(|m| m.as_array()) {
+                    for m in models {
+                        if let Some(name) = m.get("name").and_then(|n| n.as_str()) {
+                            let clean_name = name.strip_prefix("models/").unwrap_or(name);
+                            if clean_name.contains("gemini-1.5") || clean_name.contains("gemini-2.0") { 
+                                new_chain.push(CloudModel {
+                                    model: clean_name.to_string(),
+                                    provider: "google".to_string(),
+                                });
+                            }
+                        }
+                    }
                 }
-                *state.write().await = roster;
-                println!("Dynamic OpenRouter roster updated.");
             }
         }
-        tokio::time::sleep(tokio::time::Duration::from_secs(300)).await;
     }
+
+    // 3. Fetch from OpenRouter
+    if let Ok(key) = crate::get_credential("openrouter") {
+        if let Ok(resp) = client.get("https://openrouter.ai/api/v1/models")
+            .header("Authorization", format!("Bearer {}", key))
+            .send().await {
+            if let Ok(json) = resp.json::<serde_json::Value>().await {
+                if let Some(models) = json.get("data").and_then(|m| m.as_array()) {
+                    for m in models {
+                        if let Some(id) = m.get("id").and_then(|i| i.as_str()) {
+                            let mut is_free = false;
+                            
+                            // Check if model explicitly ends in :free
+                            if id.ends_with(":free") {
+                                is_free = true;
+                            } else if let Some(pricing) = m.get("pricing") {
+                                // Or check if pricing explicitly states 0
+                                let prompt = pricing.get("prompt").and_then(|p| p.as_str()).unwrap_or("1");
+                                let completion = pricing.get("completion").and_then(|c| c.as_str()).unwrap_or("1");
+                                if prompt == "0" && (completion == "0" || completion == "0.0") {
+                                    is_free = true;
+                                }
+                            }
+
+                            if is_free {
+                                new_chain.push(CloudModel {
+                                    model: id.to_string(),
+                                    provider: "openrouter".to_string(),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Sort to keep OpenRouter small? Or just truncate.
+    new_chain.truncate(150);
+    new_chain
+}
+
+#[tauri::command]
+async fn refresh_routing_chain(state: State<'_, DynamicRosterState>) -> Result<Vec<CloudModel>, String> {
+    let new_chain = fetch_live_routing_chain().await;
+    
+    let mut chain = state.fallback_chain.write().await;
+    *chain = new_chain.clone();
+    
+    Ok(new_chain)
 }
 
 async fn start_frugallm_server(app: tauri::AppHandle) {
@@ -1349,6 +1417,27 @@ fn is_wipe_mode() -> bool {
     std::env::args().any(|arg| arg == "--wipe")
 }
 
+#[tauri::command]
+fn get_local_ips() -> Vec<String> {
+    let mut ips = vec!["127.0.0.1".to_string()];
+    if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") {
+        if let Ok(_) = socket.connect("8.8.8.8:80") {
+            if let Ok(addr) = socket.local_addr() {
+                let ip = addr.ip().to_string();
+                if ip != "127.0.0.1" && !ips.contains(&ip) {
+                    ips.push(ip);
+                }
+            }
+        }
+    }
+    ips
+}
+
+#[tauri::command]
+fn restart_app(app: tauri::AppHandle) {
+    app.restart();
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     
@@ -1391,17 +1480,20 @@ fn main() {
             });
 
             let dynamic_roster_state = DynamicRosterState {
-                fallback_chain: Arc::new(tokio::sync::RwLock::new(vec![serde_json::json!("openrouter/auto")])),
+                fallback_chain: Arc::new(tokio::sync::RwLock::new(vec![
+                    CloudModel { model: "openrouter/auto".to_string(), provider: "openrouter".to_string() }
+                ])),
             };
-            let roster_chain = dynamic_roster_state.fallback_chain.clone();
+            let fallback_chain_clone = dynamic_roster_state.fallback_chain.clone();
             app.manage(dynamic_roster_state);
-
-            tauri::async_runtime::spawn(async move {
-                start_dynamic_roster_poll(roster_chain).await;
-            });
 
             // Spawn FrugalLLM Core Server
             let abort_handle = tauri::async_runtime::spawn(async move {
+                let initial_chain = fetch_live_routing_chain().await;
+                if !initial_chain.is_empty() {
+                    let mut guard = fallback_chain_clone.write().await;
+                    *guard = initial_chain;
+                }
                 start_frugallm_server(app_handle).await;
             });
             
@@ -1514,7 +1606,12 @@ fn main() {
             get_frugallm_config,
             set_frugallm_config,
             edit_hermes_soul,
-            is_wipe_mode
+            is_wipe_mode,
+            get_local_ips,
+            restart_app,
+            get_routing_chain,
+            set_routing_chain,
+            refresh_routing_chain
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

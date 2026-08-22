@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { useCanvasLogic } from './v2/hooks/useCanvasLogic';
+import { TerminalLoader } from './components/TerminalLoader';
+import { useCanvasLogic } from './hooks/useCanvasLogic';
 import { invoke } from '@tauri-apps/api/core';
 import confetti from 'canvas-confetti';
 import { listen } from '@tauri-apps/api/event';
@@ -10,7 +11,11 @@ import '@xterm/xterm/css/xterm.css';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import ReactMarkdown from 'react-markdown';
-import { StatusLight, CopyableField, InfoField, HardwareNode, CloudConnectNode } from './components/NodeWidgets';
+import { StatusLight, CopyableField, InfoField, HardwareNode } from './components/NodeWidgets';
+import { CloudRoutingPanel } from './components/CloudRoutingPanel';
+import { useOnboarding } from './hooks/useOnboarding';
+import { OnboardingDecision } from './components/OnboardingDecision';
+import { OnboardingOverlay } from './components/OnboardingOverlay';
 import agentsGuide from './guides/agents.md?raw';
 import ollamaGuide from './guides/ollama.md?raw';
 import openrouterGuide from './guides/openrouter.md?raw';
@@ -26,13 +31,12 @@ const NODE_WIDTH = 220;
 const NODE_HEIGHT = 130;
 
 const nodeLayout: Record<string, { rx: number, ry: number }> = {
-  'node-frugallm': { rx: 0, ry: 0.125 },
-  'node-ollama': { rx: -0.3, ry: -0.075 },
-  'node-openrouter': { rx: 0.3, ry: -0.075 },
-  'node-hardware': { rx: -0.3, ry: -0.325 },
-  'node-cloud': { rx: 0.3, ry: -0.325 },
-  'node-opencode': { rx: -0.3, ry: 0.325 },
-  'node-hermes': { rx: 0.3, ry: 0.325 }
+  'node-frugallm': { rx: 0, ry: 0 },
+  'node-ollama': { rx: -0.35, ry: -0.25 },
+  'node-google': { rx: 0, ry: -0.25 },
+  'node-openrouter': { rx: 0.35, ry: -0.25 },
+  'node-opencode': { rx: -0.25, ry: 0.25 },
+  'node-hermes': { rx: 0.25, ry: 0.25 }
 };
 
 
@@ -63,7 +67,7 @@ type AppNode = {
 const initialNodes: AppNode[] = [
   {
     id: 'node-ollama',
-    x: 100, y: 200,
+    x: 50, y: 50,
     data: { 
       label: 'OLLAMA LOCAL', 
       description: 'Your private, local brain! Ollama runs lightweight open-source models right on your machine, keeping your data entirely private and free from cloud costs.',
@@ -74,42 +78,30 @@ const initialNodes: AppNode[] = [
   },
   {
     id: 'node-openrouter',
-    x: 700, y: 200,
-    data: { 
+    x: 750, y: 50,
+    data: {
       label: 'OPENROUTER',
       description: 'The ultimate gateway to the cloud! OpenRouter acts as a smart multiplexer, automatically routing your requests to the best and cheapest proprietary AI models available.',
-      ip: 'api.openrouter.ai', 
-      port: '443',
-      status: 'needs_activation',
-      isGenerating: false
+      ip: 'openrouter.ai',
+      status: 'needs_activation'
     }
   },
   {
-    id: 'node-hardware',
-    x: 100, y: 0,
+    id: 'node-google',
+    x: 400, y: 50,
     data: {
-      label: 'LOCAL HARDWARE',
-      description: 'GPU and CPU resources dedicated to local inference.',
-      status: 'active',
-      isHardware: true
-    }
-  },
-  {
-    id: 'node-cloud',
-    x: 700, y: 0,
-    data: {
-      label: 'EXTERNAL CLOUD',
-      description: 'Routing to external API providers.',
-      status: 'active',
-      isCloud: true
+      label: 'GOOGLE AI STUDIO',
+      description: 'Ultra-fast, high-capability models straight from Google.',
+      ip: 'generativelanguage.googleapis.com',
+      status: 'needs_activation'
     }
   },
   {
     id: 'node-frugallm',
-    x: 400, y: 350,
+    x: 400, y: 250,
     data: { 
       label: 'FRUGALLM CORE',
-      description: 'The true mastermind of the operation. FrugalLM acts as your central hub, intercepting prompts and dynamically routing them to save you serious money without sacrificing quality!',
+      description: '',
       ip: '127.0.0.1', 
       port: '8080',
       status: 'active'
@@ -117,7 +109,7 @@ const initialNodes: AppNode[] = [
   },
   {
     id: 'node-opencode',
-    x: 100, y: 500,
+    x: 150, y: 500,
     data: { 
       label: 'OPENCODE',
       description: 'Your AI pair programmer, living right inside your IDE! OpenCode connects directly to the hub to give you brilliant, context-aware coding suggestions as you type.',
@@ -128,7 +120,7 @@ const initialNodes: AppNode[] = [
   },
   {
     id: 'node-hermes',
-    x: 700, y: 500,
+    x: 650, y: 500,
     data: { 
       label: 'HERMES',
       description: "Say hello to Hermes, your internal AI chat interface! It's not just for chatting; Hermes can kick off complex, multi-step agent workflows to get real work done.",
@@ -140,10 +132,9 @@ const initialNodes: AppNode[] = [
 ];
 
 const initialEdges = [
-  { id: 'edge-ollama-hardware', source: 'node-ollama', target: 'node-hardware' },
-  { id: 'edge-openrouter-cloud', source: 'node-openrouter', target: 'node-cloud' },
   { id: 'edge-frugallm-ollama', source: 'node-frugallm', target: 'node-ollama' },
   { id: 'edge-frugallm-openrouter', source: 'node-frugallm', target: 'node-openrouter' },
+  { id: 'edge-frugallm-google', source: 'node-frugallm', target: 'node-google' },
   { id: 'edge-opencode-frugallm', source: 'node-opencode', target: 'node-frugallm' },
   { id: 'edge-hermes-frugallm', source: 'node-hermes', target: 'node-frugallm' },
 ];
@@ -173,6 +164,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
   const [ipCopied, setIpCopied] = useState(false);
   const [passwordCopied, setPasswordCopied] = useState(false);
   const [confirmPasswordAction, setConfirmPasswordAction] = useState<'overwrite' | 'remove' | null>(null);
+  const [confirmBindNetwork, setConfirmBindNetwork] = useState(false);
   const [formData, setFormData] = useState({
     ip: node.data.ip || '',
     port: node.data.port || '',
@@ -183,6 +175,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
     extraArgs: node.data.extraArgs || '',
     prompt: node.data.prompt || '',
     apiKey: '', // specifically for openrouter credentials
+    googleApiKey: '',
     bind_all_interfaces: false,
     api_password: '',
     hermes_workspace: frugalConfig?.hermes_workspace || '',
@@ -208,6 +201,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
         extraArgs: node.data.extraArgs || '',
         prompt: node.data.prompt || '',
         apiKey: '',
+        googleApiKey: '',
         bind_all_interfaces: false,
         api_password: '',
         hermes_workspace: frugalConfig?.hermes_workspace || '~/Hermes',
@@ -286,10 +280,42 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
               </div>
               {node.id === 'node-frugallm' && (
                 <>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' }}>
-                    <input type="checkbox" id="bind_all_interfaces" name="bind_all_interfaces" checked={formData.bind_all_interfaces} onChange={e => setFormData(p => ({...p, bind_all_interfaces: e.target.checked}))} />
-                    <label htmlFor="bind_all_interfaces" style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)' }}>Make available everywhere <Tooltip text="Making FrugaLLM available everywhere means it will detect traffic from all your network connections. Do not enable this if you only using FrugaLLM on one machine." /></label>
-                  </div>
+                  {!confirmBindNetwork ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' }}>
+                      <input type="checkbox" id="bind_all_interfaces" name="bind_all_interfaces" checked={formData.bind_all_interfaces} onChange={e => {
+                        if (e.target.checked) {
+                          setConfirmBindNetwork(true);
+                        } else {
+                          setFormData(p => ({...p, bind_all_interfaces: false}));
+                        }
+                      }} />
+                      <label htmlFor="bind_all_interfaces" style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)' }}>Make available everywhere <Tooltip text="Making FrugaLLM available everywhere means it will detect traffic from all your network connections. Do not enable this if you only using FrugaLLM on one machine." /></label>
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: '10px', padding: '12px', backgroundColor: '#fef2f2', border: '1px solid #f87171', borderRadius: '8px' }}>
+                      <p style={{ margin: '0 0 10px 0', fontSize: '0.8rem', color: '#991b1b', fontWeight: 600 }}>
+                        Making FrugaLLM available to the network (and possibly the entire internet) requires restarting the app. All unsaved changes will be lost.
+                      </p>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button 
+                          onClick={async () => {
+                            setFormData(p => ({...p, bind_all_interfaces: true}));
+                            await onSave(node.id, {...formData, bind_all_interfaces: true});
+                            await invoke('restart_app');
+                          }}
+                          style={{ padding: '6px 12px', backgroundColor: '#dc2626', color: 'white', border: 'none', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}
+                        >
+                          Restart
+                        </button>
+                        <button 
+                          onClick={() => setConfirmBindNetwork(false)}
+                          style={{ padding: '6px 12px', backgroundColor: '#ffffff', color: '#4b5563', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   <div style={{ marginTop: '10px' }}>
                     <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>API PASSWORD (OPTIONAL) <Tooltip text="Set an API token to secure your FrugalLM node." /></label>
                     <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
@@ -349,7 +375,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
                       </div>
                     )}
                   </div>
-                  <div style={{ marginTop: '20px', padding: '12px', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '8px', border: '1px solid var(--zen-border)', borderRadius: '4px' }}>
+                  <div style={{ marginTop: '20px', padding: '12px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '4px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                       <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#4b5563' }}>SESSION TOKENS</span>
                       <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--zen-text)' }}>{(frugalConfig?.input_tokens_session || 0) + (frugalConfig?.output_tokens_session || 0)}</span>
@@ -364,6 +390,10 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
                         ${((((frugalConfig?.input_tokens_lifetime || 0) / 1000000) * 3.0) + (((frugalConfig?.output_tokens_lifetime || 0) / 1000000) * 15.0)).toFixed(4)}
                       </span>
                     </div>
+                  </div>
+                  
+                  <div style={{ marginTop: '16px' }}>
+                    <CloudRoutingPanel />
                   </div>
                   <button 
                     onClick={async () => {
@@ -382,9 +412,16 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
                 </>
               )}
               {node.id === 'node-openrouter' && (
-                <div>
+                <div style={{ marginTop: '16px' }}>
                   <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>API KEY <Tooltip text="Your OpenRouter API Key. This will be securely saved into your operating system's native Keychain!" /></label>
-                  <input type="password" name="apiKey" value={formData.apiKey} onChange={handleChange} placeholder="sk-or-v1-..."
+                  <input type="password" name="apiKey" value={formData.apiKey || ''} onChange={handleChange} placeholder="sk-or-v1-..."
+                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
+                </div>
+              )}
+              {node.id === 'node-google' && (
+                <div style={{ marginTop: '16px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>API KEY <Tooltip text="Your Google AI Studio API Key. This will be securely saved into your operating system's native Keychain!" /></label>
+                  <input type="password" name="googleApiKey" value={formData.googleApiKey || ''} onChange={handleChange} placeholder="AIzaSy..."
                     style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
                 </div>
               )}
@@ -613,7 +650,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
         <button onClick={handleSave} style={{ 
           flex: 1, padding: '12px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', 
           border: '1px solid var(--zen-border)', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', 
-          boxShadow: 'none', borderRadius: '8px', transition: 'all 0.1s'
+          boxShadow: 'none', transition: 'all 0.1s'
         }}
         onMouseDown={e => { e.currentTarget.style.transform = 'translate(2px, 2px)'; e.currentTarget.style.opacity = '0.9'; }}
         onMouseUp={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.opacity = '1'; }}
@@ -628,7 +665,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
         }} style={{ 
           padding: '12px 20px', backgroundColor: '#ffffff', color: 'var(--zen-text)', 
           border: '1px solid var(--zen-border)', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', 
-          boxShadow: 'none', borderRadius: '8px', transition: 'all 0.1s', display: 'flex', alignItems: 'center', gap: '8px'
+          boxShadow: 'none', transition: 'all 0.1s', display: 'flex', alignItems: 'center', gap: '8px'
         }}
         onMouseDown={e => { e.currentTarget.style.transform = 'translate(2px, 2px)'; e.currentTarget.style.opacity = '0.9'; }}
         onMouseUp={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.opacity = '1'; }}
@@ -928,6 +965,7 @@ const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, 
 };
 
 export default function App() {
+  const { onboardingState, handleDecision, isLoaded } = useOnboarding();
   const [nodes, setNodes] = useState(initialNodes);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
@@ -943,7 +981,7 @@ export default function App() {
     handleCanvasMouseUp,
     handleCanvasClick,
     handleWheel,
-  } = useCanvasLogic(canvasRef, (e, nodeId) => {
+  } = useCanvasLogic(canvasRef, (_e, nodeId) => {
     setSelectedNodeId(nodeId);
   }, () => {
     setSelectedNodeId(null);
@@ -954,8 +992,84 @@ export default function App() {
   const [isOpenCodeInstalled, setIsOpenCodeInstalled] = useState<boolean | null>(null);
   const [isOllamaInstalled, setIsOllamaInstalled] = useState<boolean | null>(null);
 
+    const [isAppLoaded, setIsAppLoaded] = useState(false);
+  const [initLogs, setInitLogs] = useState<string[]>([]);
   const [frugalConfig, setFrugalConfig] = useState<any>(null);
   const [activeProcesses, setActiveProcesses] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    let isMounted = true;
+    const runInit = async () => {
+      const addLog = (msg: string) => {
+        if (isMounted) setInitLogs(prev => [...prev, msg]);
+      };
+
+      addLog("Booting FrugaLLM core subsystems...");
+      await new Promise(r => setTimeout(r, 300));
+      
+      addLog("Fetching node configuration...");
+      try {
+        const conf = await invoke('get_frugallm_config');
+        setFrugalConfig(conf);
+        addLog("OK: Configuration loaded.");
+      } catch (e) {
+        addLog("WARN: Failed to load config.");
+      }
+      await new Promise(r => setTimeout(r, 200));
+
+      addLog("Checking Hermes agent status...");
+      try {
+        const hermesStatus = await invoke('check_hermes_status');
+        setIsHermesInstalled(hermesStatus as boolean);
+        addLog(hermesStatus ? "OK: Hermes installed." : "INFO: Hermes not installed.");
+      } catch(e) {}
+      
+      addLog("Checking OpenCode agent status...");
+      try {
+        const opencodeStatus = await invoke('check_opencode_status');
+        setIsOpenCodeInstalled(opencodeStatus as boolean);
+        addLog(opencodeStatus ? "OK: OpenCode installed." : "INFO: OpenCode not installed.");
+      } catch(e) {}
+      await new Promise(r => setTimeout(r, 200));
+
+      addLog("Detecting Ollama daemon...");
+      try {
+        const ollamaStatus = await invoke('check_ollama_status');
+        setIsOllamaInstalled(ollamaStatus as boolean);
+        addLog(ollamaStatus ? "OK: Ollama detected." : "INFO: Ollama not detected.");
+      } catch(e) {}
+      
+      addLog("Detecting system VRAM...");
+      try {
+        const vram = await invoke('detect_vram');
+        if (vram !== null && vram !== undefined) {
+          const vramGb = Math.round(Number(vram) / 1024);
+          setDetectedVram(String(vramGb));
+          addLog(`OK: Detected ${vramGb}GB VRAM.`);
+        }
+      } catch(e) {}
+      await new Promise(r => setTimeout(r, 300));
+
+      addLog("Verifying OpenRouter credentials...");
+      try {
+        await invoke('get_credential', { service: 'openrouter' });
+        setNodes(nds => nds.map(n => n.id === 'node-openrouter' ? { ...n, data: { ...n.data, status: 'active' } } : n));
+        addLog("OK: OpenRouter authenticated.");
+      } catch(e) {
+        addLog("INFO: OpenRouter credentials missing.");
+      }
+      await new Promise(r => setTimeout(r, 400));
+
+      addLog("All systems nominal. Launching UI...");
+      await new Promise(r => setTimeout(r, 500));
+      
+      if (isMounted) setIsAppLoaded(true);
+    };
+    
+    runInit();
+    return () => { isMounted = false; };
+  }, []);
+
 
   useEffect(() => {
     const unlistenConfig = listen('frugallm_config_updated', () => {
@@ -969,8 +1083,7 @@ export default function App() {
       unlistenConfig.then(f => f());
       unlistenError.then(f => f());
     };
-    invoke('get_frugallm_config').then((conf: any) => setFrugalConfig(conf)).catch(console.error);
-  }, []);
+      }, []);
 
   useEffect(() => {
     // Resize observer logic moved to useCanvasLogic
@@ -1014,22 +1127,12 @@ export default function App() {
   }, [isOpenCodeInstalled, activeProcesses]);
 
   useEffect(() => {
-    invoke('check_hermes_status').then((installed) => {
-      setIsHermesInstalled(installed as boolean);
-    }).catch(console.error);
-    invoke('check_opencode_status').then((installed) => {
-      setIsOpenCodeInstalled(installed as boolean);
-    }).catch(console.error);
     
-    // Auto-detect OpenRouter
-    invoke('get_credential', { service: 'openrouter' }).then(() => {
-      setNodes(nds => nds.map(n => n.id === 'node-openrouter' ? { ...n, data: { ...n.data, status: 'active' } } : n));
-    }).catch(() => {});
     
-    // Auto-detect Ollama and its installation status via backend
-    invoke('check_ollama_status').then((installed) => {
-      setIsOllamaInstalled(installed as boolean);
-    }).catch(console.error);
+    
+    
+    
+    
 
     const setupTelemetryListener = async () => {
       let unlisten = await listen<any>('telemetry_update', (event) => {
@@ -1063,12 +1166,7 @@ export default function App() {
       unlistenProxy = unlisten;
     }).catch(console.error);
 
-    invoke('detect_vram').then((vram) => {
-      if (vram !== null && vram !== undefined) {
-        const vramGb = Math.round(Number(vram) / 1024);
-        setDetectedVram(String(vramGb));
-      }
-    }).catch(console.error);
+    
 
     return () => {
       if (unlistenTelemetry) {
@@ -1166,22 +1264,60 @@ export default function App() {
       }
     }
     
+
+    
+    if (nodeId === 'node-google') {
+      if (finalConfig.googleApiKey) {
+        try {
+          const res = await tauriFetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${finalConfig.googleApiKey}`, { method: 'GET' });
+          if (res.ok) {
+            await invoke('set_credential', { service: 'google', secret: finalConfig.googleApiKey });
+            await invoke('refresh_routing_chain').catch(console.error);
+            finalConfig.status = 'active';
+            confetti({
+              particleCount: 150,
+              spread: 70,
+              origin: { y: 0.6 },
+              colors: ['#3b82f6', '#ffffff', '#111827']
+            });
+          } else {
+             console.error("Google API key test failed", res.status);
+             finalConfig.status = 'error';
+          }
+        } catch (e) {
+          console.error("Failed to save google credential", e);
+          finalConfig.status = 'error';
+        }
+        delete finalConfig.googleApiKey;
+      }
+    }
+    
     if (nodeId === 'node-openrouter') {
       if (finalConfig.apiKey) {
         try {
-          await invoke('set_credential', { service: 'openrouter', secret: finalConfig.apiKey });
-          finalConfig.status = 'active'; // Once key is provided, assume active. (Ideally we'd test it)
-          confetti({
-            particleCount: 150,
-            spread: 70,
-            origin: { y: 0.6 },
-            colors: ['#ea580c', '#ffffff', '#111827']
+          const res = await tauriFetch(`https://openrouter.ai/api/v1/auth/key`, { 
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${finalConfig.apiKey}` }
           });
+          if (res.ok) {
+            await invoke('set_credential', { service: 'openrouter', secret: finalConfig.apiKey });
+            await invoke('refresh_routing_chain').catch(console.error);
+            finalConfig.status = 'active';
+            confetti({
+              particleCount: 150,
+              spread: 70,
+              origin: { y: 0.6 },
+              colors: ['#ea580c', '#ffffff', '#111827']
+            });
+          } else {
+            console.error("OpenRouter API key test failed", res.status);
+            finalConfig.status = 'error';
+          }
         } catch (e) {
-          console.error("Failed to save credential", e);
+          console.error("Failed to save openrouter credential", e);
           finalConfig.status = 'error';
         }
-        delete finalConfig.apiKey; // Do not save the API key in the generic node data!
+        delete finalConfig.apiKey;
       }
     }
     
@@ -1189,6 +1325,7 @@ export default function App() {
       try {
         const res = await tauriFetch(`http://${finalConfig.ip}:${finalConfig.port}/api/version`, { method: 'GET' });
         if (res.ok) {
+          await invoke('refresh_routing_chain').catch(console.error);
           finalConfig.status = 'active';
           confetti({
             particleCount: 150,
@@ -1208,8 +1345,6 @@ export default function App() {
     setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, ...finalConfig } } : n));
   };
 
-  const EDGE_OFFSET = 4; // px offset for parallel streams
-
   const renderEdge = (edge: any) => {
     const source = renderedNodes.find(n => n.id === edge.source);
     const target = renderedNodes.find(n => n.id === edge.target);
@@ -1221,15 +1356,8 @@ export default function App() {
     const ty = target.y + NODE_HEIGHT / 2;
 
     const dx = tx - sx;
-    const dy = ty - sy;
     
-    // Control points for smooth bezier curve
-    const cx1 = sx + dx * 0.5;
-    const cy1 = sy;
-    const cx2 = tx - dx * 0.5;
-    const cy2 = ty;
-    
-    const pathD = `M ${sx} ${sy} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${tx} ${ty}`;
+    const pathD = `M ${sx} ${sy} L ${tx} ${ty}`;
     
     let isGenerating = false;
     if (edge.id === 'edge-hermes-frugallm') isGenerating = activeProxyState?.source === 'hermes';
@@ -1268,7 +1396,9 @@ export default function App() {
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
   const hasActiveBackend = nodes.some(n => (n.id === 'node-ollama' || n.id === 'node-openrouter') && n.data.status === 'active');
 
-  return (
+  if (!isLoaded) return null;
+
+  return !isAppLoaded ? <TerminalLoader logs={initLogs} /> : (
     <div 
       style={{ display: 'flex', width: '100%', height: '100vh', fontFamily: 'inherit', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '8px', overflow: 'hidden' }}
     >
@@ -1424,7 +1554,7 @@ export default function App() {
                       zIndex: 1, backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '16px', boxShadow: 'var(--tw-shadow-glass)',
                       fontFamily: 'inherit'
                     }}
-                    onMouseDown={(e) => handleCanvasMouseDown(e, node.id)}
+                    onMouseDown={(e) => handleCanvasMouseDown(e)}
                     onClick={(e) => handleNodeClick(e, node.id)}
                   >
                     <HardwareNode isGenerating={isOllamaGenerating} />
@@ -1432,24 +1562,7 @@ export default function App() {
                 );
               }
               
-              if (node.data.isCloud) {
-                const isOpenRouterGenerating = activeProxyState?.target === 'openrouter';
-                return (
-                  <div
-                    key={node.id}
-                    id={node.id}
-                    style={{ 
-                      position: 'absolute', left: node.x, top: node.y, width: NODE_WIDTH, 
-                      zIndex: 1, backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '16px', boxShadow: 'var(--tw-shadow-glass)',
-                      fontFamily: 'inherit'
-                    }}
-                    onMouseDown={(e) => handleCanvasMouseDown(e, node.id)}
-                    onClick={(e) => handleNodeClick(e, node.id)}
-                  >
-                    <CloudConnectNode isActive={isOpenRouterGenerating} />
-                  </div>
-                );
-              }
+
 
               return (
                 <div 
@@ -1470,7 +1583,7 @@ export default function App() {
                     flexDirection: 'column',
                     userSelect: 'none'
                   }}
-                  onMouseDown={(e) => handleCanvasMouseDown(e, node.id)}
+                  onMouseDown={(e) => handleCanvasMouseDown(e)}
                   onClick={(e) => handleNodeClick(e, node.id)}
                 >
                   {/* Header */}
@@ -1534,9 +1647,10 @@ export default function App() {
                             }} 
                             style={{ 
                               padding: '4px 10px', 
-                              backgroundColor: '#1f2937', 
-                              color: '#34d399', 
-                              border: '1.5px solid #374151', 
+                              backgroundColor: 'transparent', 
+                              color: '#4b5563', 
+                              border: '1.5px solid #d1d5db', 
+                              borderRadius: '4px',
                               fontSize: '0.7rem', 
                               fontWeight: 700, 
                               cursor: 'pointer', 
@@ -1546,18 +1660,18 @@ export default function App() {
                               transition: 'all 0.15s'
                             }}
                             onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = '#374151';
-                              e.currentTarget.style.color = '#ffffff';
+                              e.currentTarget.style.backgroundColor = '#f3f4f6';
+                              e.currentTarget.style.color = '#111827';
                             }}
                             onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = '#1f2937';
-                              e.currentTarget.style.color = '#34d399';
+                              e.currentTarget.style.backgroundColor = 'transparent';
+                              e.currentTarget.style.color = '#4b5563';
                             }}
                           >
                             LAUNCH APP
                           </button>
                         ) : (
-                          <InfoField label={node.id.includes('openrouter') ? 'HOST' : 'ENDPOINT'} value={node.id.includes('openrouter') ? `${node.data.ip}:${node.data.port}` : `${node.data.ip}:${node.data.port}`} />
+                          <InfoField label={(node.id.includes('openrouter') || node.id.includes('google')) ? 'HOST' : 'ENDPOINT'} value={node.data.port ? `${node.data.ip}:${node.data.port}` : `${node.data.ip}`} />
                         )}
                       </>
                     )}
@@ -1642,7 +1756,7 @@ export default function App() {
                   code: ({node, className, children, ...props}: any) => {
                     const match = /language-([a-zA-Z0-9]+)/.exec(className || '')
                     return !match ? (
-                      <code {...props} style={{ backgroundColor: 'var(--zen-surface-hover)', borderRadius: '8px', padding: '2px 4px', borderRadius: '4px', fontFamily: 'monospace', fontSize: '0.9em', color: '#ea580c' }}>
+                      <code {...props} style={{ backgroundColor: 'var(--zen-surface-hover)', padding: '2px 4px', borderRadius: '4px', fontFamily: 'monospace', fontSize: '0.9em', color: '#ea580c' }}>
                         {children}
                       </code>
                     ) : (
@@ -1658,6 +1772,16 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {onboardingState === 'fresh' && (
+        <OnboardingDecision onSelect={handleDecision} />
+      )}
+
+      {onboardingState === 'learning' && (
+        <OnboardingOverlay
+          onComplete={() => handleDecision('completed')}
+        />
       )}
     </div>
   );

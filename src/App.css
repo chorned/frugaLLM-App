@@ -114,3 +114,44 @@ button {
     background-color: #0f0f0f69;
   }
 }
+
+/* V2 Styling Overrides (merged from v2/App.css) */
+:root {
+  --zen-border: #d1d5db; /* Darker faint gray lines for connecting lines and node borders */
+  --zen-text-secondary: #6b7280; /* Darker text for status indicators like Standby */
+  --zen-success: #10b981; /* Darker green for HUB ONLINE and Connected to pass accessibility */
+}
+
+/* Increase stroke weight on node borders */
+.retro-node {
+  border-width: 2px !important;
+}
+
+/* Decrease CTA Contrast on LAUNCH APP buttons */
+.retro-node button {
+  background-color: transparent !important;
+  color: #4b5563 !important;
+  border: 1.5px solid #d1d5db !important;
+  border-radius: 4px !important;
+}
+
+.retro-node button:hover {
+  background-color: #f3f4f6 !important;
+  color: #111827 !important;
+}
+
+/* Fix the CopyableField button so it isn't affected by the above overly broad selector */
+.retro-node > div > div > button,
+.retro-node > div > div > div > button {
+  background-color: var(--zen-surface-hover) !important;
+  color: var(--zen-text-secondary) !important;
+  border: none !important;
+  border-left: 1px solid var(--zen-border) !important;
+  border-radius: 0 !important;
+}
+
+.retro-node > div > div > button:hover,
+.retro-node > div > div > div > button:hover {
+  background-color: var(--zen-text-secondary) !important;
+  color: var(--zen-surface) !important;
+}

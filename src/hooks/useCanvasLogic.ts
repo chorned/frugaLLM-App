@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect, RefObject } from 'react';
 
 export function useCanvasLogic(
-  canvasRef: RefObject<HTMLDivElement>,
-  onNodeClick?: (e: any, nodeId: string) => void,
+  canvasRef: RefObject<HTMLDivElement | null>,
+  onNodeClick?: (_e: any, nodeId: string) => void,
   onCanvasClick?: () => void
 ) {
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
+  const [pan] = useState({ x: 0, y: 0 });
+  const [zoom] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
   const lastPos = useRef({ x: 0, y: 0 });
   const dragDistance = useRef(0);
@@ -34,7 +34,7 @@ export function useCanvasLogic(
     dragDistance.current = 0;
   };
 
-  const handleWheel = (e: any) => {
+  const handleWheel = (_e: any) => {
     // Disabled zooming as requested by the user
     return;
   };

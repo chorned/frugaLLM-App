@@ -11,21 +11,12 @@ const InfoIconSVG = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
-interface TelemetryPayload {
-  ollama: {
-    status: string;
-    model_name: string;
-    location_state: string;
-    hybrid_percent: number;
-    total_size: number;
-    vram_size: number;
-  };
-  hardware: {
-    cpu_utilization: number;
-    gpu_utilization: number;
-    vram_used: number;
-    vram_total: number;
-  };
+export interface ProcessStatus {
+  status: 'offline' | 'starting' | 'active' | 'error';
+  pid?: number;
+  cpu?: number;
+  ram?: number;
+  uptime?: number;
 }
 
 // =============================================================================
@@ -384,7 +375,7 @@ export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean 
         </div>
       </div>
 
-      {showPanel && (
+      {showPanel && createPortal(
         <div 
           style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(249,249,248,0.5)', backdropFilter: 'blur(16px)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'default' }} 
           onClick={(e) => { e.stopPropagation(); setShowPanel(false); }}
@@ -442,7 +433,8 @@ export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean 
               </span>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
@@ -451,14 +443,16 @@ export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean 
 // =============================================================================
 interface CloudConnectNodeProps {
   isActive?: boolean;
+  label?: string;
+  targetHost?: string;
 }
-export const CloudConnectNode = ({ isActive = false }: CloudConnectNodeProps) => {
+export const CloudConnectNode = ({ isActive = false, label = 'External Cloud', targetHost = 'None' }: CloudConnectNodeProps) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--zen-border)', padding: '8px 12px', backgroundColor: 'var(--zen-surface)' }}>
         <div style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--zen-text)', display: 'flex', gap: '8px', alignItems: 'center' }}>
-          External Cloud
+          {label.toUpperCase()}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <div 
@@ -485,7 +479,7 @@ export const CloudConnectNode = ({ isActive = false }: CloudConnectNodeProps) =>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>Current Target</span>
           <span style={{ fontSize: '0.75rem', fontWeight: 800, color: isActive ? 'var(--zen-text)' : 'var(--zen-text-secondary)' }}>
-            {isActive ? 'openrouter.ai' : 'None'}
+            {isActive ? targetHost : 'None'}
           </span>
         </div>
       </div>
