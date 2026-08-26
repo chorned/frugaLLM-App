@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { TerminalLoader } from './components/TerminalLoader';
 import { useCanvasLogic } from './hooks/useCanvasLogic';
+import { enable as enableAutostart, disable as disableAutostart, isEnabled as isAutostartEnabled } from '@tauri-apps/plugin-autostart';
 import { invoke } from '@tauri-apps/api/core';
 import confetti from 'canvas-confetti';
 import { listen } from '@tauri-apps/api/event';
@@ -179,7 +180,9 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
     bind_all_interfaces: false,
     api_password: '',
     hermes_workspace: frugalConfig?.hermes_workspace || '',
-    opencode_workspace: frugalConfig?.opencode_workspace || ''
+    opencode_workspace: frugalConfig?.opencode_workspace || '',
+    start_on_login: false,
+    start_minimized: frugalConfig?.start_minimized || false
   });
 
   useEffect(() => {
@@ -188,8 +191,10 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
         ...prev,
         port: frugalConfig?.port?.toString() || '0',
         bind_all_interfaces: frugalConfig?.bind_all_interfaces || false,
-        api_password: frugalConfig?.api_password || ''
+        api_password: frugalConfig?.api_password || '',
+        start_minimized: frugalConfig?.start_minimized || false
       }));
+      isAutostartEnabled().then(enabled => setFormData(prev => ({ ...prev, start_on_login: enabled })));
     } else {
       setFormData({ 
         ip: node.data.ip || '', 
@@ -206,12 +211,23 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
         api_password: '',
         hermes_workspace: frugalConfig?.hermes_workspace || '~/Hermes',
         opencode_workspace: frugalConfig?.opencode_workspace || '~/Opencode',
+        start_on_login: false,
+        start_minimized: frugalConfig?.start_minimized || false
       });
     }
   }, [node, frugalConfig]);
 
   const handleChange = (e: any) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
-  const handleSave = () => onSave(node.id, formData);
+  const handleSave = async () => {
+    if (node.id === 'node-frugallm') {
+      if (formData.start_on_login) {
+        await enableAutostart();
+      } else {
+        await disableAutostart();
+      }
+    }
+    onSave(node.id, formData);
+  };
   
   const handlePanelClick = (e: any) => e.stopPropagation();
 
@@ -264,9 +280,9 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
             <>
               <div>
                 <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>IP ADDRESS / HOST <Tooltip text="Where does this service live on the network? Usually, it's right here on your computer ('127.0.0.1' or 'localhost'), but it could be a cloud API halfway across the world!" /></label>
-                {node.id === 'node-frugallm' ? (
+                {node.id === 'node-frugallm' || node.id === 'node-hermes' || node.id === 'node-opencode' ? (
                   <div style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '8px', color: 'var(--zen-text)', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, cursor: 'not-allowed' }}>
-                    {formData.bind_all_interfaces ? '0.0.0.0' : '127.0.0.1'}
+                    {node.id === 'node-frugallm' ? (formData.bind_all_interfaces ? '0.0.0.0' : '127.0.0.1') : formData.ip}
                   </div>
                 ) : (
                   <input type="text" name="ip" value={formData.ip} onChange={handleChange}
@@ -275,8 +291,14 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
               </div>
               <div>
                 <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>PORT <Tooltip text="Think of the IP address as the building, and the Port as the specific door to knock on. It's how our hub knows exactly where to send its messages." /></label>
-                <input type="text" name="port" value={formData.port} onChange={handleChange}
-                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
+                {node.id === 'node-hermes' || node.id === 'node-opencode' || node.id === 'node-frugallm' ? (
+                  <div style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '8px', color: 'var(--zen-text)', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, cursor: 'not-allowed' }}>
+                    {formData.port}
+                  </div>
+                ) : (
+                  <input type="text" name="port" value={formData.port} onChange={handleChange}
+                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
+                )}
               </div>
               {node.id === 'node-frugallm' && (
                 <>
@@ -316,7 +338,30 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
                       </div>
                     </div>
                   )}
-                  <div style={{ marginTop: '10px' }}>
+                  <div style={{ marginTop: '15px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                      <input type="checkbox" id="start_on_login" name="start_on_login" checked={formData.start_on_login} onChange={async e => {
+                        const newVal = e.target.checked;
+                        setFormData(p => ({...p, start_on_login: newVal}));
+                        if (newVal) {
+                          await enableAutostart();
+                        } else {
+                          await disableAutostart();
+                        }
+                        onSave(node.id, {...formData, start_on_login: newVal});
+                      }} />
+                      <label htmlFor="start_on_login" style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)' }}>Start FrugalLM on login</label>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input type="checkbox" id="start_minimized" name="start_minimized" checked={formData.start_minimized} onChange={e => {
+                        const newVal = e.target.checked;
+                        setFormData(p => ({...p, start_minimized: newVal}));
+                        onSave(node.id, {...formData, start_minimized: newVal});
+                      }} />
+                      <label htmlFor="start_minimized" style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)' }}>Start minimized to tray</label>
+                    </div>
+                  </div>
+                  <div style={{ marginTop: '15px' }}>
                     <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>API PASSWORD (OPTIONAL) <Tooltip text="Set an API token to secure your FrugalLM node." /></label>
                     <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
                       <input type="password" name="api_password" value={formData.api_password} onChange={handleChange} placeholder={frugalConfig?.api_password ? "••••••••" : "Super secret..."}
@@ -405,7 +450,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
                          console.error('Clipboard write failed:', err);
                        }
                     }}
-                    style={{ marginTop: '15px', width: '100%', padding: '8px', backgroundColor: ipCopied ? '#065f46' : '#e5e7eb', color: ipCopied ? '#34d399' : '#111827', border: '1px solid var(--zen-border)', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: 'none', transition: 'all 0.15s' }}>
+                    style={{ marginTop: '15px', width: '100%', padding: '10px', backgroundColor: ipCopied ? '#059669' : 'var(--zen-accent)', color: '#ffffff', border: '1px solid transparent', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}>
                     {ipCopied ? '✓ OK' : 'COPY IP & PORT'}
                   </button>
 
@@ -655,23 +700,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
         onMouseDown={e => { e.currentTarget.style.transform = 'translate(2px, 2px)'; e.currentTarget.style.opacity = '0.9'; }}
         onMouseUp={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.opacity = '1'; }}
         >
-          UPDATE PROTOCOL
-        </button>
-        <button onClick={(e) => {
-          e.stopPropagation();
-          const guideMap: any = { 'node-ollama': 'ollama', 'node-openrouter': 'openrouter' };
-          const guide = guideMap[node.id] || 'agents';
-          onOpenGuide(guide);
-        }} style={{ 
-          padding: '12px 20px', backgroundColor: '#ffffff', color: 'var(--zen-text)', 
-          border: '1px solid var(--zen-border)', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', 
-          boxShadow: 'none', transition: 'all 0.1s', display: 'flex', alignItems: 'center', gap: '8px'
-        }}
-        onMouseDown={e => { e.currentTarget.style.transform = 'translate(2px, 2px)'; e.currentTarget.style.opacity = '0.9'; }}
-        onMouseUp={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.opacity = '1'; }}
-        >
-          <span>HELP</span>
-          <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>?</span>
+          SAVE CHANGES
         </button>
       </div>
     </div>
@@ -687,14 +716,11 @@ const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, 
   useEffect(() => {
     if (!terminalRef.current) return;
     const term = new Terminal({ 
-      fontFamily: 'system-ui, -apple-system, Inter, "SF Pro", sans-serif',
+      fontFamily: 'monospace',
       fontSize: 14,
-      theme: { 
-        background: '#FFFFFF', // Matches var(--zen-surface) in light mode
-        foreground: '#2C2C2E', // Matches var(--zen-text)
-        cursor: '#6B7F99',     // Matches var(--zen-accent)
-        selectionBackground: 'rgba(107, 127, 153, 0.2)'
-      } 
+      theme: {
+        background: '#000000',
+      }
     });
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
@@ -957,7 +983,7 @@ const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, 
         </div>
       )}
 
-      <div style={{ flex: 1, backgroundColor: 'var(--zen-surface)', padding: '16px 24px', overflow: 'hidden' }}>
+      <div style={{ flex: 1, backgroundColor: '#000000', padding: '10px', overflow: 'hidden' }}>
         <div ref={terminalRef} style={{ width: '100%', height: '100%' }} />
       </div>
     </div>
@@ -1113,7 +1139,7 @@ export default function App() {
   useEffect(() => {
     if (isHermesInstalled !== null) {
       const isRunning = activeProcesses['run-hermes'] || activeProcesses['run-hermes-desktop'] || activeProcesses['run-hermes-web'];
-      const status = isRunning ? 'active' : (isHermesInstalled ? 'needs_activation' : 'inactive');
+      const status = isRunning ? 'active' : (isHermesInstalled ? 'ready' : 'not_installed');
       setNodes(nds => nds.map(n => n.id === 'node-hermes' && n.data.status !== status ? { ...n, data: { ...n.data, status } } : n));
     }
   }, [isHermesInstalled, activeProcesses]);
@@ -1121,7 +1147,7 @@ export default function App() {
   useEffect(() => {
     if (isOpenCodeInstalled !== null) {
       const isRunning = activeProcesses['run-opencode'] || activeProcesses['run-opencode-web'];
-      const status = isRunning ? 'active' : (isOpenCodeInstalled ? 'needs_activation' : 'inactive');
+      const status = isRunning ? 'active' : (isOpenCodeInstalled ? 'ready' : 'not_installed');
       setNodes(nds => nds.map(n => n.id === 'node-opencode' && n.data.status !== status ? { ...n, data: { ...n.data, status } } : n));
     }
   }, [isOpenCodeInstalled, activeProcesses]);
@@ -1627,17 +1653,17 @@ export default function App() {
                   <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: stateColors.bodyBg, color: 'var(--zen-text)' }}>
                     {isCore ? (
                       <>
-                        <StatusLight active={true} text="HUB ONLINE" />
+                        <StatusLight status="active" text="HUB ONLINE" />
                         <CopyableField label="ENDPOINT" value={`${frugalConfig?.bind_all_interfaces ? '0.0.0.0' : '127.0.0.1'}:${frugalConfig?.port || '8080'}`} />
                       </>
                     ) : node.data.isAgent ? (
                       <>
-                        <StatusLight active={node.data.status === 'active'} text={node.data.status === 'active' ? 'RUNNING' : node.data.status.toUpperCase()} />
+                        <StatusLight status={node.data.status} />
                         <CopyableField label="BINARY" value={node.data.bin || 'N/A'} />
                       </>
                     ) : (
                       <>
-                        <StatusLight active={node.data.status === 'active'} text={node.data.status === 'active' ? 'Connected' : node.data.status === 'needs_activation' ? (node.id === 'node-ollama' && isOllamaInstalled ? 'Stopped' : 'Standby') : (node.data.status.charAt(0).toUpperCase() + node.data.status.slice(1))} />
+                        <StatusLight status={node.data.status} text={node.data.status === 'active' ? 'Connected' : node.data.status === 'ready' ? (node.id === 'node-ollama' && isOllamaInstalled ? 'Stopped' : 'Ready') : (node.data.status.replace('_', ' ').toUpperCase())} />
                         {(node.id === 'node-hermes' || node.id === 'node-opencode') ? (
                           <button 
                             onClick={(e) => { 

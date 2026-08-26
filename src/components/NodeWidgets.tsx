@@ -22,46 +22,79 @@ export interface ProcessStatus {
 // =============================================================================
 // StatusLight — Pulsing indicator wired to service health
 // =============================================================================
-export const StatusLight = ({ active, text }: { active: boolean; text: string }) => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-    <div style={{ position: 'relative', display: 'flex', width: '10px', height: '10px' }}>
-      {active && (
+export type NodeStatus = 'not_installed' | 'error' | 'ready' | 'active' | 'standby' | 'inactive';
+
+export const StatusLight = ({ status, text }: { status: NodeStatus; text?: string }) => {
+  let color = 'var(--zen-text-secondary)';
+  let label = text || status.toUpperCase();
+  let animate = false;
+
+  switch (status) {
+    case 'not_installed':
+      color = '#ef4444'; // Red
+      label = text || 'NOT INSTALLED';
+      break;
+    case 'error':
+      color = '#f97316'; // Orange
+      label = text || 'ERROR';
+      break;
+    case 'ready':
+    case 'standby':
+      color = '#eab308'; // Yellow
+      label = text || 'READY';
+      break;
+    case 'active':
+      color = 'var(--zen-success)'; // Green
+      label = text || 'ACTIVE';
+      animate = true;
+      break;
+    case 'inactive':
+    default:
+      color = 'var(--zen-text-secondary)';
+      label = text || 'INACTIVE';
+      break;
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+      <div style={{ position: 'relative', display: 'flex', width: '10px', height: '10px' }}>
+        {animate && (
+          <span
+            className="animate-ping"
+            style={{
+              position: 'absolute',
+              display: 'inline-flex',
+              width: '100%',
+              height: '100%',
+              borderRadius: '50%',
+              backgroundColor: color,
+              opacity: 0.75,
+            }}
+          />
+        )}
         <span
-          className="animate-ping"
           style={{
-            position: 'absolute',
+            position: 'relative',
             display: 'inline-flex',
-            width: '100%',
-            height: '100%',
+            width: '10px',
+            height: '10px',
             borderRadius: '50%',
-            backgroundColor: 'var(--zen-success)',
-            opacity: 0.75,
+            backgroundColor: color,
           }}
         />
-      )}
+      </div>
       <span
         style={{
-          position: 'relative',
-          display: 'inline-flex',
-          width: '10px',
-          height: '10px',
-          borderRadius: '50%',
-          backgroundColor: active ? 'var(--zen-success)' : 'var(--zen-text-secondary)',
-          
+          fontSize: '0.75rem',
+          fontWeight: 500,
+          color: color,
         }}
-      />
+      >
+        {label}
+      </span>
     </div>
-    <span
-      style={{
-        fontSize: '0.75rem',
-        fontWeight: 500,
-        color: active ? 'var(--zen-success)' : 'var(--zen-text-secondary)',
-        }}
-    >
-      {text}
-    </span>
-  </div>
-);
+  );
+};
 
 // =============================================================================
 // CopyableField — Read-only input with native Tauri clipboard copy
