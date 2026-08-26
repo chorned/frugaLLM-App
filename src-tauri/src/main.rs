@@ -18,6 +18,8 @@ struct OllamaDaemonState {
 pub struct CloudModel {
     pub model: String,
     pub provider: String,
+    #[serde(skip_deserializing)]
+    pub score: Option<f32>,
 }
 
 struct DynamicRosterState {
@@ -836,14 +838,90 @@ async fn set_routing_chain(state: State<'_, DynamicRosterState>, new_chain: Vec<
     Ok(())
 }
 
-#[tauri::command]
+const MODEL_DB_JSON: &str = include_str!(concat!(env!("OUT_DIR"), "/model_db.json"));
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct ModelScore {
+    pub score: f32,
+}
+
+pub struct ModelIntelligenceRegistry {
+    scores: std::sync::RwLock<std::collections::HashMap<String, ModelScore>>,
+}
+
+impl ModelIntelligenceRegistry {
+    pub fn new() -> Self {
+        let parsed: std::collections::HashMap<String, f32> = serde_json::from_str(MODEL_DB_JSON)
+            .unwrap_or_else(|_| std::collections::HashMap::new());
+        let mut scores = std::collections::HashMap::new();
+        for (k, v) in parsed {
+            scores.insert(k, ModelScore { score: v });
+        }
+        Self {
+            scores: std::sync::RwLock::new(scores),
+        }
+    }
+
+    pub fn normalize_model_id(raw_id: &str) -> String {
+        let mut id = raw_id.to_lowercase();
+        if let Some(stripped) = id.strip_prefix("models/") {
+            id = stripped.to_string();
+        }
+        if let Some(pos) = id.find(':') {
+            id = id[..pos].to_string();
+        }
+        id
+    }
+
+    pub fn get_score(&self, model_id: &str) -> f32 {
+        let norm_id = Self::normalize_model_id(model_id);
+        let guard = self.scores.read().unwrap();
+        
+        if let Some(entry) = guard.get(&norm_id) {
+            return entry.score;
+        }
+
+        for (key, val) in guard.iter() {
+            if key.ends_with(&format!("/{}", norm_id)) || key == &norm_id {
+                return val.score;
+            }
+        }
+        50.0
+    }
+
+    pub fn sort_models_by_intelligence<T>(&self, models: &mut [T], id_extractor: impl Fn(&T) -> &str) {
+        models.sort_by(|a, b| {
+            let score_a = self.get_score(id_extractor(a));
+            let score_b = self.get_score(id_extractor(b));
+            score_b.partial_cmp(&score_a).unwrap_or(std::cmp::Ordering::Equal)
+        });
+    }
+
+    pub fn update_scores(&self, new_scores: std::collections::HashMap<String, ModelScore>) {
+        let mut guard = self.scores.write().unwrap();
+        for (k, v) in new_scores {
+            guard.insert(k, v);
+        }
+    }
+}
+
+lazy_static::lazy_static! {
+    static ref MODEL_REGISTRY: ModelIntelligenceRegistry = ModelIntelligenceRegistry::new();
+}
+
+struct RankedModel {
+    model: CloudModel,
+    score: f32,
+    context_length: u64,
+}
+
 async fn fetch_live_routing_chain() -> Vec<CloudModel> {
-    let mut new_chain: Vec<CloudModel> = Vec::new();
+    let mut ranked_chain: Vec<RankedModel> = Vec::new();
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build() {
             Ok(c) => c,
-            Err(_) => return new_chain,
+            Err(_) => return Vec::new(),
         };
 
     // 1. Fetch from Ollama
@@ -852,9 +930,15 @@ async fn fetch_live_routing_chain() -> Vec<CloudModel> {
             if let Some(models) = json.get("models").and_then(|m| m.as_array()) {
                 for m in models {
                     if let Some(name) = m.get("name").and_then(|n| n.as_str()) {
-                        new_chain.push(CloudModel {
-                            model: name.to_string(),
-                            provider: "ollama".to_string(),
+                        let score = MODEL_REGISTRY.get_score(name);
+                        ranked_chain.push(RankedModel {
+                            model: CloudModel {
+                                model: name.to_string(),
+                                provider: "ollama".to_string(),
+                                score: Some(score),
+                            },
+                            score,
+                            context_length: 128_000,
                         });
                     }
                 }
@@ -871,12 +955,17 @@ async fn fetch_live_routing_chain() -> Vec<CloudModel> {
                     for m in models {
                         if let Some(name) = m.get("name").and_then(|n| n.as_str()) {
                             let clean_name = name.strip_prefix("models/").unwrap_or(name);
-                            if clean_name.contains("gemini-1.5") || clean_name.contains("gemini-2.0") { 
-                                new_chain.push(CloudModel {
+                            let ctx = m.get("inputTokenLimit").and_then(|c| c.as_u64()).unwrap_or(128_000);
+                            let score = MODEL_REGISTRY.get_score(clean_name);
+                            ranked_chain.push(RankedModel {
+                                model: CloudModel {
                                     model: clean_name.to_string(),
                                     provider: "google".to_string(),
-                                });
-                            }
+                                    score: Some(score),
+                                },
+                                score,
+                                context_length: ctx,
+                            });
                         }
                     }
                 }
@@ -908,10 +997,30 @@ async fn fetch_live_routing_chain() -> Vec<CloudModel> {
                             }
 
                             if is_free {
-                                new_chain.push(CloudModel {
-                                    model: id.to_string(),
-                                    provider: "openrouter".to_string(),
-                                });
+                                let mut supports_tools = false;
+                                if let Some(params) = m.get("supported_parameters").and_then(|p| p.as_array()) {
+                                    for p in params {
+                                        if let Some(ps) = p.as_str() {
+                                            if ps == "tools" || ps == "tool_choice" {
+                                                supports_tools = true;
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                if supports_tools {
+                                    let ctx = m.get("context_length").and_then(|c| c.as_u64()).unwrap_or(8192);
+                                    let score = MODEL_REGISTRY.get_score(id);
+                                    ranked_chain.push(RankedModel {
+                                        model: CloudModel {
+                                            model: id.to_string(),
+                                            provider: "openrouter".to_string(),
+                                            score: Some(score),
+                                        },
+                                        score,
+                                        context_length: ctx,
+                                    });
+                                }
                             }
                         }
                     }
@@ -920,9 +1029,15 @@ async fn fetch_live_routing_chain() -> Vec<CloudModel> {
         }
     }
 
-    // Sort to keep OpenRouter small? Or just truncate.
-    new_chain.truncate(150);
-    new_chain
+    // Sort descending by score, then by context length
+    ranked_chain.sort_by(|a, b| {
+        b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal)
+            .then(b.context_length.cmp(&a.context_length))
+    });
+
+    let mut final_chain: Vec<CloudModel> = ranked_chain.into_iter().map(|rm| rm.model).collect();
+    final_chain.truncate(150);
+    final_chain
 }
 
 #[tauri::command]
@@ -1481,7 +1596,7 @@ fn main() {
 
             let dynamic_roster_state = DynamicRosterState {
                 fallback_chain: Arc::new(tokio::sync::RwLock::new(vec![
-                    CloudModel { model: "openrouter/auto".to_string(), provider: "openrouter".to_string() }
+                    CloudModel { model: "openrouter/auto".to_string(), provider: "openrouter".to_string(), score: None }
                 ])),
             };
             let fallback_chain_clone = dynamic_roster_state.fallback_chain.clone();

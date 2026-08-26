@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 export interface CloudModel {
   model: string;
   provider: string;
+  score?: number;
 }
 
 export const CloudRoutingPanel = () => {
@@ -96,9 +97,24 @@ export const CloudRoutingPanel = () => {
                 <span style={{ fontSize: '0.85rem', fontWeight: isActive ? 700 : 600, color: 'var(--zen-text)' }}>
                   {item.model}
                 </span>
-                <span style={{ fontSize: '0.7rem', color: '#6b7280', textTransform: 'uppercase' }}>
-                  {item.provider}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                  <span style={{ fontSize: '0.7rem', color: '#6b7280', textTransform: 'uppercase' }}>
+                    {item.provider}
+                  </span>
+                  {item.score !== undefined && (
+                    <span style={{
+                      fontSize: '0.65rem',
+                      fontWeight: 600,
+                      color: 'var(--zen-text)',
+                      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--zen-border)'
+                    }}>
+                      IQ: {item.score.toFixed(1)}
+                    </span>
+                  )}
+                </div>
               </div>
               {isActive && (
                 <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--zen-accent)' }}>
