@@ -6,7 +6,7 @@ test.describe('V2 Onboarding Flow', () => {
     // Mock Tauri IPC
     await page.addInitScript(() => {
       Object.defineProperty(window, '__TAURI_INTERNALS__', {
-        value: { transformCallback: () => 1234, transformCallback: () => 1234,
+        value: { transformCallback: () => 1234, plugins: { event: { unregisterListener: () => {} } }, transformCallback: () => 1234,
           invoke: (cmd: string, args: any) => {
             if (cmd === 'is_wipe_mode') return Promise.resolve(false);
             return Promise.resolve();

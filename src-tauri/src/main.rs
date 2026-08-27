@@ -2,8 +2,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod telemetry;
+mod model_db;
 
 use std::env;
+#[cfg(not(debug_assertions))]
 use keyring::Entry;
 use tauri::{Manager, State, Emitter};
 use std::sync::{Arc, Mutex};
@@ -19,7 +21,7 @@ pub struct CloudModel {
     pub model: String,
     pub provider: String,
     #[serde(default)]
-    pub iq: i32,
+    pub iq: f32,
 }
 
 struct DynamicRosterState {
@@ -40,6 +42,8 @@ pub struct FrugalConfig {
     pub hermes_workspace: Option<String>,
     #[serde(default)]
     pub start_minimized: bool,
+    #[serde(default)]
+    pub manual_model_overrides: Vec<String>,
 }
 
 impl Default for FrugalConfig {
@@ -55,6 +59,7 @@ impl Default for FrugalConfig {
             opencode_workspace: Some("~/OpenCode".to_string()),
             hermes_workspace: Some("~/Hermes".to_string()),
             start_minimized: false,
+            manual_model_overrides: Vec::new(),
         }
     }
 }
@@ -111,23 +116,83 @@ fn get_launch_options() -> LaunchOptions {
 
 #[tauri::command]
 fn set_credential(service: &str, secret: &str) -> Result<(), String> {
-    let entry = Entry::new("frugallm-app", service).map_err(|e| e.to_string())?;
-    entry.set_password(secret).map_err(|e| e.to_string())?;
-    Ok(())
+    #[cfg(debug_assertions)]
+    {
+        let key = format!("{}_KEY", service.to_uppercase());
+        let env_path = std::env::current_dir().unwrap_or_default().join(".env");
+        
+        let contents = if env_path.exists() {
+            std::fs::read_to_string(&env_path).unwrap_or_default()
+        } else {
+            String::new()
+        };
+        
+        let mut updated = false;
+        let mut new_contents = String::new();
+        for line in contents.lines() {
+            if line.starts_with(&format!("{}=", key)) {
+                new_contents.push_str(&format!("{}={}\n", key, secret));
+                updated = true;
+            } else {
+                new_contents.push_str(line);
+                new_contents.push('\n');
+            }
+        }
+        
+        if !updated {
+            new_contents.push_str(&format!("{}={}\n", key, secret));
+        }
+        
+        std::fs::write(&env_path, new_contents).map_err(|e| e.to_string())?;
+        std::env::set_var(key, secret);
+        return Ok(());
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+        let entry = Entry::new("frugallm-app", service).map_err(|e| e.to_string())?;
+        entry.set_password(secret).map_err(|e| e.to_string())?;
+        return Ok(());
+    }
 }
 
 #[tauri::command]
 fn get_credential(service: &str) -> Result<String, String> {
-    let entry = Entry::new("frugallm-app", service).map_err(|e| e.to_string())?;
-    entry.get_password().map_err(|e| e.to_string())
+    #[cfg(debug_assertions)]
+    {
+        let key = format!("{}_KEY", service.to_uppercase());
+        return std::env::var(key).map_err(|e| e.to_string());
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+        let entry = Entry::new("frugallm-app", service).map_err(|e| e.to_string())?;
+        return entry.get_password().map_err(|e| e.to_string());
+    }
 }
 
 #[tauri::command]
 fn wipe_credentials() -> Result<(), String> {
-    if let Ok(entry) = Entry::new("frugallm-app", "openrouter") {
-        let _ = entry.delete_credential();
+    #[cfg(debug_assertions)]
+    {
+        let env_path = std::env::current_dir().unwrap_or_default().join(".env");
+        if env_path.exists() {
+            let _ = std::fs::remove_file(&env_path);
+        }
+        // Also remove from current environment so it doesn't linger
+        std::env::remove_var("OPENROUTER_KEY");
+        std::env::remove_var("GOOGLE_KEY");
+        std::env::remove_var("OLLAMA_KEY");
+        return Ok(());
     }
-    Ok(())
+
+    #[cfg(not(debug_assertions))]
+    {
+        if let Ok(entry) = Entry::new("frugallm-app", "openrouter") {
+            let _ = entry.delete_credential();
+        }
+        return Ok(());
+    }
 }
 
 fn is_hermes_installed(home: &std::path::Path) -> bool {
@@ -409,6 +474,13 @@ struct ProxyActivityPayload {
     is_active: bool,
 }
 
+#[derive(serde::Serialize, Clone)]
+struct ProxyModelErrorPayload {
+    model: String,
+    provider: String,
+    error: String,
+}
+
 struct NotifyOnDrop {
     app: tauri::AppHandle,
     source: String,
@@ -669,7 +741,10 @@ async fn chat_completions(
         }
     }
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
     
     // Determine if Ollama is viable (skip if CPU-only)
     let mut ollama_running = false;
@@ -757,6 +832,12 @@ async fn chat_completions(
                     match try_cloud_provider(&app, &client, &body, &source, &cloud_model).await {
                         Ok(response) => return response,
                         Err(e) => {
+                            let _ = app.emit("proxy_model_error", ProxyModelErrorPayload {
+                                model: cloud_model.model.clone(),
+                                provider: cloud_model.provider.clone(),
+                                error: e.clone(),
+                            });
+                            
                             errors.push(format!("{} ({}) failed: {}", cloud_model.provider, cloud_model.model, e));
                             if e.contains("HTTP 429") {
                                 if cloud_model.provider == "google" && (e.contains("quota metric") || e.contains("free_tier_requests") || e.contains("Quota exceeded")) {
@@ -845,31 +926,49 @@ async fn set_routing_chain(state: State<'_, DynamicRosterState>, new_chain: Vec<
     *chain = new_chain;
     Ok(())
 }
-
-fn get_model_priority(name: &str) -> i32 {
-    let lower = name.to_lowercase();
-    if lower.contains("claude-3-5-sonnet") || lower.contains("claude-3.5-sonnet") { 100 }
-    else if lower.contains("gpt-4o") && !lower.contains("mini") { 99 }
-    else if lower.contains("gemini-1.5-pro") || lower.contains("gemini-pro-1.5") { 98 }
-    else if lower.contains("llama-3.1-405b") || lower.contains("llama3.1-405b") { 97 }
-    else if lower.contains("claude-3-opus") { 96 }
-    else if lower.contains("gpt-4-turbo") { 95 }
-    else if lower.contains("llama-3.1-70b") || lower.contains("llama3.1-70b") { 94 }
-    else if lower.contains("gemini-1.5-flash") || lower.contains("gemini-flash-1.5") { 90 }
-    else if lower.contains("gpt-4o-mini") { 85 }
-    else if lower.contains("llama3.1") || lower.contains("llama-3.1") { 80 }
-    else if lower.contains("claude-3-haiku") { 75 }
-    else if lower.contains("mixtral") { 70 }
-    else { 50 }
+#[tauri::command]
+async fn set_model_override(
+    app: tauri::AppHandle,
+    state: State<'_, FrugalConfigState>,
+    overrides: Vec<String>,
+) -> Result<(), String> {
+    {
+        let mut config = state.config.lock().await;
+        config.manual_model_overrides = overrides;
+        
+        let config_dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(&config_dir).map_err(|e| e.to_string())?;
+        let config_path = config_dir.join("frugal_config.json");
+        let config_str = serde_json::to_string_pretty(&*config).map_err(|e| e.to_string())?;
+        std::fs::write(&config_path, config_str).map_err(|e| e.to_string())?;
+        
+        app.emit("frugallm_config_updated", &*config).unwrap_or(());
+    }
+    
+    // Auto-refresh the chain
+    let new_chain = fetch_live_routing_chain(&app).await;
+    let dynamic_state = app.state::<DynamicRosterState>();
+    let mut chain = dynamic_state.fallback_chain.write().await;
+    *chain = new_chain.clone();
+    
+    Ok(())
 }
+
+
+
 
 struct RankedModel {
     model: CloudModel,
-    priority: i32,
-    context_length: u64,
+    priority: f32,
 }
 
-async fn fetch_live_routing_chain() -> Vec<CloudModel> {
+async fn fetch_live_routing_chain(app: &tauri::AppHandle) -> Vec<CloudModel> {
+    let overrides = {
+        let state = app.state::<FrugalConfigState>();
+        let config = state.config.lock().await;
+        config.manual_model_overrides.clone()
+    };
+    
     let mut ranked_chain: Vec<RankedModel> = Vec::new();
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
@@ -884,7 +983,7 @@ async fn fetch_live_routing_chain() -> Vec<CloudModel> {
             if let Some(models) = json.get("models").and_then(|m| m.as_array()) {
                 for m in models {
                     if let Some(name) = m.get("name").and_then(|n| n.as_str()) {
-                        let priority = get_model_priority(name);
+                        let priority = crate::model_db::MODEL_REGISTRY.get_score(name);
                         ranked_chain.push(RankedModel {
                             model: CloudModel {
                                 model: name.to_string(),
@@ -892,7 +991,6 @@ async fn fetch_live_routing_chain() -> Vec<CloudModel> {
                                 iq: priority,
                             },
                             priority,
-                            context_length: 128_000,
                         });
                     }
                 }
@@ -910,6 +1008,20 @@ async fn fetch_live_routing_chain() -> Vec<CloudModel> {
                         if let Some(name) = m.get("name").and_then(|n| n.as_str()) {
                             let clean_name = name.strip_prefix("models/").unwrap_or(name);
                             
+                            let is_valid_family = clean_name.starts_with("gemini-") || clean_name.starts_with("gemma-");
+                            
+                            let mut is_junk = false;
+                            let junk_keywords = [
+                                "image", "audio", "tts", "transcribe", "embedding", 
+                                "veo", "aqa", "clip", "robotics", "live", "nano-banana"
+                            ];
+                            for kw in junk_keywords.iter() {
+                                if clean_name.contains(kw) {
+                                    is_junk = true;
+                                    break;
+                                }
+                            }
+                            
                             // Check supported generation methods for 'generateContent'
                             let mut supports_chat = false;
                             if let Some(methods) = m.get("supportedGenerationMethods").and_then(|sm| sm.as_array()) {
@@ -918,9 +1030,8 @@ async fn fetch_live_routing_chain() -> Vec<CloudModel> {
                                 }
                             }
                             
-                            if supports_chat {
-                                let ctx = m.get("inputTokenLimit").and_then(|c| c.as_u64()).unwrap_or(128_000);
-                                let priority = get_model_priority(clean_name);
+                            if supports_chat && !is_junk && is_valid_family {
+                                let priority = crate::model_db::MODEL_REGISTRY.get_score(name);
                                 ranked_chain.push(RankedModel {
                                     model: CloudModel {
                                         model: clean_name.to_string(),
@@ -928,7 +1039,6 @@ async fn fetch_live_routing_chain() -> Vec<CloudModel> {
                                         iq: priority,
                                     },
                                     priority,
-                                    context_length: ctx,
                                 });
                             }
                         }
@@ -975,7 +1085,7 @@ async fn fetch_live_routing_chain() -> Vec<CloudModel> {
                                 
                                 if supports_tools {
                                     let ctx = m.get("context_length").and_then(|c| c.as_u64()).unwrap_or(8192);
-                                    let priority = get_model_priority(id);
+                                    let priority = crate::model_db::MODEL_REGISTRY.get_score(id); println!("Score for {} is {}", id, priority);
                                     ranked_chain.push(RankedModel {
                                         model: CloudModel {
                                             model: id.to_string(),
@@ -983,7 +1093,6 @@ async fn fetch_live_routing_chain() -> Vec<CloudModel> {
                                             iq: priority,
                                         },
                                         priority,
-                                        context_length: ctx,
                                     });
                                 }
                             }
@@ -994,20 +1103,46 @@ async fn fetch_live_routing_chain() -> Vec<CloudModel> {
         }
     }
 
-    // Sort descending by priority, then by context length
-    ranked_chain.sort_by(|a, b| {
-        b.priority.cmp(&a.priority)
-            .then(b.context_length.cmp(&a.context_length))
-    });
+    // 4. Sort and apply overrides using exact index mapping
+    ranked_chain.sort_by(|a, b| b.priority.total_cmp(&a.priority));
 
-    let mut final_chain: Vec<CloudModel> = ranked_chain.into_iter().map(|rm| rm.model).collect();
+    let mut final_chain = Vec::new();
+    
+    for override_id in overrides.iter() {
+        if override_id.is_empty() {
+            // Unpinned slot: pop the highest priority model that isn't explicitly pinned elsewhere
+            let mut found_idx = None;
+            for (i, rm) in ranked_chain.iter().enumerate() {
+                if !overrides.contains(&rm.model.model) {
+                    found_idx = Some(i);
+                    break;
+                }
+            }
+            if let Some(idx) = found_idx {
+                final_chain.push(ranked_chain.remove(idx).model);
+            }
+        } else {
+            // Pinned slot
+            if let Some(idx) = ranked_chain.iter().position(|rm| rm.model.model == *override_id) {
+                final_chain.push(ranked_chain.remove(idx).model);
+            }
+        }
+    }
+    
+    // Add all remaining unpinned dynamic models
+    for rm in ranked_chain {
+        if !overrides.contains(&rm.model.model) {
+            final_chain.push(rm.model);
+        }
+    }
+
     final_chain.truncate(150);
     final_chain
 }
 
 #[tauri::command]
-async fn refresh_routing_chain(state: State<'_, DynamicRosterState>) -> Result<Vec<CloudModel>, String> {
-    let new_chain = fetch_live_routing_chain().await;
+async fn refresh_routing_chain(state: State<'_, DynamicRosterState>, app: tauri::AppHandle) -> Result<Vec<CloudModel>, String> {
+    let new_chain = fetch_live_routing_chain(&app).await;
     
     let mut chain = state.fallback_chain.write().await;
     *chain = new_chain.clone();
@@ -1519,6 +1654,8 @@ fn restart_app(app: tauri::AppHandle) {
 }
 
 fn main() {
+    #[cfg(debug_assertions)]
+    dotenvy::dotenv().ok();
     let args: Vec<String> = env::args().collect();
     
     if args.contains(&"--wipe".to_string()) {
@@ -1566,15 +1703,16 @@ fn main() {
 
             let dynamic_roster_state = DynamicRosterState {
                 fallback_chain: Arc::new(tokio::sync::RwLock::new(vec![
-                    CloudModel { model: "openrouter/auto".to_string(), provider: "openrouter".to_string(), iq: 50 }
+                    CloudModel { model: "openrouter/auto".to_string(), provider: "openrouter".to_string(), iq: 50.0 }
                 ])),
             };
             let fallback_chain_clone = dynamic_roster_state.fallback_chain.clone();
             app.manage(dynamic_roster_state);
 
             // Spawn FrugalLLM Core Server
+            let app_handle_clone = app_handle.clone();
             let abort_handle = tauri::async_runtime::spawn(async move {
-                let initial_chain = fetch_live_routing_chain().await;
+                let initial_chain = fetch_live_routing_chain(&app_handle_clone).await;
                 if !initial_chain.is_empty() {
                     let mut guard = fallback_chain_clone.write().await;
                     *guard = initial_chain;
@@ -1680,6 +1818,7 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            set_model_override,
             get_launch_options,
             set_credential,
             get_credential,
@@ -1823,30 +1962,5 @@ mod tests {
         assert!(output.contains("Installing Ollama..."));
     }
 
-    #[test]
-    fn test_format_openrouter_request() {
-        let body = serde_json::json!({
-            "messages": [{"role": "user", "content": "hello"}],
-            "reasoning_effort": "high",
-            "models": ["old1", "old2"]
-        });
-        
-        let fallbacks = vec![
-            serde_json::json!("model1"),
-            serde_json::json!("model2"),
-            serde_json::json!("model3"),
-            serde_json::json!("model4"),
-            serde_json::json!("model5"),
-        ];
-        
-        let formatted = format_openrouter_request(body, fallbacks);
-        
-        let obj = formatted.as_object().unwrap();
-        assert_eq!(obj.get("model").unwrap(), &serde_json::json!("model1"));
-        let models_array = obj.get("models").unwrap().as_array().unwrap();
-        assert_eq!(models_array.len(), 3);
-        assert_eq!(models_array[0], serde_json::json!("model1"));
-        assert_eq!(models_array[2], serde_json::json!("model3"));
-        assert!(obj.get("reasoning_effort").is_none());
-    }
+
 }

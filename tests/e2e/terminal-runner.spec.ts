@@ -9,10 +9,11 @@ test.describe('Terminal Runner View', () => {
     page.on('pageerror', error => console.log('PAGE ERROR:', error.message));
 
     await page.addInitScript(() => {
-      window.localStorage.setItem('onboardingState', 'completed');
+      window.localStorage.setItem("onboardingState", "completed");
+      window["__TAURI_EVENT_PLUGIN_INTERNALS__"] = { unregisterListener: () => {} };
       window['invokedCommands'] = [];
       Object.defineProperty(window, '__TAURI_INTERNALS__', {
-        value: { transformCallback: () => 1234,
+        value: { transformCallback: () => 1234, plugins: { event: { unregisterListener: () => {} } },
           transformCallback: () => 1234,
           invoke: (cmd: string, args: any) => {
             window['invokedCommands'].push({ cmd, args });

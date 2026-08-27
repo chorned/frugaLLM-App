@@ -379,11 +379,11 @@ export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean 
           onClick={(e) => { e.stopPropagation(); setShowPanel(true); }}
           style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--zen-border)', padding: '8px 12px', backgroundColor: 'var(--zen-surface)' }}
         >
-          <div style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--zen-text)', display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div id="local-hardware-heading" style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--zen-text)', display: 'flex', gap: '8px', alignItems: 'center' }}>
             Local Hardware
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <StatusLight active={isStatusActive} text={headerStatusText} />
+            <StatusLight status={isStatusActive ? 'active' : 'standby'} text={headerStatusText} />
             <div 
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -414,6 +414,7 @@ export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean 
           onClick={(e) => { e.stopPropagation(); setShowPanel(false); }}
         >
           <div 
+            data-testid="hardware-telemetry-panel"
             style={{ width: '350px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '24px' }} 
             onClick={(e) => e.stopPropagation()}
           >

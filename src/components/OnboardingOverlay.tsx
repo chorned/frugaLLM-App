@@ -15,12 +15,7 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete
     let foundElement: Element | null = null;
 
     const findTargetNode = () => {
-      if (!foundElement) {
-        // Query the DOM for an element containing the specific text
-        // The V1 Hardware node has the text "LOCAL HARDWARE" with a chevron span, so includes is safer
-        const elements = Array.from(document.querySelectorAll('div'));
-        
-        const heading = elements.find(el => el.textContent?.toLowerCase().includes('local hardware') && el.style.fontWeight === '800');
+        const heading = document.getElementById('local-hardware-heading');
         if (heading) {
           let parent = heading.parentElement;
           while (parent) {
@@ -31,7 +26,6 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete
             parent = parent.parentElement;
           }
         }
-      }
 
       if (foundElement) {
         setTargetRect(foundElement.getBoundingClientRect());

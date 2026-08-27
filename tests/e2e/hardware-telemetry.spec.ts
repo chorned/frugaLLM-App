@@ -8,14 +8,15 @@ test.describe('Hardware Telemetry Widget', () => {
     page.on('console', msg => console.log('PAGE LOG:', msg.text()));
     page.on('pageerror', err => console.log('PAGE ERROR:', err));
     await page.addInitScript(() => {
-      window.localStorage.setItem('onboardingState', 'completed');
+      window.localStorage.setItem("onboardingState", "completed");
+      window["__TAURI_EVENT_PLUGIN_INTERNALS__"] = { unregisterListener: () => {} };
       window['invokedCommands'] = [];
       window['tauriEventCallbacks'] = {};
       window['tauriListeners'] = {};
       let nextId = 1;
 
       Object.defineProperty(window, '__TAURI_INTERNALS__', {
-        value: { transformCallback: () => 1234,
+        value: { transformCallback: () => 1234, plugins: { event: { unregisterListener: () => {} } },
           transformCallback: (callback: any) => {
              const id = nextId++;
              window['tauriEventCallbacks'][id] = callback;

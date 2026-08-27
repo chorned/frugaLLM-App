@@ -33,7 +33,7 @@ export class NodeConfigPanel {
     this.port = page.locator('input[name="port"]');
     this.apiKey = page.locator('input[name="apiKey"]');
 
-    this.updateButton = page.getByRole('button', { name: 'UPDATE PROTOCOL' });
+    this.updateButton = page.getByRole('button', { name: /SAVE CHANGES/i });
     this.helpButton = page.getByRole('button', { name: /HELP/ });
     this.closeButton = page.getByRole('button', { name: '✕' }).first(); // the config panel close button
   }

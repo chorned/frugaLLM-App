@@ -5,9 +5,10 @@ test.describe('Main Canvas Dashboard', () => {
   test.beforeEach(async ({ page }) => {
     // Mock Tauri IPC
     await page.addInitScript(() => {
-      window.localStorage.setItem('onboardingState', 'completed');
+      window.localStorage.setItem("onboardingState", "completed");
+      window["__TAURI_EVENT_PLUGIN_INTERNALS__"] = { unregisterListener: () => {} };
       Object.defineProperty(window, '__TAURI_INTERNALS__', {
-        value: { transformCallback: () => 1234,
+        value: { transformCallback: () => 1234, plugins: { event: { unregisterListener: () => {} } },
           invoke: (cmd: string, args: any) => {
             console.log('IPC Invoke:', cmd, args);
             if (cmd === 'plugin:event|listen') return Promise.resolve(1234);
@@ -34,11 +35,11 @@ test.describe('Main Canvas Dashboard', () => {
     // Verify canvas exists
     await expect(canvas.canvas).toBeVisible();
 
-    // Verify retro nodes are rendered (5 out of 7 are .retro-node, 2 are custom)
-    await expect(canvas.nodes).toHaveCount(5);
+    // Verify nodes are rendered (6 nodes total)
+    await expect(canvas.nodes).toHaveCount(6);
     
     // Verify specific nodes
-    const ollamaNode = await canvas.getNode('OLLAMA LOCAL');
+    const ollamaNode = await canvas.getNode('Local Hardware');
     await expect(ollamaNode).toBeVisible();
     
     // Node status should be updated by mock (Ollama should be STANDBY/CONNECTED initially)
@@ -81,7 +82,7 @@ test.describe('Main Canvas Dashboard', () => {
     const panel = page.getByRole('heading', { name: 'FRUGALLM CORE' });
     await expect(panel).toBeVisible();
     
-    const updateButton = page.getByRole('button', { name: 'UPDATE PROTOCOL' });
+    const updateButton = page.getByRole('button', { name: /SAVE CHANGES/i });
     await expect(updateButton).toBeVisible();
   });
 });

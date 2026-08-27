@@ -9,7 +9,7 @@ export class MainCanvas {
   constructor(page: Page) {
     this.page = page;
     this.canvas = page.locator('div[style*="cursor: grab"], div[style*="cursor: grabbing"]').first();
-    this.nodes = page.locator('.retro-node');
+    this.nodes = page.locator('[data-node-id]');
     this.edges = page.locator('svg line');
   }
 
@@ -52,6 +52,7 @@ export class MainCanvas {
 
   async clickNode(label: string) {
     const node = await this.getNode(label);
-    await node.click();
+    // Click slightly below the center to hit the body of the node, avoiding any headers that might stop propagation
+    await node.click({ position: { x: 110, y: 50 } });
   }
 }

@@ -82,7 +82,7 @@ const initialNodes: AppNode[] = [
     x: 750, y: 50,
     data: {
       label: 'OPENROUTER',
-      description: 'The ultimate gateway to the cloud! OpenRouter acts as a smart multiplexer, automatically routing your requests to the best and cheapest proprietary AI models available.',
+      description: '',
       ip: 'openrouter.ai',
       status: 'needs_activation'
     }
@@ -92,7 +92,7 @@ const initialNodes: AppNode[] = [
     x: 400, y: 50,
     data: {
       label: 'GOOGLE AI STUDIO',
-      description: 'Ultra-fast, high-capability models straight from Google.',
+      description: '',
       ip: 'generativelanguage.googleapis.com',
       status: 'needs_activation'
     }
@@ -278,168 +278,34 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
             </>
           ) : (
             <>
-              <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>IP ADDRESS / HOST <Tooltip text="Where does this service live on the network? Usually, it's right here on your computer ('127.0.0.1' or 'localhost'), but it could be a cloud API halfway across the world!" /></label>
-                {node.id === 'node-frugallm' || node.id === 'node-hermes' || node.id === 'node-opencode' ? (
-                  <div style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '8px', color: 'var(--zen-text)', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, cursor: 'not-allowed' }}>
-                    {node.id === 'node-frugallm' ? (formData.bind_all_interfaces ? '0.0.0.0' : '127.0.0.1') : formData.ip}
-                  </div>
-                ) : (
-                  <input type="text" name="ip" value={formData.ip} onChange={handleChange}
-                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
-                )}
-              </div>
-              <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>PORT <Tooltip text="Think of the IP address as the building, and the Port as the specific door to knock on. It's how our hub knows exactly where to send its messages." /></label>
-                {node.id === 'node-hermes' || node.id === 'node-opencode' || node.id === 'node-frugallm' ? (
-                  <div style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '8px', color: 'var(--zen-text)', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, cursor: 'not-allowed' }}>
-                    {formData.port}
-                  </div>
-                ) : (
-                  <input type="text" name="port" value={formData.port} onChange={handleChange}
-                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
-                )}
-              </div>
-              {node.id === 'node-frugallm' && (
+              {node.id !== 'node-openrouter' && node.id !== 'node-google' && (
                 <>
-                  {!confirmBindNetwork ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' }}>
-                      <input type="checkbox" id="bind_all_interfaces" name="bind_all_interfaces" checked={formData.bind_all_interfaces} onChange={e => {
-                        if (e.target.checked) {
-                          setConfirmBindNetwork(true);
-                        } else {
-                          setFormData(p => ({...p, bind_all_interfaces: false}));
-                        }
-                      }} />
-                      <label htmlFor="bind_all_interfaces" style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)' }}>Make available everywhere <Tooltip text="Making FrugaLLM available everywhere means it will detect traffic from all your network connections. Do not enable this if you only using FrugaLLM on one machine." /></label>
-                    </div>
-                  ) : (
-                    <div style={{ marginTop: '10px', padding: '12px', backgroundColor: '#fef2f2', border: '1px solid #f87171', borderRadius: '8px' }}>
-                      <p style={{ margin: '0 0 10px 0', fontSize: '0.8rem', color: '#991b1b', fontWeight: 600 }}>
-                        Making FrugaLLM available to the network (and possibly the entire internet) requires restarting the app. All unsaved changes will be lost.
-                      </p>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button 
-                          onClick={async () => {
-                            setFormData(p => ({...p, bind_all_interfaces: true}));
-                            await onSave(node.id, {...formData, bind_all_interfaces: true});
-                            await invoke('restart_app');
-                          }}
-                          style={{ padding: '6px 12px', backgroundColor: '#dc2626', color: 'white', border: 'none', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}
-                        >
-                          Restart
-                        </button>
-                        <button 
-                          onClick={() => setConfirmBindNetwork(false)}
-                          style={{ padding: '6px 12px', backgroundColor: '#ffffff', color: '#4b5563', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  <div style={{ marginTop: '15px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                      <input type="checkbox" id="start_on_login" name="start_on_login" checked={formData.start_on_login} onChange={async e => {
-                        const newVal = e.target.checked;
-                        setFormData(p => ({...p, start_on_login: newVal}));
-                        if (newVal) {
-                          await enableAutostart();
-                        } else {
-                          await disableAutostart();
-                        }
-                        onSave(node.id, {...formData, start_on_login: newVal});
-                      }} />
-                      <label htmlFor="start_on_login" style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)' }}>Start FrugalLM on login</label>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <input type="checkbox" id="start_minimized" name="start_minimized" checked={formData.start_minimized} onChange={e => {
-                        const newVal = e.target.checked;
-                        setFormData(p => ({...p, start_minimized: newVal}));
-                        onSave(node.id, {...formData, start_minimized: newVal});
-                      }} />
-                      <label htmlFor="start_minimized" style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)' }}>Start minimized to tray</label>
-                    </div>
-                  </div>
-                  <div style={{ marginTop: '15px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>API PASSWORD (OPTIONAL) <Tooltip text="Set an API token to secure your FrugalLM node." /></label>
-                    <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                      <input type="password" name="api_password" value={formData.api_password} onChange={handleChange} placeholder={frugalConfig?.api_password ? "••••••••" : "Super secret..."}
-                        style={{ flexGrow: 1, padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
-                      
-                      {frugalConfig?.api_password && (
-                        <button 
-                          onClick={async () => {
-                             try {
-                               await writeText(frugalConfig.api_password);
-                               setPasswordCopied(true);
-                               setTimeout(() => setPasswordCopied(false), 1500);
-                             } catch (err) {
-                               console.error('Clipboard write failed:', err);
-                             }
-                          }}
-                          style={{ padding: '0 12px', backgroundColor: passwordCopied ? '#065f46' : '#e5e7eb', color: passwordCopied ? '#34d399' : '#111827', border: '1px solid var(--zen-border)', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: 'none', transition: 'all 0.15s' }}>
-                          {passwordCopied ? '✓' : 'COPY'}
-                        </button>
-                      )}
-                    </div>
-                    {confirmPasswordAction ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)' }}>
-                        <span style={{ fontSize: '0.8rem', color: 'var(--zen-text)', fontWeight: 700 }}>
-                          {confirmPasswordAction === 'overwrite' ? 'OVERWRITE EXISTING PASSWORD?' : 'REMOVE PASSWORD?'}
-                        </span>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button onClick={() => {
-                            if (confirmPasswordAction === 'remove') {
-                              setFormData(prev => ({ ...prev, api_password: '' }));
-                              onSave(node.id, { ...formData, api_password: '' });
-                            } else {
-                              onSave(node.id, formData);
-                            }
-                            setConfirmPasswordAction(null);
-                          }} style={{ flex: 1, padding: '6px', backgroundColor: '#ef4444', color: '#FFFFFF', border: '2px solid #991b1b', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
-                          <button onClick={() => setConfirmPasswordAction(null)} style={{ flex: 1, padding: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
-                        </div>
+                  <div>
+                    <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>IP ADDRESS / HOST <Tooltip text="Where does this service live on the network? Usually, it's right here on your computer ('127.0.0.1' or 'localhost'), but it could be a cloud API halfway across the world!" /></label>
+                    {node.id === 'node-frugallm' || node.id === 'node-hermes' || node.id === 'node-opencode' ? (
+                      <div style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '8px', color: 'var(--zen-text)', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, cursor: 'not-allowed' }}>
+                        {node.id === 'node-frugallm' ? (formData.bind_all_interfaces ? '0.0.0.0' : '127.0.0.1') : formData.ip}
                       </div>
                     ) : (
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button onClick={() => {
-                          if (frugalConfig?.api_password && formData.api_password !== frugalConfig.api_password && formData.api_password !== '') {
-                            setConfirmPasswordAction('overwrite');
-                          } else if (formData.api_password !== '') {
-                            onSave(node.id, formData);
-                          }
-                        }} style={{ flex: 1, padding: '8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', borderBottom: '1px solid var(--zen-border)', border: '1px solid var(--zen-border)', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: 'none' }}>
-                          APPLY PASSWORD
-                        </button>
-                        {frugalConfig?.api_password && (
-                          <button onClick={() => setConfirmPasswordAction('remove')} style={{ padding: '8px', backgroundColor: '#fef2f2', color: '#ef4444', border: '2px dashed #ef4444', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-                            REMOVE
-                          </button>
-                        )}
-                      </div>
+                      <input type="text" name="ip" value={formData.ip} onChange={handleChange}
+                        style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
                     )}
                   </div>
-                  <div style={{ marginTop: '20px', padding: '12px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '4px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#4b5563' }}>SESSION TOKENS</span>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--zen-text)' }}>{(frugalConfig?.input_tokens_session || 0) + (frugalConfig?.output_tokens_session || 0)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#4b5563' }}>LIFETIME TOKENS</span>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--zen-text)' }}>{(frugalConfig?.input_tokens_lifetime || 0) + (frugalConfig?.output_tokens_lifetime || 0)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#4b5563' }}>EST. LIFETIME SAVINGS <Tooltip text="Estimated savings assuming Claude 3.5 Sonnet pricing ($3.00/1M In, $15.00/1M Out)" /></span>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--zen-success)' }}>
-                        ${((((frugalConfig?.input_tokens_lifetime || 0) / 1000000) * 3.0) + (((frugalConfig?.output_tokens_lifetime || 0) / 1000000) * 15.0)).toFixed(4)}
-                      </span>
-                    </div>
+                  <div>
+                    <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>PORT <Tooltip text="Think of the IP address as the building, and the Port as the specific door to knock on. It's how our hub knows exactly where to send its messages." /></label>
+                    {node.id === 'node-hermes' || node.id === 'node-opencode' || node.id === 'node-frugallm' ? (
+                      <div style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '8px', color: 'var(--zen-text)', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, cursor: 'not-allowed' }}>
+                        {formData.port}
+                      </div>
+                    ) : (
+                      <input type="text" name="port" value={formData.port} onChange={handleChange}
+                        style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
+                    )}
                   </div>
-                  
-                  <div style={{ marginTop: '16px' }}>
-                    <CloudRoutingPanel />
-                  </div>
+                </>
+              )}
+              {node.id === 'node-frugallm' && (
+                <>
                   <button 
                     onClick={async () => {
                        try {
@@ -450,10 +316,13 @@ const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled
                          console.error('Clipboard write failed:', err);
                        }
                     }}
-                    style={{ marginTop: '15px', width: '100%', padding: '10px', backgroundColor: ipCopied ? '#059669' : 'var(--zen-accent)', color: '#ffffff', border: '1px solid transparent', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}>
+                    style={{ marginBottom: '15px', width: '100%', padding: '10px', backgroundColor: ipCopied ? '#059669' : 'var(--zen-accent)', color: '#ffffff', border: '1px solid transparent', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}>
                     {ipCopied ? '✓ OK' : 'COPY IP & PORT'}
                   </button>
 
+                  <div style={{ marginTop: '0px' }}>
+                    <CloudRoutingPanel />
+                  </div>
                 </>
               )}
               {node.id === 'node-openrouter' && (
@@ -1569,12 +1438,13 @@ export default function App() {
               if (node.id === 'node-hermes') Icon = Icons.workflow;
               if (node.data.isAgent) Icon = Icons.agent;
 
-              if (node.data.isHardware) {
+              if (node.id === 'node-ollama') {
                 const isOllamaGenerating = activeProxyState?.target === 'ollama' || terminalMode === 'run-ollama';
                 return (
                   <div
                     key={node.id}
                     id={node.id}
+                    data-node-id={node.id}
                     style={{ 
                       position: 'absolute', left: node.x, top: node.y, width: NODE_WIDTH, 
                       zIndex: 1, backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '16px', boxShadow: 'var(--tw-shadow-glass)',
@@ -1593,6 +1463,7 @@ export default function App() {
               return (
                 <div 
                   key={node.id}
+                  data-node-id={node.id}
                   className="retro-node"
                   style={{
                     position: 'absolute',

@@ -32,3 +32,6 @@ test-results/
 production_artifacts/
 app_build/
 src-tauri/target/
+
+# Secrets
+.env
