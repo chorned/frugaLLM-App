@@ -160,12 +160,10 @@ const Tooltip = ({ text }: { text: string }) => {
   );
 };
 
-const NodeConfigPanel = ({ node, onClose, onSave, onOpenGuide, isHermesInstalled, isOpenCodeInstalled, isOllamaInstalled, detectedVram, setDetectedVram, hasActiveBackend, handleInitializeHermes, handleOpenHermes, handleUninstallHermes, handleInitializeOpenCode, handleOpenOpenCode, handleUninstallOpenCode, handleInitializeOllama, handleOpenOllama, handleUninstallOllama, handleDisconnectOpenRouter, frugalConfig, handleOpenHermesDesktop, handleOpenHermesWeb, handleOpenOpenCodeWeb, activeProcesses, handleKillProcess }: any) => {
+const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeInstalled, isOllamaInstalled, detectedVram, setDetectedVram, hasActiveBackend, handleInitializeHermes, handleOpenHermes, handleUninstallHermes, handleInitializeOpenCode, handleOpenOpenCode, handleUninstallOpenCode, handleInitializeOllama, handleOpenOllama, handleUninstallOllama, handleDisconnectOpenRouter, frugalConfig, handleOpenHermesDesktop, handleOpenHermesWeb, handleOpenOpenCodeWeb, activeProcesses, handleKillProcess }: any) => {
   const [confirmUninstall, setConfirmUninstall] = useState<string | null>(null);
   const [ipCopied, setIpCopied] = useState(false);
-  const [passwordCopied, setPasswordCopied] = useState(false);
-  const [confirmPasswordAction, setConfirmPasswordAction] = useState<'overwrite' | 'remove' | null>(null);
-  const [confirmBindNetwork, setConfirmBindNetwork] = useState(false);
+  
   const [formData, setFormData] = useState({
     ip: node.data.ip || '',
     port: node.data.port || '',
@@ -1250,8 +1248,6 @@ export default function App() {
     const tx = target.x + NODE_WIDTH / 2;
     const ty = target.y + NODE_HEIGHT / 2;
 
-    const dx = tx - sx;
-    
     const pathD = `M ${sx} ${sy} L ${tx} ${ty}`;
     
     let isGenerating = false;
@@ -1529,12 +1525,12 @@ export default function App() {
                       </>
                     ) : node.data.isAgent ? (
                       <>
-                        <StatusLight status={node.data.status} />
+                        <StatusLight status={node.data.status as any} />
                         <CopyableField label="BINARY" value={node.data.bin || 'N/A'} />
                       </>
                     ) : (
                       <>
-                        <StatusLight status={node.data.status} text={node.data.status === 'active' ? 'Connected' : node.data.status === 'ready' ? (node.id === 'node-ollama' && isOllamaInstalled ? 'Stopped' : 'Ready') : (node.data.status.replace('_', ' ').toUpperCase())} />
+                        <StatusLight status={node.data.status as any} text={node.data.status === 'active' ? 'Connected' : node.data.status === 'ready' ? (node.id === 'node-ollama' && isOllamaInstalled ? 'Stopped' : 'Ready') : (node.data.status.replace('_', ' ').toUpperCase())} />
                         {(node.id === 'node-hermes' || node.id === 'node-opencode') ? (
                           <button 
                             onClick={(e) => { 
