@@ -9,7 +9,9 @@ export class TerminalRunner {
   readonly confirmCloseText: Locator;
   readonly yesButton: Locator;
   readonly cancelButton: Locator;
-  readonly provisioningBar: Locator;
+  readonly downloadSpeed: Locator;
+  readonly downloadEta: Locator;
+  readonly downloadSize: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -22,5 +24,8 @@ export class TerminalRunner {
     this.yesButton = page.getByRole('button', { name: 'Yes' });
     this.cancelButton = page.getByRole('button', { name: 'Cancel' });
     this.provisioningBar = page.getByText('Downloading Weights...');
+    this.downloadSpeed = page.getByTestId('download-speed');
+    this.downloadEta = page.getByTestId('download-eta');
+    this.downloadSize = page.getByTestId('download-size');
   }
 }

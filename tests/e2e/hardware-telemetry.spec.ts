@@ -145,13 +145,36 @@ test.describe('Hardware Telemetry Widget', () => {
     await expect(telemetry.statusLight).toHaveText('Thinking');
     
     // Throughput should be calculated (not 0.0)
-    await expect(telemetry.throughputValue).not.toContainText('0.0');
+    await expect(telemetry.throughputValue).not.toContainText('0.0 t/s');
     
-    // Wait for throughput timeout to reset (1 second pause)
-    await page.waitForTimeout(1100);
+    // Wait for stream timeout (1.2 second pause)
+    await page.waitForTimeout(1300);
     
-    // Should go back to LOADED and throughput 0.0
+    // Should go back to LOADED
     await expect(telemetry.statusLight).toHaveText('Loaded');
-    await expect(telemetry.throughputValue).toContainText('0.0');
+    // Avg throughput should retain the computed average value
+    await expect(telemetry.throughputValue).not.toContainText('0.0 t/s');
+  });
+
+  test('should toggle benchmark reference panel showing Claude Sonnet and cloud tiers', async ({ page }) => {
+    const telemetry = new HardwareTelemetryPage(page);
+    await telemetry.toggle();
+
+    // Benchmark panel should not be visible initially
+    await expect(telemetry.benchmarkPanel).not.toBeVisible();
+
+    // Click ( i ) benchmark info button
+    await telemetry.toggleBenchmarks();
+
+    // Benchmark panel should be visible
+    await expect(telemetry.benchmarkPanel).toBeVisible();
+    await expect(telemetry.benchmarkPanel).toContainText('Claude 3.7 / 3.5 Sonnet');
+    await expect(telemetry.benchmarkPanel).toContainText('~75 - 90 t/s');
+    await expect(telemetry.benchmarkPanel).toContainText('Gemini 2.5 Flash');
+    await expect(telemetry.benchmarkPanel).toContainText('Local Intel x86 (AVX2)');
+
+    // Toggle off
+    await telemetry.toggleBenchmarks();
+    await expect(telemetry.benchmarkPanel).not.toBeVisible();
   });
 });

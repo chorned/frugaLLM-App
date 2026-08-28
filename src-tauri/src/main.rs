@@ -44,6 +44,8 @@ pub struct FrugalConfig {
     pub start_minimized: bool,
     #[serde(default)]
     pub manual_model_overrides: Vec<String>,
+    #[serde(default)]
+    pub tool_enforcing_gateway: bool,
 }
 
 impl Default for FrugalConfig {
@@ -60,6 +62,7 @@ impl Default for FrugalConfig {
             hermes_workspace: Some("~/Hermes".to_string()),
             start_minimized: false,
             manual_model_overrides: Vec::new(),
+            tool_enforcing_gateway: false,
         }
     }
 }
@@ -119,7 +122,14 @@ fn set_credential(service: &str, secret: &str) -> Result<(), String> {
     #[cfg(debug_assertions)]
     {
         let key = format!("{}_KEY", service.to_uppercase());
-        let env_path = std::env::current_dir().unwrap_or_default().join(".env");
+        let current_dir = std::env::current_dir().unwrap_or_default();
+        let env_path = if current_dir.join(".env").exists() {
+            current_dir.join(".env")
+        } else if current_dir.join("src-tauri").join(".env").exists() {
+            current_dir.join("src-tauri").join(".env")
+        } else {
+            current_dir.join(".env")
+        };
         
         let contents = if env_path.exists() {
             std::fs::read_to_string(&env_path).unwrap_or_default()
@@ -161,7 +171,38 @@ fn get_credential(service: &str) -> Result<String, String> {
     #[cfg(debug_assertions)]
     {
         let key = format!("{}_KEY", service.to_uppercase());
-        return std::env::var(key).map_err(|e| e.to_string());
+        if let Ok(val) = std::env::var(&key) {
+            if !val.trim().is_empty() {
+                return Ok(val);
+            }
+        }
+
+        let current_dir = std::env::current_dir().unwrap_or_default();
+        let env_candidates = [
+            current_dir.join(".env"),
+            current_dir.join("src-tauri").join(".env"),
+            current_dir.parent().unwrap_or(&std::path::PathBuf::new()).join(".env"),
+            current_dir.parent().unwrap_or(&std::path::PathBuf::new()).join("src-tauri").join(".env"),
+        ];
+
+        for env_path in &env_candidates {
+            if env_path.exists() {
+                if let Ok(contents) = std::fs::read_to_string(env_path) {
+                    for line in contents.lines() {
+                        let prefix = format!("{}=", key);
+                        if let Some(stripped) = line.strip_prefix(&prefix) {
+                            let val = stripped.trim().to_string();
+                            if !val.is_empty() {
+                                std::env::set_var(&key, &val);
+                                return Ok(val);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return Err(format!("Credential for service '{}' not found", service));
     }
 
     #[cfg(not(debug_assertions))]
@@ -172,12 +213,60 @@ fn get_credential(service: &str) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn delete_credential(service: &str) -> Result<(), String> {
+    #[cfg(debug_assertions)]
+    {
+        let key = format!("{}_KEY", service.to_uppercase());
+        std::env::remove_var(&key);
+
+        let current_dir = std::env::current_dir().unwrap_or_default();
+        let env_candidates = [
+            current_dir.join(".env"),
+            current_dir.join("src-tauri").join(".env"),
+            current_dir.parent().unwrap_or(&std::path::PathBuf::new()).join(".env"),
+            current_dir.parent().unwrap_or(&std::path::PathBuf::new()).join("src-tauri").join(".env"),
+        ];
+
+        for env_path in &env_candidates {
+            if env_path.exists() {
+                if let Ok(contents) = std::fs::read_to_string(env_path) {
+                    let mut new_contents = String::new();
+                    let prefix = format!("{}=", key);
+                    for line in contents.lines() {
+                        if !line.starts_with(&prefix) {
+                            new_contents.push_str(line);
+                            new_contents.push('\n');
+                        }
+                    }
+                    let _ = std::fs::write(env_path, new_contents);
+                }
+            }
+        }
+        return Ok(());
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+        if let Ok(entry) = Entry::new("frugallm-app", service) {
+            let _ = entry.delete_credential();
+        }
+        return Ok(());
+    }
+}
+
+#[tauri::command]
 fn wipe_credentials() -> Result<(), String> {
     #[cfg(debug_assertions)]
     {
-        let env_path = std::env::current_dir().unwrap_or_default().join(".env");
-        if env_path.exists() {
-            let _ = std::fs::remove_file(&env_path);
+        let current_dir = std::env::current_dir().unwrap_or_default();
+        let env_candidates = [
+            current_dir.join(".env"),
+            current_dir.join("src-tauri").join(".env"),
+        ];
+        for env_path in &env_candidates {
+            if env_path.exists() {
+                let _ = std::fs::remove_file(env_path);
+            }
         }
         // Also remove from current environment so it doesn't linger
         std::env::remove_var("OPENROUTER_KEY");
@@ -188,8 +277,10 @@ fn wipe_credentials() -> Result<(), String> {
 
     #[cfg(not(debug_assertions))]
     {
-        if let Ok(entry) = Entry::new("frugallm-app", "openrouter") {
-            let _ = entry.delete_credential();
+        for svc in &["openrouter", "google"] {
+            if let Ok(entry) = Entry::new("frugallm-app", svc) {
+                let _ = entry.delete_credential();
+            }
         }
         return Ok(());
     }
@@ -229,6 +320,23 @@ fn check_opencode_status(app: tauri::AppHandle) -> bool {
     false
 }
 
+fn get_ollama_binary() -> std::path::PathBuf {
+    let paths = [
+        "/usr/local/bin/ollama",
+        "/opt/homebrew/bin/ollama",
+        "/usr/bin/ollama",
+        "/Applications/Ollama.app/Contents/Resources/ollama",
+        "/Applications/Ollama.app/Contents/MacOS/Ollama",
+    ];
+    for p in paths {
+        let path = std::path::Path::new(p);
+        if path.exists() {
+            return path.to_path_buf();
+        }
+    }
+    std::path::PathBuf::from("ollama")
+}
+
 fn is_ollama_in_paths(paths: &[&str]) -> bool {
     for p in paths.iter() {
         if std::path::Path::new(p).exists() {
@@ -245,11 +353,12 @@ async fn check_ollama_status() -> bool {
         return true;
     }
 
-    // 2. Check if the binary is in PATH
-    if std::process::Command::new("ollama")
+    // 2. Check if the binary is in PATH or common paths
+    if std::process::Command::new(get_ollama_binary())
         .arg("--version")
         .output()
-        .is_ok()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
     {
         return true;
     }
@@ -259,9 +368,38 @@ async fn check_ollama_status() -> bool {
         "/usr/local/bin/ollama", 
         "/opt/homebrew/bin/ollama", 
         "/usr/bin/ollama",
-        "/Applications/Ollama.app/Contents/MacOS/Ollama"
+        "/Applications/Ollama.app/Contents/Resources/ollama",
+        "/Applications/Ollama.app/Contents/MacOS/Ollama",
+        "/Applications/Ollama.app"
     ];
     is_ollama_in_paths(&paths)
+}
+
+#[tauri::command(async)]
+async fn check_tool_gateway_status(app: tauri::AppHandle) -> bool {
+    // Check local marker file in app_data_dir
+    if let Ok(app_dir) = app.path().app_data_dir() {
+        let marker = app_dir.join("tool_gateway_installed");
+        if marker.exists() {
+            return true;
+        }
+    }
+    false
+}
+
+#[tauri::command]
+fn set_tool_gateway_installed(app: tauri::AppHandle, installed: bool) -> Result<(), String> {
+    let app_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    if !app_dir.exists() {
+        std::fs::create_dir_all(&app_dir).map_err(|e| e.to_string())?;
+    }
+    let marker = app_dir.join("tool_gateway_installed");
+    if installed {
+        std::fs::write(&marker, b"1").map_err(|e| e.to_string())?;
+    } else if marker.exists() {
+        let _ = std::fs::remove_file(&marker);
+    }
+    Ok(())
 }
 
 #[tauri::command(async)]
@@ -537,12 +675,17 @@ async fn try_ollama(
     if let Some(model) = body.get_mut("model") {
         *model = json!(ollama_model);
     }
+    
+    let optimal_threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
     if let Some(obj) = body.as_object_mut() {
         if !obj.contains_key("options") {
-            obj.insert("options".to_string(), json!({ "num_ctx": 131072 }));
+            obj.insert("options".to_string(), json!({ "num_ctx": 131072, "num_thread": optimal_threads }));
         } else if let Some(options) = obj.get_mut("options").and_then(|o| o.as_object_mut()) {
             if !options.contains_key("num_ctx") {
                 options.insert("num_ctx".to_string(), json!(131072));
+            }
+            if !options.contains_key("num_thread") {
+                options.insert("num_thread".to_string(), json!(optimal_threads));
             }
         }
     }
@@ -575,9 +718,16 @@ async fn try_ollama(
         .map_err(|e| format!("Network error: {}", e))?;
 
     if res.status().is_success() {
-        let mut builder = axum::response::Response::builder().status(res.status());
+        let mut builder = axum::response::Response::builder()
+            .status(res.status())
+            .header("Cache-Control", "no-cache")
+            .header("Connection", "keep-alive")
+            .header("X-Accel-Buffering", "no");
+
         for (key, value) in res.headers() {
-            builder = builder.header(key.clone(), value.clone());
+            if key != axum::http::header::CONTENT_LENGTH {
+                builder = builder.header(key.clone(), value.clone());
+            }
         }
         let app_clone = app.clone();
         let source_clone = source.to_string();
@@ -742,16 +892,17 @@ async fn chat_completions(
     }
 
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .tcp_keepalive(std::time::Duration::from_secs(15))
         .build()
         .unwrap_or_else(|_| reqwest::Client::new());
     
-    // Determine if Ollama is viable (skip if CPU-only)
+    // Determine if Ollama is viable and running
     let mut ollama_running = false;
     let mut ollama_viable = false;
     let mut ollama_model = "llama3:8b".to_string();
     
-    if let Ok(tags_res) = client.get("http://127.0.0.1:11434/api/tags").send().await {
+    if let Ok(tags_res) = client.get("http://127.0.0.1:11434/api/tags").timeout(std::time::Duration::from_secs(2)).send().await {
         if tags_res.status().is_success() {
             ollama_running = true;
             if let Ok(tags_json) = tags_res.json::<Value>().await {
@@ -764,21 +915,23 @@ async fn chat_completions(
                             }
                         }
                     }
+                    if !models.is_empty() {
+                        ollama_viable = true;
+                    }
                 }
             }
         }
     }
     
     if ollama_running {
-        if let Ok(ps_res) = client.get("http://127.0.0.1:11434/api/ps").send().await {
+        if let Ok(ps_res) = client.get("http://127.0.0.1:11434/api/ps").timeout(std::time::Duration::from_secs(2)).send().await {
             if let Ok(ps_json) = ps_res.json::<Value>().await {
                 if let Some(models) = ps_json.get("models").and_then(|m| m.as_array()) {
                     if let Some(first) = models.first() {
-                        let size = first.get("size").and_then(|s| s.as_u64()).unwrap_or(0);
-                        let size_vram = first.get("size_vram").and_then(|s| s.as_u64()).unwrap_or(0);
-                        // Only prefer Ollama if it's using GPU/Hybrid (size_vram > 0) or if size is unknown
-                        if size_vram > 0 || size == 0 {
-                            ollama_viable = true;
+                        if let Some(name) = first.get("name").and_then(|n| n.as_str()) {
+                            if !name.is_empty() {
+                                ollama_viable = true;
+                            }
                         }
                     }
                 }
@@ -1084,7 +1237,7 @@ async fn fetch_live_routing_chain(app: &tauri::AppHandle) -> Vec<CloudModel> {
                                 }
                                 
                                 if supports_tools {
-                                    let ctx = m.get("context_length").and_then(|c| c.as_u64()).unwrap_or(8192);
+                                    let _ctx = m.get("context_length").and_then(|c| c.as_u64()).unwrap_or(8192);
                                     let priority = crate::model_db::MODEL_REGISTRY.get_score(id); println!("Score for {} is {}", id, priority);
                                     ranked_chain.push(RankedModel {
                                         model: CloudModel {
@@ -1290,16 +1443,8 @@ async fn configure_opencode_defaults(app: tauri::AppHandle, state: tauri::State<
 }
 
 async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), String> {
-    // Check if the binary already exists on PATH
-    if tokio::process::Command::new("ollama")
-        .arg("--version")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .await
-        .map(|s| s.success())
-        .unwrap_or(false)
-    {
+    // Check if the binary already exists on PATH or common paths
+    if check_ollama_status().await {
         return Ok(());
     }
 
@@ -1307,14 +1452,11 @@ async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), String> {
 
     #[cfg(not(target_os = "windows"))]
     {
-        // CRITICAL: Use .status() instead of .output().
-        // The Ollama install script on macOS spawns a background daemon that
-        // inherits stdout/stderr. If we waited for pipes to close (e.g. using .output()),
-        // it would hang indefinitely. Instead, we use .spawn() and child.wait() which
-        // only waits for the shell process to exit, while the piped readers run independently.
+        // CRITICAL: Set OLLAMA_NO_START=1 so install.sh does not fail on `open -a Ollama`.
+        // The background daemon will be started cleanly by `start_ollama_daemon`.
         let mut child = tokio::process::Command::new("sh")
             .arg("-c")
-            .arg("curl -fsSL https://ollama.com/install.sh | sh")
+            .arg("export OLLAMA_NO_START=1 && curl -fsSL https://ollama.com/install.sh | sh")
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
@@ -1343,9 +1485,9 @@ async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), String> {
             });
         }
 
-        let status = child.wait().await.map_err(|e| e.to_string())?;
+        let _ = child.wait().await;
 
-        if !status.success() {
+        if !check_ollama_status().await {
             return Err("Failed to install Ollama".to_string());
         }
     }
@@ -1399,8 +1541,10 @@ async fn start_ollama_daemon(app: &tauri::AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
+    let ollama_bin = get_ollama_binary();
+
     // Spawn daemon in background — pipe stderr so we can stream boot logs
-    let mut child = tokio::process::Command::new("ollama")
+    let mut child = tokio::process::Command::new(ollama_bin)
         .arg("serve")
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::piped())
@@ -1481,6 +1625,15 @@ struct DownloadProgress {
 }
 
 #[derive(serde::Serialize, Clone)]
+struct ModelProgressPayload {
+    percent: u32,
+    completed: u64,
+    total: u64,
+    speed_bytes_per_sec: f64,
+    eta_seconds: u64,
+}
+
+#[derive(serde::Serialize, Clone)]
 struct DeploymentResult {
     success: bool,
     message: String,
@@ -1522,6 +1675,9 @@ async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
         match client.post("http://127.0.0.1:11434/api/pull").json(&pull_payload).send().await {
             Ok(mut res) => {
                 let mut buffer = Vec::new();
+                let mut last_completed: u64 = 0;
+                let mut last_speed_calc = tokio::time::Instant::now();
+                let mut smoothed_speed: f64 = 0.0;
                 let mut last_emit = tokio::time::Instant::now();
                 while let Ok(Some(chunk)) = res.chunk().await {
                     buffer.extend_from_slice(&chunk);
@@ -1535,8 +1691,35 @@ async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
                                         if t > 0 {
                                             let percent = ((c as f64 / t as f64) * 100.0) as u32;
                                             let now = tokio::time::Instant::now();
+                                            let elapsed_speed = now.duration_since(last_speed_calc).as_secs_f64();
+
+                                            if elapsed_speed >= 0.4 {
+                                                let delta_bytes = if c >= last_completed { c - last_completed } else { c };
+                                                let current_instant_speed = delta_bytes as f64 / elapsed_speed;
+                                                if smoothed_speed == 0.0 {
+                                                    smoothed_speed = current_instant_speed;
+                                                } else {
+                                                    smoothed_speed = 0.65 * smoothed_speed + 0.35 * current_instant_speed;
+                                                }
+                                                last_completed = c;
+                                                last_speed_calc = now;
+                                            }
+
+                                            let remaining_bytes = t.saturating_sub(c);
+                                            let eta_seconds = if smoothed_speed > 1024.0 {
+                                                (remaining_bytes as f64 / smoothed_speed) as u64
+                                            } else {
+                                                0
+                                            };
+
                                             if now.duration_since(last_emit) > tokio::time::Duration::from_millis(100) || percent == 100 {
-                                                let _ = app_clone.emit("model_download_progress", percent);
+                                                let _ = app_clone.emit("model_download_progress", ModelProgressPayload {
+                                                    percent,
+                                                    completed: c,
+                                                    total: t,
+                                                    speed_bytes_per_sec: smoothed_speed,
+                                                    eta_seconds,
+                                                });
                                                 last_emit = now;
                                             }
                                         }
@@ -1558,7 +1741,8 @@ async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
         }
 
 
-        let child_res = tokio::process::Command::new("ollama")
+        let ollama_bin = get_ollama_binary();
+        let child_res = tokio::process::Command::new(ollama_bin)
             .current_dir(&models_dir)
             .arg("create")
             .arg("frugallm-active")
@@ -1822,6 +2006,7 @@ fn main() {
             get_launch_options,
             set_credential,
             get_credential,
+            delete_credential,
             wipe_credentials,
             check_hermes_status,
             check_opencode_status,
@@ -1842,7 +2027,9 @@ fn main() {
             restart_app,
             get_routing_chain,
             set_routing_chain,
-            refresh_routing_chain
+            refresh_routing_chain,
+            check_tool_gateway_status,
+            set_tool_gateway_installed
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

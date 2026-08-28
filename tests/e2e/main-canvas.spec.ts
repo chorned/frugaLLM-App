@@ -39,7 +39,7 @@ test.describe('Main Canvas Dashboard', () => {
     await expect(canvas.nodes).toHaveCount(6);
     
     // Verify specific nodes
-    const ollamaNode = await canvas.getNode('Local Hardware');
+    const ollamaNode = await canvas.getNode('Ollama (Local LLM)');
     await expect(ollamaNode).toBeVisible();
     
     // Node status should be updated by mock (Ollama should be STANDBY/CONNECTED initially)

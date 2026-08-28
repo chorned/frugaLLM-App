@@ -17,6 +17,8 @@ import { CloudRoutingPanel } from './components/CloudRoutingPanel';
 import { useOnboarding } from './hooks/useOnboarding';
 import { OnboardingDecision } from './components/OnboardingDecision';
 import { OnboardingOverlay } from './components/OnboardingOverlay';
+import en from './locales/en.json';
+import { loadOnnxClassifier, clearOnnxCache } from './services/onnxGateway';
 import agentsGuide from './guides/agents.md?raw';
 import ollamaGuide from './guides/ollama.md?raw';
 import openrouterGuide from './guides/openrouter.md?raw';
@@ -70,7 +72,7 @@ const initialNodes: AppNode[] = [
     id: 'node-ollama',
     x: 50, y: 50,
     data: { 
-      label: 'OLLAMA LOCAL', 
+      label: 'Ollama (Local LLM)', 
       description: 'Your private, local brain! Ollama runs lightweight open-source models right on your machine, keeping your data entirely private and free from cloud costs.',
       ip: '127.0.0.1', 
       port: '11434',
@@ -160,8 +162,9 @@ const Tooltip = ({ text }: { text: string }) => {
   );
 };
 
-const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeInstalled, isOllamaInstalled, detectedVram, setDetectedVram, hasActiveBackend, handleInitializeHermes, handleOpenHermes, handleUninstallHermes, handleInitializeOpenCode, handleOpenOpenCode, handleUninstallOpenCode, handleInitializeOllama, handleOpenOllama, handleUninstallOllama, handleDisconnectOpenRouter, frugalConfig, handleOpenHermesDesktop, handleOpenHermesWeb, handleOpenOpenCodeWeb, activeProcesses, handleKillProcess }: any) => {
+const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeInstalled, isOllamaInstalled, isToolGatewayInstalled, detectedVram, setDetectedVram, hasActiveBackend, handleInitializeHermes, handleOpenHermes, handleUninstallHermes, handleInitializeOpenCode, handleOpenOpenCode, handleUninstallOpenCode, handleInitializeOllama, handleOpenOllama, handleUninstallOllama, handleInstallToolGateway, handleUninstallToolGateway, handleDisconnectOpenRouter, handleDisconnectGoogle, frugalConfig, handleOpenHermesDesktop, handleOpenHermesWeb, handleOpenOpenCodeWeb, activeProcesses, handleKillProcess, setFrugalConfig }: any) => {
   const [confirmUninstall, setConfirmUninstall] = useState<string | null>(null);
+  const [showToolGatewayPrompt, setShowToolGatewayPrompt] = useState<'install' | 'uninstall' | null>(null);
   const [ipCopied, setIpCopied] = useState(false);
   
   const [formData, setFormData] = useState({
@@ -173,7 +176,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
     bin: node.data.bin || '',
     extraArgs: node.data.extraArgs || '',
     prompt: node.data.prompt || '',
-    apiKey: '', // specifically for openrouter credentials
+    apiKey: '',
     googleApiKey: '',
     bind_all_interfaces: false,
     api_password: '',
@@ -250,17 +253,17 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
             <>
               <div>
                 <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>SCHEMA PATH <Tooltip text="Think of this as the agent's strict instruction manual. By giving it a JSON schema, we force the AI to return data in the exact structure your application expects. No more messy text—just clean data!" /></label>
-                <input type="text" name="schemaPath" value={formData.schemaPath} onChange={handleChange}
+                <input type="text" name="schemaPath" value={formData.schemaPath} onChange={handleChange} 
                   style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
               </div>
               <div>
                 <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>WORKING DIR (CWD) <Tooltip text="Where should the agent live while it works? This is the folder on your computer where the agent will run commands and look for files. It's basically the agent's home base." /></label>
-                <input type="text" name="cwd" value={formData.cwd} onChange={handleChange}
+                <input type="text" name="cwd" value={formData.cwd} onChange={handleChange} 
                   style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
               </div>
               <div>
                 <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>EXECUTABLE (BIN) <Tooltip text="Which program is actually doing the heavy lifting? This tells the system what tool to launch under the hood. Usually, it's 'agy' for our Antigravity agent, but you can plug in any CLI tool!" /></label>
-                <input type="text" name="bin" value={formData.bin} onChange={handleChange}
+                <input type="text" name="bin" value={formData.bin} onChange={handleChange} 
                   style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
               </div>
               <div>
@@ -270,37 +273,41 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
               </div>
               <div>
                 <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>INSTRUCTION PROMPT <Tooltip text="This is your agent's main mission. Tell it exactly what you want it to accomplish. Be as specific as possible—the better the prompt, the better the results!" /></label>
-                <textarea name="prompt" value={formData.prompt} onChange={handleChange}
-                  style={{ width: '100%', minHeight: '80px', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none', resize: 'vertical' }} />
+                <textarea name="prompt" value={formData.prompt} onChange={handleChange} rows={3} 
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
               </div>
             </>
           ) : (
             <>
               {node.id !== 'node-openrouter' && node.id !== 'node-google' && (
-                <>
-                  <div>
-                    <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>IP ADDRESS / HOST <Tooltip text="Where does this service live on the network? Usually, it's right here on your computer ('127.0.0.1' or 'localhost'), but it could be a cloud API halfway across the world!" /></label>
+                <div>
+                  <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>IP ADDRESS / HOST <Tooltip text="Where does this service live on the network? Usually, it's right here on your computer ('127.0.0.1' or 'localhost'), but it could be a cloud API halfway across the world!" /></label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
                     {node.id === 'node-frugallm' || node.id === 'node-hermes' || node.id === 'node-opencode' ? (
-                      <div style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '8px', color: 'var(--zen-text)', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, cursor: 'not-allowed' }}>
+                      <div style={{ flex: 1, padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: 'var(--zen-surface-hover)', color: '#4b5563', fontFamily: 'inherit', fontWeight: 600 }}>
                         {node.id === 'node-frugallm' ? (formData.bind_all_interfaces ? '0.0.0.0' : '127.0.0.1') : formData.ip}
                       </div>
                     ) : (
-                      <input type="text" name="ip" value={formData.ip} onChange={handleChange}
-                        style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
+                      <input type="text" name="ip" value={formData.ip} onChange={handleChange} 
+                        style={{ flex: 1, padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
                     )}
                   </div>
-                  <div>
-                    <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>PORT <Tooltip text="Think of the IP address as the building, and the Port as the specific door to knock on. It's how our hub knows exactly where to send its messages." /></label>
+                </div>
+              )}
+              {node.id !== 'node-openrouter' && node.id !== 'node-google' && (
+                <div>
+                  <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>PORT <Tooltip text="Think of the IP address as the building, and the Port as the specific door to knock on. It's how our hub knows exactly where to send its messages." /></label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
                     {node.id === 'node-hermes' || node.id === 'node-opencode' || node.id === 'node-frugallm' ? (
-                      <div style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '8px', color: 'var(--zen-text)', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, cursor: 'not-allowed' }}>
+                      <div style={{ flex: 1, padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: 'var(--zen-surface-hover)', color: '#4b5563', fontFamily: 'inherit', fontWeight: 600 }}>
                         {formData.port}
                       </div>
                     ) : (
-                      <input type="text" name="port" value={formData.port} onChange={handleChange}
-                        style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
+                      <input type="text" name="port" value={formData.port} onChange={handleChange} 
+                        style={{ flex: 1, padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
                     )}
                   </div>
-                </>
+                </div>
               )}
               {node.id === 'node-frugallm' && (
                 <>
@@ -318,6 +325,70 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
                     {ipCopied ? '✓ OK' : 'COPY IP & PORT'}
                   </button>
 
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700, color: 'var(--zen-text)' }}>
+                      <input 
+                        type="checkbox" 
+                        name="bind_all_interfaces" 
+                        checked={formData.bind_all_interfaces} 
+                        onChange={(e) => setFormData(prev => ({ ...prev, bind_all_interfaces: e.target.checked }))} 
+                      />
+                      Make available everywhere
+                      <Tooltip text="Making FrugaLLM available everywhere means it will detect traffic from all your network connections. Do not enable this if you only using FrugaLLM on one machine." />
+                    </label>
+                  </div>
+
+                  <div style={{ marginTop: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', margin: 0 }}>API PASSWORD (OPTIONAL) <Tooltip text="Set an API token to secure your FrugalLM node." /></label>
+                      {frugalConfig?.api_password && (
+                        <span style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: 700 }}>• ACTIVE</span>
+                      )}
+                    </div>
+                    {frugalConfig?.api_password ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {confirmUninstall === 'overwrite-password' ? (
+                          <div style={{ padding: '8px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px' }}>
+                            <span style={{ fontSize: '0.8rem', color: 'var(--zen-text)', fontWeight: 700 }}>OVERWRITE EXISTING PASSWORD?</span>
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                              <button onClick={() => {
+                                setFormData(prev => ({ ...prev, api_password: '' }));
+                                setConfirmUninstall(null);
+                              }} style={{ flex: 1, padding: '6px', backgroundColor: '#3b82f6', color: '#FFFFFF', border: 'none', borderRadius: '4px', fontWeight: 700, cursor: 'pointer' }}>YES</button>
+                              <button onClick={() => setConfirmUninstall(null)} style={{ flex: 1, padding: '6px', backgroundColor: '#e5e7eb', color: '#374151', border: 'none', borderRadius: '4px', fontWeight: 700, cursor: 'pointer' }}>NO</button>
+                            </div>
+                          </div>
+                        ) : confirmUninstall === 'remove-password' ? (
+                          <div style={{ padding: '8px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px' }}>
+                            <span style={{ fontSize: '0.8rem', color: '#ef4444', fontWeight: 700 }}>REMOVE PASSWORD?</span>
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                              <button onClick={async () => {
+                                try {
+                                  await invoke('set_frugallm_config', { newConfig: { ...frugalConfig, api_password: null } });
+                                  const updated = await invoke('get_frugallm_config');
+                                  setFrugalConfig(updated);
+                                  setFormData(prev => ({ ...prev, api_password: '' }));
+                                } catch (e) {
+                                  console.error(e);
+                                }
+                                setConfirmUninstall(null);
+                              }} style={{ flex: 1, padding: '6px', backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '4px', fontWeight: 700, cursor: 'pointer' }}>YES</button>
+                              <button onClick={() => setConfirmUninstall(null)} style={{ flex: 1, padding: '6px', backgroundColor: '#e5e7eb', color: '#374151', border: 'none', borderRadius: '4px', fontWeight: 700, cursor: 'pointer' }}>NO</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button onClick={() => setConfirmUninstall('overwrite-password')} style={{ flex: 1, padding: '8px', backgroundColor: 'transparent', color: '#3b82f6', border: '1px solid #3b82f6', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontSize: '0.75rem' }}>APPLY PASSWORD</button>
+                            <button onClick={() => setConfirmUninstall('remove-password')} style={{ flex: 1, padding: '8px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #ef4444', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontSize: '0.75rem' }}>REMOVE</button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <input type="password" name="api_password" value={formData.api_password} onChange={handleChange} placeholder="Super secret..."
+                        style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
+                    )}
+                  </div>
+
                   <div style={{ marginTop: '0px' }}>
                     <CloudRoutingPanel />
                   </div>
@@ -326,14 +397,14 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
               {node.id === 'node-openrouter' && (
                 <div style={{ marginTop: '16px' }}>
                   <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>API KEY <Tooltip text="Your OpenRouter API Key. This will be securely saved into your operating system's native Keychain!" /></label>
-                  <input type="password" name="apiKey" value={formData.apiKey || ''} onChange={handleChange} placeholder="sk-or-v1-..."
+                  <input type="password" name="apiKey" value={formData.apiKey || ''} onChange={handleChange} placeholder={node.data.status === 'active' ? "•••••••••••••••• (Key Configured)" : "sk-or-v1-..."}
                     style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
                 </div>
               )}
               {node.id === 'node-google' && (
                 <div style={{ marginTop: '16px' }}>
                   <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>API KEY <Tooltip text="Your Google AI Studio API Key. This will be securely saved into your operating system's native Keychain!" /></label>
-                  <input type="password" name="googleApiKey" value={formData.googleApiKey || ''} onChange={handleChange} placeholder="AIzaSy..."
+                  <input type="password" name="googleApiKey" value={formData.googleApiKey || ''} onChange={handleChange} placeholder={node.data.status === 'active' ? "•••••••••••••••• (Key Configured)" : "AIzaSy..."}
                     style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
                 </div>
               )}
@@ -533,6 +604,129 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
           )}
         </div>
       )}
+
+      {node.id === 'node-ollama' && isOllamaInstalled === true && (
+        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <h4 style={{ margin: 0, color: 'var(--zen-text)', fontSize: '0.85rem', fontWeight: 700, letterSpacing: '0.5px' }}>
+              {en.routingGraph.nodeConfigPanel.actions.toolGateway.title}
+            </h4>
+            <span 
+              data-testid="tool-gateway-status"
+              style={{ 
+              fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '4px',
+              backgroundColor: isToolGatewayInstalled ? '#dcfce7' : '#f3f4f6',
+              color: isToolGatewayInstalled ? '#15803d' : '#6b7280',
+              border: `1px solid ${isToolGatewayInstalled ? '#86efac' : '#d1d5db'}`
+            }}>
+              {isToolGatewayInstalled ? en.routingGraph.nodeConfigPanel.actions.toolGateway.installed : en.routingGraph.nodeConfigPanel.actions.toolGateway.notInstalled}
+            </span>
+          </div>
+
+          <p style={{ margin: '0 0 12px 0', fontSize: '0.75rem', color: 'var(--zen-text-secondary)', lineHeight: '1.4' }}>
+            {en.routingGraph.nodeConfigPanel.actions.toolGateway.description}
+          </p>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', userSelect: 'none' }}>
+            <input 
+              type="checkbox"
+              name="toolGatewayCheckbox"
+              data-testid="tool-gateway-checkbox"
+              checked={!!frugalConfig?.tool_enforcing_gateway}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                if (checked) {
+                  if (!isToolGatewayInstalled) {
+                    setShowToolGatewayPrompt('install');
+                  } else {
+                    const next = { ...frugalConfig, tool_enforcing_gateway: true };
+                    if (setFrugalConfig) setFrugalConfig(next);
+                    invoke('set_frugallm_config', { config: next }).catch(console.error);
+                  }
+                } else {
+                  if (isToolGatewayInstalled) {
+                    setShowToolGatewayPrompt('uninstall');
+                  } else {
+                    const next = { ...frugalConfig, tool_enforcing_gateway: false };
+                    if (setFrugalConfig) setFrugalConfig(next);
+                    invoke('set_frugallm_config', { config: next }).catch(console.error);
+                  }
+                }
+              }}
+              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+            />
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--zen-text)' }}>
+              {en.routingGraph.nodeConfigPanel.actions.toolGateway.checkboxLabel}
+            </span>
+          </label>
+
+          {showToolGatewayPrompt === 'install' && (
+            <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '6px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '0.8rem', color: '#9a3412', fontWeight: 700 }}>
+                {en.routingGraph.nodeConfigPanel.actions.toolGateway.installPromptTitle}
+              </span>
+              <span style={{ fontSize: '0.75rem', color: '#9a3412', lineHeight: '1.3' }}>
+                {en.routingGraph.nodeConfigPanel.actions.toolGateway.installPromptText}
+              </span>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                <button 
+                  data-testid="confirm-install-tool-gateway"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowToolGatewayPrompt(null);
+                    handleInstallToolGateway();
+                  }}
+                  style={{ flex: 1, padding: '8px', backgroundColor: 'var(--zen-accent)', color: '#ffffff', border: 'none', borderRadius: '4px', fontWeight: 700, cursor: 'pointer', fontSize: '0.75rem' }}
+                >
+                  {en.routingGraph.nodeConfigPanel.actions.toolGateway.installButton}
+                </button>
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowToolGatewayPrompt(null);
+                  }}
+                  style={{ flex: 1, padding: '8px', backgroundColor: '#f3f4f6', color: '#374151', border: '1px solid #d1d5db', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '0.75rem' }}
+                >
+                  {en.routingGraph.nodeConfigPanel.actions.toolGateway.cancelButton}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {showToolGatewayPrompt === 'uninstall' && (
+            <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '0.8rem', color: '#991b1b', fontWeight: 700 }}>
+                {en.routingGraph.nodeConfigPanel.actions.toolGateway.uninstallPromptTitle}
+              </span>
+              <span style={{ fontSize: '0.75rem', color: '#991b1b', lineHeight: '1.3' }}>
+                {en.routingGraph.nodeConfigPanel.actions.toolGateway.uninstallPromptText}
+              </span>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                <button 
+                  data-testid="confirm-uninstall-tool-gateway"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowToolGatewayPrompt(null);
+                    handleUninstallToolGateway();
+                  }}
+                  style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#ffffff', border: 'none', borderRadius: '4px', fontWeight: 700, cursor: 'pointer', fontSize: '0.75rem' }}
+                >
+                  {en.routingGraph.nodeConfigPanel.actions.toolGateway.uninstallButton}
+                </button>
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowToolGatewayPrompt(null);
+                  }}
+                  style={{ flex: 1, padding: '8px', backgroundColor: '#f3f4f6', color: '#374151', border: '1px solid #d1d5db', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '0.75rem' }}
+                >
+                  {en.routingGraph.nodeConfigPanel.actions.toolGateway.cancelButton}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       
       {node.id === 'node-openrouter' && node.data.status === 'active' && (
         <div style={{ marginTop: '20px', padding: '16px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px' }}>
@@ -549,6 +743,29 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <button 
                 onClick={(e) => { e.stopPropagation(); setConfirmUninstall('openrouter'); }}
+                style={{ width: '100%', padding: '8px', backgroundColor: 'transparent', color: '#ef4444', border: '2px dashed #ef4444', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
+                DISCONNECT
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {node.id === 'node-google' && node.data.status === 'active' && (
+        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px' }}>
+          <h4 style={{ margin: '0 0 10px 0', color: 'var(--zen-text)', fontSize: '0.9rem' }}>GOOGLE AI STUDIO CONNECTED</h4>
+          {confirmUninstall === 'google' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--zen-text)', fontWeight: 700 }}>ARE YOU SURE?</span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={(e) => { e.stopPropagation(); handleDisconnectGoogle(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#FFFFFF', border: '2px solid #991b1b', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
+                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#e5e7eb', color: '#374151', border: '2px solid #9ca3af', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button 
+                onClick={(e) => { e.stopPropagation(); setConfirmUninstall('google'); }}
                 style={{ width: '100%', padding: '8px', backgroundColor: 'transparent', color: '#ef4444', border: '2px dashed #ef4444', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
                 DISCONNECT
               </button>
@@ -574,11 +791,46 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
   );
 };
 
-const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, frugalConfig, setIsHermesInstalled, setIsOpenCodeInstalled, setIsOllamaInstalled }: { mode: 'install-hermes' | 'run-hermes' | 'run-hermes-web' | 'run-hermes-desktop' | 'install-opencode' | 'run-opencode' | 'run-opencode-web' | 'install-ollama' | 'run-ollama', sessionId: string, onExit: () => void, onProcessStart?: () => void, onProcessExit?: () => void, frugalConfig?: any, setIsHermesInstalled: (installed: boolean) => void, setIsOpenCodeInstalled: (installed: boolean) => void, setIsOllamaInstalled: (installed: boolean) => void }) => {
+const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, frugalConfig, setFrugalConfig, setIsHermesInstalled, setIsOpenCodeInstalled, setIsOllamaInstalled, setIsToolGatewayInstalled }: { mode: 'install-hermes' | 'run-hermes' | 'run-hermes-web' | 'run-hermes-desktop' | 'install-opencode' | 'run-opencode' | 'run-opencode-web' | 'install-ollama' | 'run-ollama' | 'install-tool-gateway' | 'uninstall-tool-gateway', sessionId: string, onExit: () => void, onProcessStart?: () => void, onProcessExit?: () => void, frugalConfig?: any, setFrugalConfig?: any, setIsHermesInstalled: (installed: boolean) => void, setIsOpenCodeInstalled: (installed: boolean) => void, setIsOllamaInstalled: (installed: boolean) => void, setIsToolGatewayInstalled?: (installed: boolean) => void }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const [isProvisioningModel, setIsProvisioningModel] = useState(false);
   const [downloadPercent, setDownloadPercent] = useState<number>(0);
+  const [downloadStats, setDownloadStats] = useState<{
+    completed: number;
+    total: number;
+    speedBytesPerSec: number;
+    etaSeconds: number;
+  }>({ completed: 0, total: 0, speedBytesPerSec: 0, etaSeconds: 0 });
   const [showConfirmClose, setShowConfirmClose] = useState(false);
+
+  const formatBytes = (bytes: number) => {
+    if (!bytes || bytes <= 0) return '0 B';
+    const gb = bytes / (1024 * 1024 * 1024);
+    if (gb >= 1) return `${gb.toFixed(1)} GB`;
+    const mb = bytes / (1024 * 1024);
+    if (mb >= 1) return `${mb.toFixed(0)} MB`;
+    return `${(bytes / 1024).toFixed(0)} KB`;
+  };
+
+  const formatSpeed = (bytesPerSec: number) => {
+    if (!bytesPerSec || bytesPerSec <= 0) return '';
+    const mb = bytesPerSec / (1024 * 1024);
+    if (mb >= 1) return `${mb.toFixed(1)} MB/s`;
+    const kb = bytesPerSec / 1024;
+    if (kb >= 1) return `${kb.toFixed(0)} KB/s`;
+    return `${Math.round(bytesPerSec)} B/s`;
+  };
+
+  const formatEta = (seconds: number) => {
+    if (!seconds || seconds <= 0) return '';
+    if (seconds < 60) return `${seconds}s left`;
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins < 60) return `${mins}m ${secs}s left`;
+    const hours = Math.floor(mins / 60);
+    const remMins = mins % 60;
+    return `${hours}h ${remMins}m left`;
+  };
 
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -593,7 +845,6 @@ const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, 
     term.loadAddon(fitAddon);
     term.open(terminalRef.current);
     
-    // Explicitly fit before spawning PTY so cols/rows are initialized correctly
     try {
       fitAddon.fit();
     } catch (e) {
@@ -617,25 +868,121 @@ const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, 
     });
     resizeObserver.observe(terminalRef.current);
 
-    let unlistenOutput: (() => void) | null = null;
-    let unlistenExit: (() => void) | null = null;
     let isMounted = true;
+    let unlistenOutput: (() => void) | undefined;
+    let unlistenExit: (() => void) | undefined;
 
-    const start = async () => {
-      if (mode.startsWith('install')) {
+    const setupPty = async () => {
+      try {
+        await invoke('kill_pty', { sessionId });
+      } catch (e) {
+        // Ignored
+      }
+      
+      if (mode === 'install-tool-gateway') {
+        setIsProvisioningModel(true);
+        setDownloadPercent(0);
+        setDownloadStats({ completed: 0, total: 0, speedBytesPerSec: 0, etaSeconds: 0 });
+        term.writeln('Initializing Tool Enforcing Gateway (ONNX: Xenova/nli-deberta-v3-small)...');
+        term.writeln('>>> Downloading ONNX model weights and tokenizer...');
+
+        let lastCompleted = 0;
+        let lastSpeedCalc = Date.now();
+        let smoothedSpeed = 0;
+        const fileProgress: Record<string, { loaded: number; total: number }> = {};
+
+        try {
+          await loadOnnxClassifier((info) => {
+            if (info.status === 'progress' && info.total && info.file) {
+              fileProgress[info.file] = { loaded: info.loaded || 0, total: info.total };
+              let totalLoaded = 0;
+              let totalSize = 0;
+              Object.values(fileProgress).forEach(f => {
+                totalLoaded += f.loaded;
+                totalSize += f.total;
+              });
+              if (totalSize > 0) {
+                const percent = Math.min(100, Math.round((totalLoaded / totalSize) * 100));
+                setDownloadPercent(percent);
+                
+                const now = Date.now();
+                const elapsedSec = (now - lastSpeedCalc) / 1000;
+                if (elapsedSec >= 0.3) {
+                  const delta = totalLoaded >= lastCompleted ? totalLoaded - lastCompleted : totalLoaded;
+                  const instSpeed = delta / Math.max(0.1, elapsedSec);
+                  smoothedSpeed = smoothedSpeed === 0 ? instSpeed : 0.65 * smoothedSpeed + 0.35 * instSpeed;
+                  lastCompleted = totalLoaded;
+                  lastSpeedCalc = now;
+                }
+                const remainingBytes = Math.max(0, totalSize - totalLoaded);
+                const etaSec = smoothedSpeed > 1024 ? Math.round(remainingBytes / smoothedSpeed) : 0;
+                setDownloadStats({
+                  completed: totalLoaded,
+                  total: totalSize,
+                  speedBytesPerSec: smoothedSpeed,
+                  etaSeconds: etaSec,
+                });
+              }
+            } else if (info.status === 'done' && info.file) {
+              term.writeln(`>>> Downloaded: ${info.file}`);
+            }
+          });
+
+          setIsProvisioningModel(false);
+          if (setIsToolGatewayInstalled) setIsToolGatewayInstalled(true);
+          try {
+            await invoke('set_tool_gateway_installed', { installed: true });
+            if (setFrugalConfig) {
+              setFrugalConfig((prev: any) => {
+                const next = { ...prev, tool_enforcing_gateway: true };
+                invoke('set_frugallm_config', { config: next }).catch(console.error);
+                return next;
+              });
+            }
+            term.writeln(`\r\n\x1b[32mTool Enforcing Gateway (ONNX: Xenova/nli-deberta-v3-small) installed successfully!\x1b[0m\r\n`);
+            confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+            setTimeout(() => { if (isMounted) onExit(); }, 2000);
+          } catch (err) {
+            term.writeln(`\r\n\x1b[31mFailed to update configuration: ${err}\x1b[0m\r\n`);
+          }
+        } catch (err) {
+          setIsProvisioningModel(false);
+          term.writeln(`\r\n\x1b[31mFailed to install ONNX model: ${err}\x1b[0m\r\n`);
+        }
+      } else if (mode === 'uninstall-tool-gateway') {
+        term.writeln('Uninstalling Tool Enforcing Gateway (ONNX)...');
+        try {
+          await clearOnnxCache();
+          if (setIsToolGatewayInstalled) setIsToolGatewayInstalled(false);
+          await invoke('set_tool_gateway_installed', { installed: false });
+          if (setFrugalConfig) {
+            setFrugalConfig((prev: any) => {
+              const next = { ...prev, tool_enforcing_gateway: false };
+              invoke('set_frugallm_config', { config: next }).catch(console.error);
+              return next;
+            });
+          }
+          term.writeln(`\r\n\x1b[32mTool Enforcing Gateway (ONNX) cache cleared and uninstalled.\x1b[0m\r\n`);
+          setTimeout(() => { if (isMounted) onExit(); }, 1500);
+        } catch (err) {
+          term.writeln(`\r\n\x1b[31mFailed to uninstall: ${err}\x1b[0m\r\n`);
+        }
+      } else if (mode.startsWith('install')) {
         let installingText = 'Initializing installation...';
-        if (mode === 'install-opencode') installingText = 'Initializing OpenCode environment...';
-        if (mode === 'install-hermes') installingText = 'Initializing Hermes Agent environment...';
+        if (mode === 'install-hermes') installingText = 'Installing Hermes Agent...';
+        if (mode === 'install-opencode') installingText = 'Installing OpenCode...';
         if (mode === 'install-ollama') installingText = 'Initializing Ollama installation...';
         term.writeln(installingText);
+        
         unlistenOutput = await listen<{ session_id: string, data: string }>('pty_output', (event) => {
           if (event.payload.session_id === sessionId) {
             term.write(event.payload.data);
+            window.dispatchEvent(new CustomEvent('pty_bytes', { detail: event.payload.data.length }));
           }
         });
-        unlistenExit = await listen<{ session_id: string, exit_code: number }>('pty_exit', (event) => {
+        unlistenExit = await listen<{ session_id: string, exit_code: number }>('pty_exit', async (event) => {
           if (event.payload.session_id !== sessionId) return;
-          term.writeln(`\r\n\x1b[32mInstallation finished with code ${event.payload.exit_code}\x1b[0m\r\n`);
+          if (onProcessExit) onProcessExit();
           if (event.payload.exit_code === 0) {
             if (mode === 'install-opencode') {
               setIsOpenCodeInstalled(true);
@@ -643,10 +990,10 @@ const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, 
                 if (!isMounted) return;
                 try {
                   await invoke('configure_opencode_defaults');
-                  term.writeln(`\\r\\n\\x1b[32mConfiguration applied. Closing...\\x1b[0m\\r\\n`);
+                  term.writeln(`\r\n\x1b[32mConfiguration applied. Closing...\x1b[0m\r\n`);
                   setTimeout(() => { if (isMounted) onExit(); }, 1000);
                 } catch (err) {
-                  term.writeln(`\\r\\n\\x1b[31mFailed to configure OpenCode: ${err}\\x1b[0m\\r\\n`);
+                  term.writeln(`\r\n\x1b[31mFailed to configure OpenCode: ${err}\x1b[0m\r\n`);
                 }
               }, 1000);
             } else if (mode !== 'install-ollama') {
@@ -656,30 +1003,22 @@ const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, 
                   await invoke('configure_hermes_defaults');
                   term.writeln(`\r\n\x1b[32mConfiguration applied.\x1b[0m\r\n`);
                   
-                  term.writeln(`\r\n\x1b[33mTesting Hermes installation...\x1b[0m`);
-                  let installed = false;
-                  for (let i = 0; i < 5; i++) {
-                     installed = await invoke('check_hermes_status');
-                     if (installed) break;
-                     await new Promise(r => setTimeout(r, 1000));
+                  if (setIsHermesInstalled) {
+                    setIsHermesInstalled(true);
                   }
                   
-                  if (installed) {
-                    setIsHermesInstalled(true);
-                    term.writeln(`\r\n\x1b[32mHermes installed successfully!\x1b[0m\r\n`);
-                    confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
-                  } else {
-                    term.writeln(`\r\n\x1b[31mHermes installation check failed.\x1b[0m\r\n`);
-                  }
-                  setTimeout(() => { if (isMounted) onExit(); }, 3000);
+                  confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+                  setTimeout(() => { if (isMounted) onExit(); }, 1500);
                 } catch (err) {
                   term.writeln(`\r\n\x1b[31mFailed to configure Hermes: ${err}\x1b[0m\r\n`);
                 }
               }, 1000);
             }
+          } else {
+            term.writeln(`\r\n\x1b[31mProcess exited with code ${event.payload.exit_code}\x1b[0m\r\n`);
           }
         });
-        
+
         if (!isMounted) return;
         if (onProcessStart) onProcessStart();
         if (mode === 'install-opencode') {
@@ -690,31 +1029,27 @@ const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, 
           const unlisten4 = await listen('model_provisioning_started', () => {
              setIsProvisioningModel(true);
              setDownloadPercent(0);
+             setDownloadStats({ completed: 0, total: 0, speedBytesPerSec: 0, etaSeconds: 0 });
           });
-          const unlisten5 = await listen<number>('model_download_progress', (event) => {
-             setDownloadPercent(event.payload);
+          const unlisten5 = await listen<any>('model_download_progress', (event) => {
+             if (typeof event.payload === 'number') {
+               setDownloadPercent(event.payload);
+             } else if (event.payload && typeof event.payload === 'object') {
+               setDownloadPercent(event.payload.percent ?? 0);
+               setDownloadStats({
+                 completed: event.payload.completed ?? 0,
+                 total: event.payload.total ?? 0,
+                 speedBytesPerSec: event.payload.speed_bytes_per_sec ?? 0,
+                 etaSeconds: event.payload.eta_seconds ?? 0,
+               });
+             }
           });
           const unlisten3 = await listen<{ success: boolean; message: string }>('model_deployment_complete', async (event) => {
             setIsProvisioningModel(false);
             if (event.payload.success) {
               setIsOllamaInstalled(true);
               term.writeln(`\r\n\x1b[32mModel Provisioned successfully.\x1b[0m\r\n`);
-              term.writeln(`\r\n\x1b[33mTesting endpoint...\x1b[0m`);
-              try {
-                const response = await tauriFetch('http://127.0.0.1:11434/api/generate', {
-                   method: 'POST',
-                   headers: { 'Content-Type': 'application/json' },
-                   body: JSON.stringify({ model: 'frugallm-active', prompt: 'say hi', stream: false })
-                });
-                if (response.ok) {
-                   term.writeln(`\r\n\x1b[32mEndpoint test succeeded!\x1b[0m\r\n`);
-                   confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
-                } else {
-                   term.writeln(`\r\n\x1b[31mEndpoint test failed with status ${response.status}\x1b[0m\r\n`);
-                }
-              } catch (e) {
-                 term.writeln(`\r\n\x1b[31mEndpoint test failed: ${e}\x1b[0m\r\n`);
-              }
+              confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
               setTimeout(() => { if (isMounted) onExit(); }, 3000);
             } else {
               console.error(event.payload.message);
@@ -775,7 +1110,7 @@ const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, 
         } else if (mode === 'run-opencode-web') {
           await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && export PATH="$HOME/.opencode/bin:$PATH" && ${frugalEnv} && opencode web`] });
         } else if (mode === 'run-ollama') {
-          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && ${frugalEnv} && ollama run frugallm-active`] });
+          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && export PATH="/usr/local/bin:/opt/homebrew/bin:/Applications/Ollama.app/Contents/Resources:$PATH" && ${frugalEnv} && ollama run frugallm-active`] });
         } else if (mode === 'run-hermes-web') {
           await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && export PATH="$HOME/.hermes/bin:$PATH" && ${frugalEnv} && hermes dashboard`] });
         } else if (mode === 'run-hermes-desktop') {
@@ -792,30 +1127,36 @@ const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, 
         };
       }
     };
-    start();
+
+    setupPty();
 
     return () => {
       isMounted = false;
+      window.clearTimeout(fitTimeout);
       resizeObserver.disconnect();
-      invoke('kill_pty', { sessionId }).catch(console.error);
       if (unlistenOutput) unlistenOutput();
       if (unlistenExit) unlistenExit();
       term.dispose();
     };
-  }, [mode]);
+  }, [mode, sessionId]);
+
+  let title = 'Terminal Runner';
+  if (mode === 'install-hermes') title = 'Hermes Agent Installation';
+  if (mode === 'run-hermes') title = 'Hermes Terminal';
+  if (mode === 'run-hermes-web') title = 'Hermes Web Dashboard';
+  if (mode === 'run-hermes-desktop') title = 'Hermes Desktop UI';
+  if (mode === 'install-opencode') title = 'OpenCode Installation';
+  if (mode === 'run-opencode') title = 'OpenCode Terminal';
+  if (mode === 'run-opencode-web') title = 'OpenCode Web UI';
+  if (mode === 'install-ollama') title = 'Ollama';
+  if (mode === 'run-ollama') title = 'Ollama Local Chat';
+  if (mode === 'install-tool-gateway' || mode === 'uninstall-tool-gateway') title = 'Tool Enforcing Gateway';
 
   return (
-    <div style={{ 
-      position: 'absolute', top: '10vh', left: '50%', transform: 'translateX(-50%)',
-      width: '80%', maxWidth: '800px', height: '60vh',
-      backgroundColor: 'var(--zen-surface)', color: 'var(--zen-text)',
-      borderRadius: '16px', boxShadow: '0 24px 48px rgba(0, 0, 0, 0.15)',
-      border: '1px solid var(--zen-border)',
-      display: 'flex', flexDirection: 'column', overflow: 'hidden', zIndex: 1000
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid var(--zen-border)', backgroundColor: 'var(--zen-surface-hover)' }}>
-        <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600, color: 'var(--zen-text)' }}>
-          {mode.includes('opencode') ? 'OpenCode' : mode.includes('hermes') ? 'Hermes' : 'Ollama'}
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', backgroundColor: 'var(--zen-surface)', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--zen-border)', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', backgroundColor: 'var(--zen-surface-hover)', borderBottom: '1px solid var(--zen-border)' }}>
+        <h2 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--zen-text)', margin: 0 }}>
+          {title}
         </h2>
         {showConfirmClose ? (
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -837,15 +1178,38 @@ const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, 
       </div>
 
       {isProvisioningModel && (
-        <div style={{ padding: '16px 24px', backgroundColor: 'var(--zen-surface-hover)', borderBottom: '1px solid var(--zen-border)', display: 'flex', alignItems: 'center', gap: '15px' }}>
-           <div style={{ width: '100%' }}>
-             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-               <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--zen-text)' }}>Downloading Weights...</span>
-               <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--zen-accent)' }}>{downloadPercent}%</span>
+        <div style={{ padding: '14px 24px', backgroundColor: 'var(--zen-surface-hover)', borderBottom: '1px solid var(--zen-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+               <span style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--zen-text)' }}>Downloading Weights...</span>
+               {downloadStats.total > 0 && (
+                 <span data-testid="download-size" style={{ fontSize: '0.75rem', color: 'var(--zen-text-secondary)', fontWeight: 500, fontFamily: 'monospace' }}>
+                   ({formatBytes(downloadStats.completed)} / {formatBytes(downloadStats.total)})
+                 </span>
+               )}
              </div>
-             <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--zen-border)', borderRadius: '3px', overflow: 'hidden' }}>
-               <div style={{ width: `${downloadPercent}%`, height: '100%', backgroundColor: 'var(--zen-accent)', transition: 'width 0.2s linear' }} />
+
+             <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+               {downloadStats.speedBytesPerSec > 0 && (
+                 <span data-testid="download-speed" style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', fontFamily: 'monospace' }}>
+                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                   {formatSpeed(downloadStats.speedBytesPerSec)}
+                 </span>
+               )}
+               {downloadStats.etaSeconds > 0 && (
+                 <span data-testid="download-eta" style={{ fontSize: '0.8rem', color: '#f59e0b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', fontFamily: 'monospace' }}>
+                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                   {formatEta(downloadStats.etaSeconds)}
+                 </span>
+               )}
+               <span style={{ fontWeight: 700, fontSize: '0.92rem', color: 'var(--zen-accent)', minWidth: '38px', textAlign: 'right' }}>
+                 {downloadPercent}%
+               </span>
              </div>
+           </div>
+
+           <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--zen-border)', borderRadius: '3px', overflow: 'hidden' }}>
+             <div style={{ width: `${downloadPercent}%`, height: '100%', backgroundColor: 'var(--zen-accent)', transition: 'width 0.2s linear' }} />
            </div>
         </div>
       )}
@@ -880,10 +1244,11 @@ export default function App() {
     setSelectedNodeId(null);
   });
   const [guidesOpen, setGuidesOpen] = useState(false);
-  const [terminalMode, setTerminalMode] = useState<'install-hermes' | 'run-hermes' | 'run-hermes-web' | 'run-hermes-desktop' | 'install-opencode' | 'run-opencode' | 'run-opencode-web' | 'install-ollama' | 'run-ollama' | null>(null);
+  const [terminalMode, setTerminalMode] = useState<'install-hermes' | 'run-hermes' | 'run-hermes-web' | 'run-hermes-desktop' | 'install-opencode' | 'run-opencode' | 'run-opencode-web' | 'install-ollama' | 'run-ollama' | 'install-tool-gateway' | 'uninstall-tool-gateway' | null>(null);
   const [isHermesInstalled, setIsHermesInstalled] = useState<boolean | null>(null);
   const [isOpenCodeInstalled, setIsOpenCodeInstalled] = useState<boolean | null>(null);
   const [isOllamaInstalled, setIsOllamaInstalled] = useState<boolean | null>(null);
+  const [isToolGatewayInstalled, setIsToolGatewayInstalled] = useState<boolean | null>(null);
 
     const [isAppLoaded, setIsAppLoaded] = useState(false);
   const [initLogs, setInitLogs] = useState<string[]>([]);
@@ -932,6 +1297,13 @@ export default function App() {
         addLog(ollamaStatus ? "OK: Ollama detected." : "INFO: Ollama not detected.");
       } catch(e) {}
       
+      addLog("Checking Tool Enforcing Gateway status...");
+      try {
+        const toolGatewayStatus = await invoke('check_tool_gateway_status');
+        setIsToolGatewayInstalled(toolGatewayStatus as boolean);
+        addLog(toolGatewayStatus ? "OK: Tool Gateway installed." : "INFO: Tool Gateway not installed.");
+      } catch(e) {}
+      
       addLog("Detecting system VRAM...");
       try {
         const vram = await invoke('detect_vram');
@@ -951,7 +1323,17 @@ export default function App() {
       } catch(e) {
         addLog("INFO: OpenRouter credentials missing.");
       }
-      await new Promise(r => setTimeout(r, 400));
+      await new Promise(r => setTimeout(r, 200));
+
+      addLog("Verifying Google AI Studio credentials...");
+      try {
+        await invoke('get_credential', { service: 'google' });
+        setNodes(nds => nds.map(n => n.id === 'node-google' ? { ...n, data: { ...n.data, status: 'active' } } : n));
+        addLog("OK: Google AI Studio authenticated.");
+      } catch(e) {
+        addLog("INFO: Google AI Studio credentials missing.");
+      }
+      await new Promise(r => setTimeout(r, 300));
 
       addLog("All systems nominal. Launching UI...");
       await new Promise(r => setTimeout(r, 500));
@@ -1083,6 +1465,8 @@ export default function App() {
   const handleOpenOpenCodeWeb = () => setTerminalMode('run-opencode-web');
   const handleInitializeOllama = () => setTerminalMode('install-ollama');
   const handleOpenOllama = () => setTerminalMode('run-ollama');
+  const handleInstallToolGateway = () => setTerminalMode('install-tool-gateway');
+  const handleUninstallToolGateway = () => setTerminalMode('uninstall-tool-gateway');
 
   const handleUninstallHermes = async () => {
     await invoke('spawn_pty', { command: 'bash', args: ['-c', 'rm -rf ~/.hermes'] });
@@ -1097,8 +1481,14 @@ export default function App() {
     setIsOllamaInstalled(false);
   };
   const handleDisconnectOpenRouter = async () => {
-    await invoke('wipe_credentials');
-    setNodes(nds => nds.map(n => n.id === 'node-openrouter' ? { ...n, data: { ...n.data, status: 'inactive', apiKey: '' } } : n));
+    await invoke('delete_credential', { service: 'openrouter' }).catch(console.error);
+    setNodes(nds => nds.map(n => n.id === 'node-openrouter' ? { ...n, data: { ...n.data, status: 'needs_activation', apiKey: '' } } : n));
+    await invoke('refresh_routing_chain').catch(console.error);
+  };
+  const handleDisconnectGoogle = async () => {
+    await invoke('delete_credential', { service: 'google' }).catch(console.error);
+    setNodes(nds => nds.map(n => n.id === 'node-google' ? { ...n, data: { ...n.data, status: 'needs_activation', googleApiKey: '' } } : n));
+    await invoke('refresh_routing_chain').catch(console.error);
   };
 
   const [activeGuide, setActiveGuide] = useState<string | null>(null);
@@ -1285,7 +1675,7 @@ export default function App() {
   };
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
-  const hasActiveBackend = nodes.some(n => (n.id === 'node-ollama' || n.id === 'node-openrouter') && n.data.status === 'active');
+  const hasActiveBackend = nodes.some(n => (n.id === 'node-ollama' || n.id === 'node-openrouter' || n.id === 'node-google') && n.data.status === 'active');
 
   if (!isLoaded) return null;
 
@@ -1358,11 +1748,11 @@ export default function App() {
       </style>
 
       {/* Canvas Area */}
-      {(['install-hermes', 'run-hermes', 'run-hermes-web', 'run-hermes-desktop', 'install-opencode', 'run-opencode', 'run-opencode-web', 'install-ollama', 'run-ollama'] as const).map((mode) => {
+      {(['install-hermes', 'run-hermes', 'run-hermes-web', 'run-hermes-desktop', 'install-opencode', 'run-opencode', 'run-opencode-web', 'install-ollama', 'run-ollama', 'install-tool-gateway', 'uninstall-tool-gateway'] as const).map((mode) => {
         const isActive = activeProcesses[mode] || terminalMode === mode;
         if (!isActive) return null;
         return (
-          <div key={mode} style={{ display: terminalMode === mode ? 'flex' : 'none', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, zIndex: 50, backgroundColor: 'var(--zen-accent)' }}>
+          <div key={mode} style={{ display: terminalMode === mode ? 'flex' : 'none', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, zIndex: 50, backgroundColor: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(4px)' }}>
             <TerminalView
                mode={mode}
                sessionId={mode}
@@ -1371,13 +1761,16 @@ export default function App() {
                  invoke('check_hermes_status').then((installed) => setIsHermesInstalled(installed as boolean));
                  invoke('check_opencode_status').then((installed) => setIsOpenCodeInstalled(installed as boolean));
                  invoke('check_ollama_status').then((installed) => setIsOllamaInstalled(installed as boolean));
+                 invoke('check_tool_gateway_status').then((installed) => setIsToolGatewayInstalled(installed as boolean));
                }}
                onProcessStart={() => setActiveProcesses(prev => ({ ...prev, [mode]: true }))}
                onProcessExit={() => setActiveProcesses(prev => ({ ...prev, [mode]: false }))}
                frugalConfig={frugalConfig}
+               setFrugalConfig={setFrugalConfig}
                setIsHermesInstalled={setIsHermesInstalled}
                setIsOpenCodeInstalled={setIsOpenCodeInstalled}
                setIsOllamaInstalled={setIsOllamaInstalled}
+               setIsToolGatewayInstalled={setIsToolGatewayInstalled}
             />
           </div>
         );
@@ -1429,7 +1822,7 @@ export default function App() {
               };
 
               let Icon = Icons.cpu;
-              if (node.id.includes('openrouter')) Icon = Icons.cloud;
+              if (node.id.includes('openrouter') || node.id.includes('google')) Icon = Icons.cloud;
               if (node.id === 'node-opencode') Icon = Icons.code;
               if (node.id === 'node-hermes') Icon = Icons.workflow;
               if (node.data.isAgent) Icon = Icons.agent;
@@ -1441,10 +1834,18 @@ export default function App() {
                     key={node.id}
                     id={node.id}
                     data-node-id={node.id}
+                    className="retro-node"
                     style={{ 
                       position: 'absolute', left: node.x, top: node.y, width: NODE_WIDTH, 
-                      zIndex: 1, backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '16px', boxShadow: 'var(--tw-shadow-glass)',
-                      fontFamily: 'inherit'
+                      zIndex: isSelected ? 5 : 1,
+                      backgroundColor: 'var(--zen-surface)',
+                      border: '2px solid var(--zen-border)',
+                      borderRadius: '8px',
+                      boxShadow: isSelected ? `0 0 0 4px #cbd5e1, var(--tw-shadow-glass)` : 'var(--tw-shadow-glass)',
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      userSelect: 'none',
+                      overflow: 'hidden'
                     }}
                     onMouseDown={(e) => handleCanvasMouseDown(e)}
                     onClick={(e) => handleNodeClick(e, node.id)}
@@ -1579,7 +1980,7 @@ export default function App() {
       {/* Settings Modal */}
       {selectedNode && !terminalMode && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setSelectedNodeId(null)}>
-          <NodeConfigPanel node={selectedNode} onClose={() => setSelectedNodeId(null)} onSave={handleSaveNodeConfig} onOpenGuide={setActiveGuide} isHermesInstalled={isHermesInstalled} isOpenCodeInstalled={isOpenCodeInstalled} isOllamaInstalled={isOllamaInstalled} detectedVram={detectedVram} setDetectedVram={setDetectedVram} hasActiveBackend={hasActiveBackend} handleInitializeHermes={handleInitializeHermes} handleOpenHermes={handleOpenHermes} handleUninstallHermes={handleUninstallHermes} handleInitializeOpenCode={handleInitializeOpenCode} handleOpenOpenCode={handleOpenOpenCode} handleUninstallOpenCode={handleUninstallOpenCode} handleInitializeOllama={handleInitializeOllama} handleOpenOllama={handleOpenOllama} handleUninstallOllama={handleUninstallOllama} handleDisconnectOpenRouter={handleDisconnectOpenRouter} frugalConfig={frugalConfig} handleOpenHermesDesktop={handleOpenHermesDesktop} handleOpenHermesWeb={handleOpenHermesWeb} handleOpenOpenCodeWeb={handleOpenOpenCodeWeb} activeProcesses={activeProcesses} handleKillProcess={(mode: string) => invoke('kill_pty', { sessionId: mode }).catch(console.error)} />
+          <NodeConfigPanel node={selectedNode} onClose={() => setSelectedNodeId(null)} onSave={handleSaveNodeConfig} onOpenGuide={setActiveGuide} isHermesInstalled={isHermesInstalled} isOpenCodeInstalled={isOpenCodeInstalled} isOllamaInstalled={isOllamaInstalled} isToolGatewayInstalled={isToolGatewayInstalled} detectedVram={detectedVram} setDetectedVram={setDetectedVram} hasActiveBackend={hasActiveBackend} handleInitializeHermes={handleInitializeHermes} handleOpenHermes={handleOpenHermes} handleUninstallHermes={handleUninstallHermes} handleInitializeOpenCode={handleInitializeOpenCode} handleOpenOpenCode={handleOpenOpenCode} handleUninstallOpenCode={handleUninstallOpenCode} handleInitializeOllama={handleInitializeOllama} handleOpenOllama={handleOpenOllama} handleUninstallOllama={handleUninstallOllama} handleInstallToolGateway={handleInstallToolGateway} handleUninstallToolGateway={handleUninstallToolGateway} handleDisconnectOpenRouter={handleDisconnectOpenRouter} handleDisconnectGoogle={handleDisconnectGoogle} frugalConfig={frugalConfig} setFrugalConfig={setFrugalConfig} handleOpenHermesDesktop={handleOpenHermesDesktop} handleOpenHermesWeb={handleOpenHermesWeb} handleOpenOpenCodeWeb={handleOpenOpenCodeWeb} activeProcesses={activeProcesses} handleKillProcess={(mode: string) => invoke('kill_pty', { sessionId: mode }).catch(console.error)} />
         </div>
       )}
 

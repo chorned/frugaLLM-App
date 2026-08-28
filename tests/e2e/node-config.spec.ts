@@ -12,20 +12,30 @@ test.describe('Node Configuration Panel', () => {
     await page.addInitScript(() => {
       window.localStorage.setItem("onboardingState", "completed");
       window["__TAURI_EVENT_PLUGIN_INTERNALS__"] = { unregisterListener: () => {} };
+      window['__MOCK_ONNX_DOWNLOAD__'] = true;
       window['invokedCommands'] = [];
       Object.defineProperty(window, '__TAURI_INTERNALS__', {
+        writable: true,
+        configurable: true,
         value: { transformCallback: () => 1234, plugins: { event: { unregisterListener: () => {} } },
           invoke: (cmd: string, args: any) => {
             window['invokedCommands'].push({ cmd, args });
+            if (window['customInvokeHandler']) {
+              const customRes = window['customInvokeHandler'](cmd, args);
+              if (customRes !== undefined) return customRes;
+            }
             if (cmd === 'plugin:event|listen') return Promise.resolve(1234);
             if (cmd === 'check_ollama_status') return Promise.resolve(true);
             if (cmd === 'check_hermes_status') return Promise.resolve(false);
             if (cmd === 'check_opencode_status') return Promise.resolve(false);
+            if (cmd === 'check_tool_gateway_status') return Promise.resolve(false);
+            if (cmd === 'set_tool_gateway_installed') return Promise.resolve();
             if (cmd === 'detect_vram') return Promise.resolve(8192);
             if (cmd === 'get_frugallm_config') return Promise.resolve({});
             if (cmd === 'set_frugallm_config') return Promise.resolve();
             if (cmd === 'get_credential') return Promise.reject('No key');
             if (cmd === 'set_credential') return Promise.resolve();
+            if (cmd === 'delete_credential') return Promise.resolve();
             if (cmd === 'get_routing_chain') return Promise.resolve([
               { provider: 'OPENROUTER', model: 'anthropic/claude-3-opus' },
               { provider: 'OPENROUTER', model: 'anthropic/claude-3-sonnet' },
@@ -59,7 +69,7 @@ test.describe('Node Configuration Panel', () => {
     await canvas.goto();
 
     // Click Ollama to open config
-    await canvas.clickNode('Local Hardware');
+    await canvas.clickNode('Ollama');
     await expect(configPanel.updateButton).toBeVisible();
 
     // The config for Ollama shows IP and Port
@@ -74,7 +84,7 @@ test.describe('Node Configuration Panel', () => {
     await expect(configPanel.updateButton).not.toBeVisible();
 
     // Reopen and check if saved
-    await canvas.clickNode('Local Hardware');
+    await canvas.clickNode('Ollama');
     await expect(configPanel.port).toHaveValue('11435');
     
     await page.waitForTimeout(500);
@@ -107,6 +117,53 @@ test.describe('Node Configuration Panel', () => {
     
     // Verify confetti canvas was injected (confetti library creates a canvas in the body)
     await expect(page.locator('canvas').last()).toBeVisible();
+  });
+
+  test('should handle Google AI Studio API key entry and saving', async ({ page }) => {
+    const canvas = new MainCanvas(page);
+    const configPanel = new NodeConfigPanel(page);
+
+    await canvas.goto();
+
+    // Click Google AI Studio node
+    await canvas.clickNode('GOOGLE AI STUDIO');
+    await expect(configPanel.updateButton).toBeVisible();
+
+    // Verify Google API Key field is password masked
+    await expect(configPanel.googleApiKey).toHaveAttribute('type', 'password');
+
+    // Fill Google API key and save
+    await configPanel.googleApiKey.fill('AIzaSyMockGoogleKey123');
+    await configPanel.updateButton.click();
+
+    // Verify Tauri IPC was called for set_credential for google service
+    const cmds = await page.evaluate(() => window['invokedCommands']);
+    const setGoogleCall = cmds.find((c: any) => c.cmd === 'set_credential' && c.args?.service === 'google');
+    expect(setGoogleCall).toBeDefined();
+    expect(setGoogleCall.args.secret).toBe('AIzaSyMockGoogleKey123');
+  });
+
+  test('should restore Google AI Studio active status on startup when credentials exist', async ({ page }) => {
+    // Override get_credential mock to return a key for google
+    await page.addInitScript(() => {
+      const origInvoke = (window as any).__TAURI_INTERNALS__?.invoke;
+      if (origInvoke) {
+        (window as any).__TAURI_INTERNALS__.invoke = (cmd: string, args: any) => {
+          if (cmd === 'get_credential' && args?.service === 'google') {
+            return Promise.resolve('AIzaSyMockGoogleKey123');
+          }
+          return origInvoke(cmd, args);
+        };
+      }
+    });
+
+    const canvas = new MainCanvas(page);
+    await canvas.goto();
+
+    // Verify Google AI Studio node shows Connected status
+    const googleNode = page.locator('[data-node-id="node-google"]');
+    await expect(googleNode).toBeVisible();
+    await expect(googleNode.getByText('Connected')).toBeVisible();
   });
 
   test('should render FrugalLM Hub routing panel and filter computer-use models', async ({ page }) => {
@@ -145,5 +202,107 @@ test.describe('Node Configuration Panel', () => {
     const cmds = await page.evaluate(() => window['invokedCommands']);
     const overrideCall = cmds.find((c: any) => c.cmd === 'set_model_override');
     expect(overrideCall).toBeDefined();
+  });
+
+  test('should not show tool enforcing gateway option when Ollama is not installed', async ({ page }) => {
+    // Override check_ollama_status mock to return false
+    await page.addInitScript(() => {
+      const origInvoke = (window as any).__TAURI_INTERNALS__?.invoke;
+      if (origInvoke) {
+        (window as any).__TAURI_INTERNALS__.invoke = (cmd: string, args: any) => {
+          if (cmd === 'check_ollama_status') return Promise.resolve(false);
+          return origInvoke(cmd, args);
+        };
+      }
+    });
+
+    const canvas = new MainCanvas(page);
+    const configPanel = new NodeConfigPanel(page);
+
+    await canvas.goto();
+
+    // Click Ollama node
+    await canvas.clickNode('Ollama');
+    await expect(configPanel.updateButton).toBeVisible();
+
+    // Check that Ollama Missing is shown, and Tool Gateway is not shown
+    await expect(page.getByText('OLLAMA MISSING')).toBeVisible();
+    await expect(configPanel.toolGatewayCheckbox).not.toBeVisible();
+  });
+
+  test('should prompt and trigger installation for Tool Enforcing Gateway when not installed', async ({ page }) => {
+    const canvas = new MainCanvas(page);
+    const configPanel = new NodeConfigPanel(page);
+
+    await canvas.goto();
+
+    // Click Ollama node
+    await canvas.clickNode('Ollama');
+    await expect(configPanel.updateButton).toBeVisible();
+
+    // Check that the Tool Enforcing Gateway checkbox is present and unchecked
+    await expect(configPanel.toolGatewayCheckbox).toBeVisible();
+    await expect(configPanel.toolGatewayCheckbox).not.toBeChecked();
+    await expect(configPanel.toolGatewayStatus).toHaveText('NOT INSTALLED');
+
+    // Clicking checkbox when not installed prompts user with confirmation dialog
+    await configPanel.toolGatewayCheckbox.click();
+    await expect(page.getByText('INSTALL TOOL ENFORCING GATEWAY?')).toBeVisible();
+    await expect(configPanel.confirmInstallToolGatewayButton).toBeVisible();
+
+    // Confirm installation
+    await configPanel.confirmInstallToolGatewayButton.click();
+
+    // Verify Terminal Runner opens in install-tool-gateway mode
+    await expect(page.getByRole('heading', { name: 'Tool Enforcing Gateway' })).toBeVisible();
+    
+    // Verify set_tool_gateway_installed was called with installed: true
+    await expect(async () => {
+      const cmds = await page.evaluate(() => window['invokedCommands']);
+      const installCall = cmds.find((c: any) => c.cmd === 'set_tool_gateway_installed' && c.args?.installed === true);
+      expect(installCall).toBeDefined();
+    }).toPass({ timeout: 10000 });
+  });
+
+  test('should prompt and trigger uninstallation for Tool Enforcing Gateway when installed', async ({ page }) => {
+    // Override mocks so tool gateway is installed and enabled
+    await page.addInitScript(() => {
+      window['customInvokeHandler'] = (cmd: string) => {
+        if (cmd === 'check_tool_gateway_status') return Promise.resolve(true);
+        if (cmd === 'get_frugallm_config') return Promise.resolve({ tool_enforcing_gateway: true });
+        return undefined;
+      };
+    });
+
+    const canvas = new MainCanvas(page);
+    const configPanel = new NodeConfigPanel(page);
+
+    await canvas.goto();
+
+    // Click Ollama node
+    await canvas.clickNode('Ollama');
+    await expect(configPanel.updateButton).toBeVisible();
+
+    // Check that the Tool Enforcing Gateway is marked INSTALLED and checked
+    await expect(configPanel.toolGatewayStatus).toHaveText('INSTALLED');
+    await expect(configPanel.toolGatewayCheckbox).toBeChecked();
+
+    // Clicking checkbox to uncheck prompts user with uninstall dialog
+    await configPanel.toolGatewayCheckbox.click();
+    await expect(page.getByText('UNINSTALL TOOL ENFORCING GATEWAY?')).toBeVisible();
+    await expect(configPanel.confirmUninstallToolGatewayButton).toBeVisible();
+
+    // Confirm uninstallation
+    await configPanel.confirmUninstallToolGatewayButton.click();
+
+    // Verify Terminal Runner opens in uninstall-tool-gateway mode
+    await expect(page.getByRole('heading', { name: 'Tool Enforcing Gateway' })).toBeVisible();
+
+    // Verify set_tool_gateway_installed was called with installed: false
+    await expect(async () => {
+      const cmds = await page.evaluate(() => window['invokedCommands']);
+      const uninstallCall = cmds.find((c: any) => c.cmd === 'set_tool_gateway_installed' && c.args?.installed === false);
+      expect(uninstallCall).toBeDefined();
+    }).toPass({ timeout: 5000 });
   });
 });

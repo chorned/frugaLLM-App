@@ -27,13 +27,13 @@ export class HardwareTelemetryPage {
     // However, it's safer to scope it. It's the only one with LOCAL HARDWARE.
     this.container = page.locator('#node-ollama');
     
-    this.headerTitle = this.container.getByText('Local Hardware', { exact: false }).first();
-    this.toggleButton = this.container.locator('text=▼').or(this.container.locator('text=▲'));
+    this.headerTitle = this.container.getByText('Ollama', { exact: false }).first();
+    this.toggleButton = this.container.getByTestId('hardware-info-btn');
     
     // Status light text is inside the header
     this.statusLight = this.container.locator('span').filter({ hasText: /^(Standby|Loading|Thinking|Loaded|llama.*)$/i }).first();
     
-    this.activeModel = this.container.locator('div').filter({ hasText: /^Active Model.*$/ }).locator('span').last();
+    this.activeModel = this.container.locator('[data-testid="active-model-name"]');
     
     this.panel = page.getByTestId('hardware-telemetry-panel');
     
@@ -43,12 +43,21 @@ export class HardwareTelemetryPage {
     this.memoryLabel = this.panel.locator('div').filter({ hasText: /^(Memory|RAM Allocation|VRAM Allocation).*$/ }).locator('span').first();
     this.memoryValue = this.panel.locator('div').filter({ hasText: /^(Memory|RAM Allocation|VRAM Allocation).*$/ }).locator('span').last();
     
-    this.throughputLabel = this.panel.locator('text=Throughput');
-    this.throughputValue = this.throughputLabel.locator('..').locator('span').nth(1); // The value span next to it
+    this.throughputLabel = this.panel.locator('text=Avg. Throughput');
+    this.throughputValue = this.panel.getByTestId('live-throughput-stat');
+    this.benchmarkButton = this.panel.getByTestId('benchmark-info-btn');
+    this.benchmarkPanel = this.panel.getByTestId('benchmark-panel');
   }
 
+  readonly benchmarkButton: Locator;
+  readonly benchmarkPanel: Locator;
+
   async toggle() {
-    await this.headerTitle.click();
+    await this.toggleButton.click();
+  }
+
+  async toggleBenchmarks() {
+    await this.benchmarkButton.click();
   }
 
   // Helper to emit events to the mock

@@ -2,7 +2,7 @@
   "routingGraph": {
     "nodes": {
       "ollamaLocal": {
-        "label": "OLLAMA LOCAL",
+        "label": "Ollama (Local LLM)",
         "description": "Your private, local brain! Ollama runs lightweight open-source models right on your machine, keeping your data entirely private and free from cloud costs."
       },
       "openRouter": {
@@ -81,7 +81,14 @@
         "openRouterApiKey": {
           "label": "API KEY",
           "helpText": "Your OpenRouter API Key. This will be securely saved into your operating system's native Keychain!",
-          "placeholder": "sk-or-v1-..."
+          "placeholder": "sk-or-v1-...",
+          "configuredPlaceholder": "•••••••••••••••• (Key Configured)"
+        },
+        "googleApiKey": {
+          "label": "API KEY",
+          "helpText": "Your Google AI Studio API Key. This will be securely saved into your operating system's native Keychain!",
+          "placeholder": "AIzaSy...",
+          "configuredPlaceholder": "•••••••••••••••• (Key Configured)"
         }
       },
       "stats": {
@@ -125,6 +132,23 @@
         },
         "openRouter": {
           "connected": "OPENROUTER CONNECTED"
+        },
+        "google": {
+          "connected": "GOOGLE AI STUDIO CONNECTED"
+        },
+        "toolGateway": {
+          "title": "TOOL ENFORCING GATEWAY",
+          "description": "Runs a lightweight local ONNX language model (Xenova/nli-deberta-v3-small) in WebAssembly to detect empty promises and enforce strict tool execution.",
+          "checkboxLabel": "Enable Tool Enforcing Gateway",
+          "installed": "INSTALLED",
+          "notInstalled": "NOT INSTALLED",
+          "installPromptTitle": "INSTALL TOOL ENFORCING GATEWAY?",
+          "installPromptText": "The Tool Enforcing Gateway requires downloading the lightweight local ONNX model (Xenova/nli-deberta-v3-small, ~100MB). Would you like to install it now?",
+          "uninstallPromptTitle": "UNINSTALL TOOL ENFORCING GATEWAY?",
+          "uninstallPromptText": "Are you sure you want to uninstall the Tool Enforcing Gateway? This will remove the local ONNX model cache and disable tool enforcement.",
+          "installButton": "INSTALL GATEWAY",
+          "uninstallButton": "UNINSTALL GATEWAY",
+          "cancelButton": "CANCEL"
         },
         "common": {
           "areYouSure": "ARE YOU SURE?",
@@ -180,7 +204,27 @@
       "cpuUtil": "CPU UTIL",
       "gpuUtil": "GPU UTIL",
       "vramUsage": "VRAM USAGE",
-      "noModelLoaded": "No model currently loaded in memory."
+      "noModelLoaded": "No model currently loaded in memory.",
+      "title": "Hardware Telemetry",
+      "cpuLoad": "CPU Load",
+      "gpuLoad": "GPU Load",
+      "ramAllocation": "RAM Allocation",
+      "vramAllocation": "VRAM Allocation",
+      "throughput": "Throughput",
+      "avgThroughput": "Avg. Throughput",
+      "viewBenchmarks": "View Industry Speed Benchmarks",
+      "benchmarkTitle": "Speed Benchmarks",
+      "benchmarkSubtitle": "Reference generation speeds across cloud & local tiers:",
+      "benchmarkSonnet": "Claude 3.7 / 3.5 Sonnet",
+      "benchmarkSonnetSpeed": "~75 - 90 t/s",
+      "benchmarkHaiku": "Claude 3.5 Haiku",
+      "benchmarkHaikuSpeed": "~120 - 150 t/s",
+      "benchmarkGeminiFlash": "Gemini 2.5 Flash",
+      "benchmarkGeminiFlashSpeed": "~140 - 180 t/s",
+      "benchmarkLocalGpu": "Local Apple Silicon (Metal)",
+      "benchmarkLocalGpuSpeed": "~35 - 55 t/s",
+      "benchmarkLocalCpu": "Local Intel x86 (AVX2)",
+      "benchmarkLocalCpuSpeed": "~8 - 15 t/s"
     },
     "terminal": {
       "confirmClose": "This will terminate the running process. Are you sure?",
@@ -191,7 +235,10 @@
       "startingOpenCode": "Starting OpenCode...",
       "startingHermes": "Starting Hermes Agent...",
       "startingOllama": "Chatting with Ollama...",
-      "exitedWithCode": "{{name}} exited with code {{code}}"
+      "exitedWithCode": "{{name}} exited with code {{code}}",
+      "speed": "Speed",
+      "eta": "ETA",
+      "left": "left"
     },
     "guides": {
       "quickstartTitle": "FRUGALLM // QUICKSTART GUIDES",

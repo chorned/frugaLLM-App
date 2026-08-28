@@ -2,12 +2,28 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { listen } from '@tauri-apps/api/event';
+import en from '../locales/en.json';
 
 const InfoIconSVG = (props: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="-50 -50 590 590" fill="currentColor" {...props}>
     <path d="M245.148,0C109.967,0,0.009,109.98,0.009,245.162c0,135.182,109.958,245.156,245.139,245.156 c135.186,0,245.162-109.978,245.162-245.156C490.31,109.98,380.333,0,245.148,0z M245.148,438.415 c-106.555,0-193.234-86.698-193.234-193.253c0-106.555,86.68-193.258,193.234-193.258c106.559,0,193.258,86.703,193.258,193.258 C438.406,351.717,351.706,438.415,245.148,438.415z"/>
     <path d="M270.036,221.352h-49.771c-8.351,0-15.131,6.78-15.131,15.118v147.566c0,8.352,6.78,15.119,15.131,15.119h49.771 c8.351,0,15.131-6.77,15.131-15.119V236.471C285.167,228.133,278.387,221.352,270.036,221.352z"/>
     <path d="M245.148,91.168c-24.48,0-44.336,19.855-44.336,44.336c0,24.484,19.855,44.34,44.336,44.34 c24.485,0,44.342-19.855,44.342-44.34C289.489,111.023,269.634,91.168,245.148,91.168z"/>
+  </svg>
+);
+
+const CpuIconSVG = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
+    <rect x="9" y="9" width="6" height="6"></rect>
+    <line x1="9" y1="1" x2="9" y2="4"></line>
+    <line x1="15" y1="1" x2="15" y2="4"></line>
+    <line x1="9" y1="20" x2="9" y2="23"></line>
+    <line x1="15" y1="20" x2="15" y2="23"></line>
+    <line x1="20" y1="9" x2="23" y2="9"></line>
+    <line x1="20" y1="14" x2="23" y2="14"></line>
+    <line x1="1" y1="9" x2="4" y2="9"></line>
+    <line x1="1" y1="14" x2="4" y2="14"></line>
   </svg>
 );
 
@@ -314,6 +330,16 @@ export const SettingsToggle = ({
 export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean }) => {
   const [telemetry, setTelemetry] = useState<any>(null);
   const [showPanel, setShowPanel] = useState(false);
+  const [showBenchmarks, setShowBenchmarks] = useState(false);
+  const [avgThroughput, setAvgThroughput] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('frugallm_avg_throughput');
+      return saved ? parseFloat(saved) : 0;
+    } catch {
+      return 0;
+    }
+  });
+  const [liveThroughput, setLiveThroughput] = useState(0);
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
@@ -344,25 +370,71 @@ export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean 
     
   const isActive = telemetry?.ollama?.status === 'active';
 
-  const [throughput, setThroughput] = useState(0);
+  // Cold-Start and Hot-Start aware token throughput measurement:
+  // - Cold Start: Discards pre-generation prompt evaluation & TTFT latency. Timing begins on the first token chunk.
+  // - Hot Start: Steady-state generation across active token stream with spike filtering and run persistence.
   useEffect(() => {
-    if (!isActive) { setThroughput(0); return; }
-    let totalChars = 0; let startTime: number | null = null; let timeout: ReturnType<typeof setTimeout>;
+    if (!isActive) {
+      setLiveThroughput(0);
+      return;
+    }
+
+    let totalChars = 0;
+    let firstTokenTime: number | null = null;
+    let runTokens = 0;
+    let timeout: ReturnType<typeof setTimeout>;
+
     const handleBytes = (e: any) => {
       const now = performance.now();
-      if (!startTime) startTime = now;
-      totalChars += e.detail;
-      const elapsedSec = (now - startTime) / 1000;
-      if (elapsedSec > 0.5) setThroughput((totalChars / elapsedSec) / 4);
+      const chunkBytes = Number(e.detail) || 0;
+      if (chunkBytes <= 0) return;
+
+      // Cold Start -> Hot Start transition on first token arrival
+      if (!firstTokenTime) {
+        firstTokenTime = now;
+        totalChars = chunkBytes;
+        runTokens = chunkBytes / 4.0;
+      } else {
+        totalChars += chunkBytes;
+        runTokens += chunkBytes / 4.0;
+
+        const totalElapsedSec = (now - firstTokenTime) / 1000;
+        // Require at least 300ms of hot generation to eliminate instant buffer flush artifacts
+        if (totalElapsedSec >= 0.3) {
+          const rawAvgTps = runTokens / totalElapsedSec;
+          // Clamp realistic physical generation boundaries (e.g. 0.1 to 250 t/s)
+          const smoothedAvg = Math.min(Math.max(rawAvgTps, 0.1), 250);
+          const rounded = Math.round(smoothedAvg * 10) / 10;
+          setLiveThroughput(rounded);
+          setAvgThroughput(rounded);
+
+          try {
+            localStorage.setItem('frugallm_avg_throughput', rounded.toString());
+          } catch {
+            // Storage quota ignored
+          }
+        }
+      }
+
       clearTimeout(timeout);
-      timeout = setTimeout(() => { setThroughput(0); totalChars = 0; startTime = null; }, 1000);
+      timeout = setTimeout(() => {
+        // Stream completed: zero live throughput while preserving hot run average
+        setLiveThroughput(0);
+        totalChars = 0;
+        firstTokenTime = null;
+        runTokens = 0;
+      }, 1200);
     };
+
     window.addEventListener('pty_bytes', handleBytes);
-    return () => { window.removeEventListener('pty_bytes', handleBytes); clearTimeout(timeout); };
+    return () => {
+      window.removeEventListener('pty_bytes', handleBytes);
+      clearTimeout(timeout);
+    };
   }, [isActive]);
 
   const isLoaded = telemetry?.ollama?.status === 'active';
-  const isThinking = (isGenerating && isLoaded) || throughput > 0;
+  const isThinking = (isGenerating && isLoaded) || liveThroughput > 0;
   const isLoading = isGenerating && !isLoaded;
 
   let headerStatusText = 'Standby';
@@ -376,21 +448,29 @@ export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean 
       <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
         {/* Header */}
         <div 
-          onClick={(e) => { e.stopPropagation(); setShowPanel(true); }}
-          style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--zen-border)', padding: '8px 12px', backgroundColor: 'var(--zen-surface)' }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--zen-border)', padding: '8px 12px', backgroundColor: 'var(--zen-surface-hover)' }}
         >
-          <div id="local-hardware-heading" style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--zen-text)', display: 'flex', gap: '8px', alignItems: 'center' }}>
-            Local Hardware
+          <div id="local-hardware-heading" style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--zen-text)', display: 'flex', gap: '8px', alignItems: 'center', letterSpacing: '0.5px' }}>
+            <CpuIconSVG />
+            Ollama (Local LLM)
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <StatusLight status={isStatusActive ? 'active' : 'standby'} text={headerStatusText} />
             <div 
+              data-testid="hardware-info-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowPanel(true);
+              }}
+              title="View Hardware Telemetry"
               style={{
+                cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: 'var(--zen-accent)', transition: 'opacity 0.2s', opacity: 0.8
+                color: 'var(--zen-accent)', transition: 'all 0.2s', opacity: 0.85,
+                padding: '4px', borderRadius: '4px'
               }}
               onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-              onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
+              onMouseLeave={(e) => e.currentTarget.style.opacity = '0.85'}
             >
               <InfoIconSVG width="14" height="14" style={{ display: 'block' }} />
             </div>
@@ -401,8 +481,14 @@ export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean 
         <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: 'var(--zen-surface)', color: 'var(--zen-text)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>Active Model</span>
-            <span style={{ fontSize: '0.75rem', fontWeight: 800, color: isLoaded ? 'var(--zen-text)' : 'var(--zen-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }} title={isLoaded ? telemetry?.ollama?.model_name : 'None'}>
+            <span data-testid="active-model-name" style={{ fontSize: '0.75rem', fontWeight: 700, color: isLoaded ? 'var(--zen-text)' : 'var(--zen-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }} title={isLoaded ? telemetry?.ollama?.model_name : 'None'}>
               {isLoaded ? telemetry?.ollama?.model_name : 'None'}
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>Allocation</span>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>
+              {memUsed} / {memTotal} GB
             </span>
           </div>
         </div>
@@ -415,18 +501,20 @@ export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean 
         >
           <div 
             data-testid="hardware-telemetry-panel"
-            style={{ width: '350px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '24px' }} 
+            style={{ width: '360px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '16px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '20px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }} 
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--zen-border)', paddingBottom: '8px' }}>
-              <span style={{ fontWeight: 800, color: 'var(--zen-text)', fontSize: '1rem' }}>Hardware Telemetry</span>
-              <span onClick={() => setShowPanel(false)} style={{ color: '#9ca3af', cursor: 'pointer', fontWeight: 'bold' }}>✕</span>
+              <span style={{ fontWeight: 800, color: 'var(--zen-text)', fontSize: '1rem' }}>
+                {en.routingGraph.hardwareTelemetryWidget.title}
+              </span>
+              <span onClick={() => setShowPanel(false)} style={{ color: '#9ca3af', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem', padding: '2px 6px' }}>✕</span>
             </div>
             
             {/* Utilization Bar (Load) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>
-                <span>{isCpuMode ? 'CPU Load' : 'GPU Load'}</span>
+                <span>{isCpuMode ? en.routingGraph.hardwareTelemetryWidget.cpuLoad : en.routingGraph.hardwareTelemetryWidget.gpuLoad}</span>
                 <span>{loadPercent.toFixed(1)}%</span>
               </div>
               <div style={{ width: '100%', height: '10px', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '5px', overflow: 'hidden' }}>
@@ -444,7 +532,7 @@ export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean 
             {/* Utilization Bar (Memory) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>
-                <span>{isCpuMode ? 'RAM Allocation' : 'VRAM Allocation'}</span>
+                <span>{isCpuMode ? en.routingGraph.hardwareTelemetryWidget.ramAllocation : en.routingGraph.hardwareTelemetryWidget.vramAllocation}</span>
                 <span>{memUsed} / {memTotal} GB</span>
               </div>
               <div style={{ width: '100%', height: '10px', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '5px', overflow: 'hidden' }}>
@@ -459,13 +547,120 @@ export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean 
               </div>
             </div>
 
-            {/* Throughput Metric */}
-            <div style={{ marginTop: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--zen-text-secondary)' }}>Throughput</span>
-              <span style={{ fontSize: '0.85rem', fontWeight: 800, color: isActive ? 'var(--zen-text)' : 'var(--zen-text-secondary)' }}>
-                {throughput.toFixed(1)} <span style={{ fontSize: '0.65rem', color: '#9ca3af' }}>t/s</span>
-              </span>
+            {/* Average Throughput Metric Card */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--zen-surface-hover)', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--zen-border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)' }}>
+                    {en.routingGraph.hardwareTelemetryWidget.avgThroughput}
+                  </span>
+                  <div
+                    data-testid="benchmark-info-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowBenchmarks(prev => !prev);
+                    }}
+                    title={en.routingGraph.hardwareTelemetryWidget.viewBenchmarks}
+                    style={{
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: showBenchmarks ? 'var(--zen-accent)' : 'var(--zen-text-secondary)',
+                      opacity: showBenchmarks ? 1 : 0.75,
+                      transition: 'all 0.2s',
+                      padding: '2px',
+                      borderRadius: '4px'
+                    }}
+                  >
+                    <InfoIconSVG width="13" height="13" />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {liveThroughput > 0 && (
+                    <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10b981' }} />
+                  )}
+                  <span data-testid="live-throughput-stat" style={{ fontSize: '0.9rem', fontWeight: 800, color: (liveThroughput > 0 || avgThroughput > 0) ? 'var(--zen-text)' : 'var(--zen-text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
+                    {(liveThroughput > 0 ? liveThroughput : avgThroughput).toFixed(1)} <span style={{ fontSize: '0.65rem', color: '#9ca3af', fontWeight: 600 }}>t/s</span>
+                  </span>
+                </div>
+              </div>
             </div>
+
+            {/* Benchmark Reference Panel */}
+            {showBenchmarks && (
+              <div 
+                data-testid="benchmark-panel"
+                style={{
+                  backgroundColor: 'var(--zen-surface-hover)',
+                  border: '1px solid var(--zen-border)',
+                  borderRadius: '10px',
+                  padding: '12px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  fontSize: '0.75rem'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 800, color: 'var(--zen-text)', fontSize: '0.75rem' }}>
+                    {en.routingGraph.hardwareTelemetryWidget.benchmarkTitle}
+                  </span>
+                  <span style={{ fontSize: '0.65rem', color: '#9ca3af', fontWeight: 600 }}>tokens / sec</span>
+                </div>
+                <p style={{ margin: 0, fontSize: '0.68rem', color: 'var(--zen-text-secondary)', lineHeight: '1.3' }}>
+                  {en.routingGraph.hardwareTelemetryWidget.benchmarkSubtitle}
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '2px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', backgroundColor: 'var(--zen-surface)', borderRadius: '6px', border: '1px solid var(--zen-border)' }}>
+                    <span style={{ fontWeight: 600, color: 'var(--zen-text)', fontSize: '0.72rem' }}>
+                      {en.routingGraph.hardwareTelemetryWidget.benchmarkSonnet}
+                    </span>
+                    <span style={{ fontWeight: 800, color: '#2563eb', fontSize: '0.72rem', fontVariantNumeric: 'tabular-nums' }}>
+                      {en.routingGraph.hardwareTelemetryWidget.benchmarkSonnetSpeed}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', backgroundColor: 'var(--zen-surface)', borderRadius: '6px', border: '1px solid var(--zen-border)' }}>
+                    <span style={{ fontWeight: 600, color: 'var(--zen-text)', fontSize: '0.72rem' }}>
+                      {en.routingGraph.hardwareTelemetryWidget.benchmarkGeminiFlash}
+                    </span>
+                    <span style={{ fontWeight: 800, color: '#16a34a', fontSize: '0.72rem', fontVariantNumeric: 'tabular-nums' }}>
+                      {en.routingGraph.hardwareTelemetryWidget.benchmarkGeminiFlashSpeed}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', backgroundColor: 'var(--zen-surface)', borderRadius: '6px', border: '1px solid var(--zen-border)' }}>
+                    <span style={{ fontWeight: 600, color: 'var(--zen-text)', fontSize: '0.72rem' }}>
+                      {en.routingGraph.hardwareTelemetryWidget.benchmarkHaiku}
+                    </span>
+                    <span style={{ fontWeight: 800, color: '#0891b2', fontSize: '0.72rem', fontVariantNumeric: 'tabular-nums' }}>
+                      {en.routingGraph.hardwareTelemetryWidget.benchmarkHaikuSpeed}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', backgroundColor: 'var(--zen-surface)', borderRadius: '6px', border: '1px solid var(--zen-border)' }}>
+                    <span style={{ fontWeight: 600, color: 'var(--zen-text)', fontSize: '0.72rem' }}>
+                      {en.routingGraph.hardwareTelemetryWidget.benchmarkLocalGpu}
+                    </span>
+                    <span style={{ fontWeight: 800, color: '#9333ea', fontSize: '0.72rem', fontVariantNumeric: 'tabular-nums' }}>
+                      {en.routingGraph.hardwareTelemetryWidget.benchmarkLocalGpuSpeed}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', backgroundColor: 'var(--zen-surface)', borderRadius: '6px', border: '1px solid var(--zen-border)' }}>
+                    <span style={{ fontWeight: 600, color: 'var(--zen-text)', fontSize: '0.72rem' }}>
+                      {en.routingGraph.hardwareTelemetryWidget.benchmarkLocalCpu}
+                    </span>
+                    <span style={{ fontWeight: 800, color: '#d97706', fontSize: '0.72rem', fontVariantNumeric: 'tabular-nums' }}>
+                      {en.routingGraph.hardwareTelemetryWidget.benchmarkLocalCpuSpeed}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>,
         document.body

@@ -14,6 +14,13 @@ export class NodeConfigPanel {
   readonly ip: Locator;
   readonly port: Locator;
   readonly apiKey: Locator;
+  readonly googleApiKey: Locator;
+
+  // Tool Enforcing Gateway
+  readonly toolGatewayCheckbox: Locator;
+  readonly toolGatewayStatus: Locator;
+  readonly confirmInstallToolGatewayButton: Locator;
+  readonly confirmUninstallToolGatewayButton: Locator;
 
   // Actions
   readonly updateButton: Locator;
@@ -32,6 +39,12 @@ export class NodeConfigPanel {
     this.ip = page.locator('input[name="ip"]');
     this.port = page.locator('input[name="port"]');
     this.apiKey = page.locator('input[name="apiKey"]');
+    this.googleApiKey = page.locator('input[name="googleApiKey"]');
+
+    this.toolGatewayCheckbox = page.getByTestId('tool-gateway-checkbox');
+    this.toolGatewayStatus = page.getByTestId('tool-gateway-status');
+    this.confirmInstallToolGatewayButton = page.getByTestId('confirm-install-tool-gateway');
+    this.confirmUninstallToolGatewayButton = page.getByTestId('confirm-uninstall-tool-gateway');
 
     this.updateButton = page.getByRole('button', { name: /SAVE CHANGES/i });
     this.helpButton = page.getByRole('button', { name: /HELP/ });
