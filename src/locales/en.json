@@ -2,12 +2,19 @@
   "routingGraph": {
     "nodes": {
       "ollamaLocal": {
-        "label": "Ollama (Local LLM)",
+        "label": "Ollama",
+        "subheader": "Open source (local)",
         "description": "Your private, local brain! Ollama runs lightweight open-source models right on your machine, keeping your data entirely private and free from cloud costs."
       },
       "openRouter": {
-        "label": "OPENROUTER",
-        "description": "The ultimate gateway to the cloud! OpenRouter acts as a smart multiplexer, automatically routing your requests to the best and cheapest proprietary AI models available."
+        "label": "Openrouter",
+        "subheader": "Stripe",
+        "description": ""
+      },
+      "googleAIStudio": {
+        "label": "AI Studio",
+        "subheader": "Google",
+        "description": ""
       },
       "localHardware": {
         "label": "LOCAL HARDWARE",
@@ -18,16 +25,19 @@
         "description": "Routing to external API providers."
       },
       "frugallmCore": {
-        "label": "FRUGALLM CORE",
+        "label": "FrugaLLM",
+        "subheader": "Open source",
         "description": "The true mastermind of the operation. FrugalLM acts as your central hub, intercepting prompts and dynamically routing them to save you serious money without sacrificing quality!"
       },
       "openCode": {
-        "label": "OPENCODE",
-        "description": "Your AI pair programmer, living right inside your IDE! OpenCode connects directly to the hub to give you brilliant, context-aware coding suggestions as you type."
+        "label": "Opencode",
+        "subheader": "Open source",
+        "description": ""
       },
       "hermes": {
-        "label": "HERMES",
-        "description": "Say hello to Hermes, your internal AI chat interface! It's not just for chatting; Hermes can kick off complex, multi-step agent workflows to get real work done."
+        "label": "Hermes",
+        "subheader": "Open source",
+        "description": ""
       }
     },
     "nodeConfigPanel": {
@@ -49,11 +59,11 @@
           "helpText": "Want to tweak how the agent runs? You can pass secret flags here (like '--verbose' to see its inner thoughts). Just list them out, separated by commas.",
           "placeholder": "--verbose, --force"
         },
-        "instructionPrompt": {
+        "prompt": {
           "label": "INSTRUCTION PROMPT",
           "helpText": "This is your agent's main mission. Tell it exactly what you want it to accomplish. Be as specific as possible—the better the prompt, the better the results!"
         },
-        "ipAddress": {
+        "ip": {
           "label": "IP ADDRESS / HOST",
           "helpText": "Where does this service live on the network? Usually, it's right here on your computer ('127.0.0.1' or 'localhost'), but it could be a cloud API halfway across the world!"
         },
@@ -63,44 +73,40 @@
         },
         "bindAllInterfaces": {
           "label": "Make available everywhere",
-          "helpText": "Making FrugaLLM available everywhere means it will detect traffic from all your network connections. Do not enable this if you only using FrugaLLM on one machine."
+          "helpText": "Allow other computers on your local network (LAN) to connect directly to your FrugaLLM proxy."
         },
         "apiPassword": {
-          "label": "API PASSWORD (OPTIONAL)",
-          "helpText": "Set an API token to secure your FrugalLM node.",
-          "placeholder": "Super secret...",
+          "label": "API PASSWORD",
+          "checkboxLabel": "Require API Password",
+          "placeholder": "Enter proxy password...",
+          "helpText": "Require a Bearer token / password when clients connect to your FrugaLLM proxy.",
+          "active": "• ACTIVE",
           "buttons": {
-            "overwrite": "OVERWRITE EXISTING PASSWORD?",
-            "removePrompt": "REMOVE PASSWORD?",
-            "yes": "YES",
-            "no": "NO",
-            "apply": "APPLY PASSWORD",
-            "remove": "REMOVE"
+            "show": "Show password",
+            "hide": "Hide password",
+            "copy": "Copy password",
+            "copied": "Copied!"
           }
         },
         "openRouterApiKey": {
           "label": "API KEY",
-          "helpText": "Your OpenRouter API Key. This will be securely saved into your operating system's native Keychain!",
-          "placeholder": "sk-or-v1-...",
-          "configuredPlaceholder": "•••••••••••••••• (Key Configured)"
+          "helpText": "Your OpenRouter API Key. This will be securely saved into your operating system's native Keychain!"
         },
         "googleApiKey": {
           "label": "API KEY",
-          "helpText": "Your Google AI Studio API Key. This will be securely saved into your operating system's native Keychain!",
-          "placeholder": "AIzaSy...",
-          "configuredPlaceholder": "•••••••••••••••• (Key Configured)"
+          "helpText": "Your Google AI Studio API Key. This will be securely saved into your operating system's native Keychain!"
+        },
+        "vramDetected": {
+          "label": "VRAM DETECTED (GB)",
+          "helpText": "We tried to auto-detect your Video RAM, but you can correct this if it's wrong."
+        },
+        "recommendedModel": {
+          "label": "RECOMMENDED MODEL",
+          "helpText": "Based on your VRAM, we'll pull this model for you!"
+        },
+        "workspace": {
+          "label": "WORKSPACE FOLDER"
         }
-      },
-      "stats": {
-        "sessionTokens": "SESSION TOKENS",
-        "lifetimeTokens": "LIFETIME TOKENS",
-        "estLifetimeSavings": "EST. LIFETIME SAVINGS",
-        "savingsHelpText": "Estimated savings assuming Claude 3.5 Sonnet pricing ($3.00/1M In, $15.00/1M Out)",
-        "vramDetected": "VRAM DETECTED (GB)",
-        "vramHelpText": "We tried to auto-detect your Video RAM, but you can correct this if it's wrong.",
-        "recommendedModel": "RECOMMENDED MODEL",
-        "recommendedModelHelpText": "Based on your VRAM, we'll pull this model for you!",
-        "unsupportedVram": "Unsupported (< 4GB VRAM)"
       },
       "actions": {
         "copyIpAndPort": "COPY IP & PORT",
@@ -109,8 +115,8 @@
         "help": "HELP",
         "hermes": {
           "missing": "HERMES AGENT MISSING",
-          "prerequisite": "Prerequisite: Connect Ollama or OpenRouter first.",
-          "initialize": "INITIALIZE HERMES",
+          "prerequisite": "Please connect an intelligence source to FrugaLLM first.",
+          "initialize": "INSTALL HERMES",
           "installed": "HERMES AGENT INSTALLED",
           "launchDesktop": "LAUNCH DESKTOP",
           "launchWebUi": "LAUNCH WEBUI",
@@ -118,14 +124,15 @@
         },
         "opencode": {
           "missing": "OPENCODE AGENT MISSING",
-          "initialize": "INITIALIZE OPENCODE",
+          "prerequisite": "Please connect an intelligence source to FrugaLLM first.",
+          "initialize": "INSTALL OPENCODE",
           "installed": "OPENCODE AGENT INSTALLED",
           "launch": "LAUNCH OPENCODE",
           "uninstall": "UNINSTALL OPENCODE"
         },
         "ollama": {
           "missing": "OLLAMA MISSING",
-          "initialize": "INITIALIZE OLLAMA",
+          "initialize": "INSTALL OLLAMA",
           "installed": "OLLAMA INSTALLED",
           "chat": "CHAT WITH OLLAMA",
           "uninstall": "UNINSTALL OLLAMA"
@@ -251,5 +258,16 @@
       "openRouterSubtitle": "Route queries dynamically to save costs and avoid rate limits.",
       "guideTitle": "FRUGALLM // GUIDE"
     }
+  },
+  "onboarding": {
+    "welcomeTitle": "Welcome to FrugalLLM",
+    "welcomeSubtitle": "The ultimate local-first AI orchestrator. Do you want a quick tour of the nodes, or are you ready to dive straight in?",
+    "learnTitle": "I want to learn, walk me through it",
+    "learnSubtitle": "Starts a quick interactive tutorial.",
+    "skipTitle": "Doing is learning (skip tutorial)",
+    "skipSubtitle": "Jump right into the app.",
+    "hardwareNodeTitle": "Local Hardware Node",
+    "hardwareNodeDescription": "This node represents your machine's physical GPU and CPU. FrugalLLM monitors telemetry in real-time to optimize local AI inference.",
+    "finishTour": "Finish Tour"
   }
 }

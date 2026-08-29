@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { TerminalLoader } from './components/TerminalLoader';
 import { useCanvasLogic } from './hooks/useCanvasLogic';
 import { enable as enableAutostart, disable as disableAutostart, isEnabled as isAutostartEnabled } from '@tauri-apps/plugin-autostart';
@@ -12,12 +13,16 @@ import '@xterm/xterm/css/xterm.css';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import ReactMarkdown from 'react-markdown';
-import { StatusLight, CopyableField, InfoField, HardwareNode } from './components/NodeWidgets';
+import { StatusLight, InfoField, HardwareNode } from './components/NodeWidgets';
+import { MemoryPipelineWidget } from './components/MemoryPipelineWidget';
+import { MemoryProvider, useMemory } from './context/MemoryContext';
+import { HardwareProfile, AVAILABLE_MODELS, GRAPH_OVERHEAD_GB } from './services/memoryCalculator';
 import { CloudRoutingPanel } from './components/CloudRoutingPanel';
 import { useOnboarding } from './hooks/useOnboarding';
 import { OnboardingDecision } from './components/OnboardingDecision';
 import { OnboardingOverlay } from './components/OnboardingOverlay';
 import en from './locales/en.json';
+import { Eye, EyeOff, Copy, Check } from 'lucide-react';
 import { loadOnnxClassifier, clearOnnxCache } from './services/onnxGateway';
 import agentsGuide from './guides/agents.md?raw';
 import ollamaGuide from './guides/ollama.md?raw';
@@ -45,6 +50,7 @@ const nodeLayout: Record<string, { rx: number, ry: number }> = {
 
 type NodeData = {
   label: string;
+  subheader?: string;
   description: string;
   ip?: string;
   port?: string;
@@ -58,6 +64,8 @@ type NodeData = {
   isGenerating?: boolean;
   isHardware?: boolean;
   isCloud?: boolean;
+  keyPrefix?: string;
+  lastStatus?: string;
 };
 
 type AppNode = {
@@ -72,7 +80,8 @@ const initialNodes: AppNode[] = [
     id: 'node-ollama',
     x: 50, y: 50,
     data: { 
-      label: 'Ollama (Local LLM)', 
+      label: 'Ollama',
+      subheader: 'Open source (local)', 
       description: 'Your private, local brain! Ollama runs lightweight open-source models right on your machine, keeping your data entirely private and free from cloud costs.',
       ip: '127.0.0.1', 
       port: '11434',
@@ -83,7 +92,8 @@ const initialNodes: AppNode[] = [
     id: 'node-openrouter',
     x: 750, y: 50,
     data: {
-      label: 'OPENROUTER',
+      label: 'Openrouter',
+      subheader: 'Stripe',
       description: '',
       ip: 'openrouter.ai',
       status: 'needs_activation'
@@ -93,7 +103,8 @@ const initialNodes: AppNode[] = [
     id: 'node-google',
     x: 400, y: 50,
     data: {
-      label: 'GOOGLE AI STUDIO',
+      label: 'AI Studio',
+      subheader: 'Google',
       description: '',
       ip: 'generativelanguage.googleapis.com',
       status: 'needs_activation'
@@ -103,7 +114,8 @@ const initialNodes: AppNode[] = [
     id: 'node-frugallm',
     x: 400, y: 250,
     data: { 
-      label: 'FRUGALLM CORE',
+      label: 'FrugaLLM',
+      subheader: 'Open source',
       description: '',
       ip: '127.0.0.1', 
       port: '8080',
@@ -114,8 +126,9 @@ const initialNodes: AppNode[] = [
     id: 'node-opencode',
     x: 150, y: 500,
     data: { 
-      label: 'OPENCODE',
-      description: 'Your AI pair programmer, living right inside your IDE! OpenCode connects directly to the hub to give you brilliant, context-aware coding suggestions as you type.',
+      label: 'Opencode',
+      subheader: 'Open source',
+      description: '',
       ip: '127.0.0.1', 
       port: '3000',
       status: 'inactive'
@@ -125,8 +138,9 @@ const initialNodes: AppNode[] = [
     id: 'node-hermes',
     x: 650, y: 500,
     data: { 
-      label: 'HERMES',
-      description: "Say hello to Hermes, your internal AI chat interface! It's not just for chatting; Hermes can kick off complex, multi-step agent workflows to get real work done.",
+      label: 'Hermes',
+      subheader: 'Open source',
+      description: '',
       ip: '127.0.0.1', 
       port: '3001',
       status: 'inactive'
@@ -154,18 +168,128 @@ const Icons = {
 };
 
 const Tooltip = ({ text }: { text: string }) => {
+  const [visible, setVisible] = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0, isAbove: true });
+  const triggerRef = useRef<HTMLSpanElement>(null);
+
+  const updatePosition = () => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      const isAbove = rect.top > 90;
+      setCoords({
+        top: isAbove ? rect.top - 8 : rect.bottom + 8,
+        left: rect.left + rect.width / 2,
+        isAbove
+      });
+    }
+  };
+
+  const handleMouseEnter = () => {
+    updatePosition();
+    setVisible(true);
+  };
+
+  const handleMouseLeave = () => {
+    setVisible(false);
+  };
+
+  useEffect(() => {
+    if (!visible) return;
+    const handleScrollOrResize = () => {
+      updatePosition();
+    };
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    window.addEventListener('resize', handleScrollOrResize);
+    return () => {
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+      window.removeEventListener('resize', handleScrollOrResize);
+    };
+  }, [visible]);
+
   return (
-    <span className="tooltip-container" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '14px', height: '14px', color: '#9ca3af', marginLeft: '6px', cursor: 'help', position: 'relative' }}>
-      {Icons.info}
-      <span className="tooltip-text">{text}</span>
-    </span>
+    <>
+      <span 
+        ref={triggerRef}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        style={{ 
+          display: 'inline-flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          width: '14px', 
+          height: '14px', 
+          color: '#9ca3af', 
+          marginLeft: '6px', 
+          cursor: 'help' 
+        }}
+      >
+        {Icons.info}
+      </span>
+      {visible && createPortal(
+        <div 
+          style={{
+            position: 'fixed',
+            top: coords.top,
+            left: coords.left,
+            transform: coords.isAbove ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
+            zIndex: 999999,
+            pointerEvents: 'none',
+            width: 'max-content',
+            maxWidth: '260px',
+            backgroundColor: '#111827',
+            color: '#ffffff',
+            textAlign: 'center',
+            borderRadius: '6px',
+            padding: '8px 12px',
+            fontSize: '0.75rem',
+            fontFamily: 'sans-serif',
+            fontWeight: 'normal',
+            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.2)',
+            lineHeight: 1.35,
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            textTransform: 'none'
+          }}
+        >
+          {text}
+          <div 
+            style={{
+              position: 'absolute',
+              ...(coords.isAbove 
+                ? { top: '100%', borderColor: '#111827 transparent transparent transparent' } 
+                : { bottom: '100%', borderColor: 'transparent transparent #111827 transparent' }),
+              left: '50%',
+              transform: 'translateX(-50%)',
+              borderWidth: '5px',
+              borderStyle: 'solid',
+            }}
+          />
+        </div>,
+        document.body
+      )}
+    </>
   );
 };
 
-const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeInstalled, isOllamaInstalled, isToolGatewayInstalled, detectedVram, setDetectedVram, hasActiveBackend, handleInitializeHermes, handleOpenHermes, handleUninstallHermes, handleInitializeOpenCode, handleOpenOpenCode, handleUninstallOpenCode, handleInitializeOllama, handleOpenOllama, handleUninstallOllama, handleInstallToolGateway, handleUninstallToolGateway, handleDisconnectOpenRouter, handleDisconnectGoogle, frugalConfig, handleOpenHermesDesktop, handleOpenHermesWeb, handleOpenOpenCodeWeb, activeProcesses, handleKillProcess, setFrugalConfig }: any) => {
+const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeInstalled, isOllamaInstalled, isToolGatewayInstalled, detectedVram, setDetectedVram, hasActiveBackend, handleInitializeHermes, handleOpenHermes, handleUninstallHermes, handleInitializeOpenCode, handleOpenOpenCode, handleUninstallOpenCode, handleInitializeOllama, handleOpenOllama, handleUninstallOllama, handleInstallToolGateway, handleUninstallToolGateway, handleDisconnectOpenRouter, handleDisconnectGoogle, frugalConfig, handleOpenHermesDesktop, handleOpenHermesWeb, handleOpenOpenCodeWeb, activeProcesses, handleKillProcess, setFrugalConfig, latestTelemetry, hardwareProfile }: any) => {
+  const memory = useMemory();
   const [confirmUninstall, setConfirmUninstall] = useState<string | null>(null);
   const [showToolGatewayPrompt, setShowToolGatewayPrompt] = useState<'install' | 'uninstall' | null>(null);
   const [ipCopied, setIpCopied] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [passwordCopied, setPasswordCopied] = useState(false);
+  const [enablePassword, setEnablePassword] = useState(false);
+
+  useEffect(() => {
+    const vramNum = Number(detectedVram) || 0;
+    if (vramNum > 0) {
+      memory.setDetectedVramGb(vramNum);
+      invoke<string>('get_model_tag_for_vram', { detectedVramGb: vramNum })
+        .then((tag) => {
+          if (tag) memory.setActiveModelName(tag);
+        })
+        .catch(() => {});
+    }
+  }, [detectedVram]);
   
   const [formData, setFormData] = useState({
     ip: node.data.ip || '',
@@ -188,6 +312,10 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
 
   useEffect(() => {
     if (node.id === 'node-frugallm') {
+      const hasPass = Boolean(frugalConfig?.api_password);
+      setEnablePassword(hasPass);
+      setShowPassword(false);
+      setPasswordCopied(false);
       setFormData(prev => ({
         ...prev,
         port: frugalConfig?.port?.toString() || '0',
@@ -227,84 +355,91 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
         await disableAutostart();
       }
     }
-    onSave(node.id, formData);
+    const dataToSave = {
+      ...formData,
+      api_password: enablePassword ? formData.api_password : ''
+    };
+    onSave(node.id, dataToSave);
   };
   
   const handlePanelClick = (e: any) => e.stopPropagation();
 
   return (
     <div onClick={handlePanelClick} style={{ 
-      width: '450px', 
+      width: '400px', 
       maxHeight: '85vh',
-      border: '1px solid var(--zen-border)', backgroundColor: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(16px)', borderRadius: '16px',
+      border: '1px solid var(--zen-border)', backgroundColor: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(16px)', borderRadius: '12px',
       display: 'flex', flexDirection: 'column',
       boxShadow: '0 24px 48px rgba(0, 0, 0, 0.1)', overflow: 'hidden',
       zIndex: 100,
       fontFamily: 'inherit'
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', borderBottom: '1px solid var(--zen-border)' }}>
-        <h2 style={{ margin: 0, color: 'var(--zen-text)', fontSize: '1.2rem', fontWeight: 600 }}>{node.data.label}</h2>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: '#9ca3af' }}>✕</button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', borderBottom: '1px solid var(--zen-border)' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+          <h2 style={{ margin: 0, color: 'var(--zen-text)', fontSize: '1rem', fontWeight: 700 }}>{node.data.label}</h2>
+          {node.data.subheader && (
+            <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--zen-text-secondary)' }}>
+              ({node.data.subheader})
+            </span>
+          )}
+        </div>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', color: '#9ca3af', padding: '2px 6px' }}>✕</button>
       </div>
       
-      <div style={{ padding: '20px', flexGrow: 1, backgroundColor: 'transparent', overflowY: 'auto' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div style={{ padding: '14px 16px', flexGrow: 1, backgroundColor: 'transparent', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {node.data.isAgent ? (
             <>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>SCHEMA PATH <Tooltip text="Think of this as the agent's strict instruction manual. By giving it a JSON schema, we force the AI to return data in the exact structure your application expects. No more messy text—just clean data!" /></label>
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>SCHEMA PATH <Tooltip text="Think of this as the agent's strict instruction manual. By giving it a JSON schema, we force the AI to return data in the exact structure your application expects. No more messy text—just clean data!" /></label>
                 <input type="text" name="schemaPath" value={formData.schemaPath} onChange={handleChange} 
-                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
+                  style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', boxShadow: 'none' }} />
               </div>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>WORKING DIR (CWD) <Tooltip text="Where should the agent live while it works? This is the folder on your computer where the agent will run commands and look for files. It's basically the agent's home base." /></label>
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>WORKING DIR (CWD) <Tooltip text="Where should the agent live while it works? This is the folder on your computer where the agent will run commands and look for files. It's basically the agent's home base." /></label>
                 <input type="text" name="cwd" value={formData.cwd} onChange={handleChange} 
-                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
+                  style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', boxShadow: 'none' }} />
               </div>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>EXECUTABLE (BIN) <Tooltip text="Which program is actually doing the heavy lifting? This tells the system what tool to launch under the hood. Usually, it's 'agy' for our Antigravity agent, but you can plug in any CLI tool!" /></label>
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>EXECUTABLE (BIN) <Tooltip text="Which program is actually doing the heavy lifting? This tells the system what tool to launch under the hood. Usually, it's 'agy' for our Antigravity agent, but you can plug in any CLI tool!" /></label>
                 <input type="text" name="bin" value={formData.bin} onChange={handleChange} 
-                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
+                  style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', boxShadow: 'none' }} />
               </div>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>EXTRA ARGS (CSV) <Tooltip text="Want to tweak how the agent runs? You can pass secret flags here (like '--verbose' to see its inner thoughts). Just list them out, separated by commas." /></label>
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>EXTRA ARGS (CSV) <Tooltip text="Want to tweak how the agent runs? You can pass secret flags here (like '--verbose' to see its inner thoughts). Just list them out, separated by commas." /></label>
                 <input type="text" name="extraArgs" value={formData.extraArgs} onChange={handleChange} placeholder="--verbose, --force"
-                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
+                  style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', boxShadow: 'none' }} />
               </div>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>INSTRUCTION PROMPT <Tooltip text="This is your agent's main mission. Tell it exactly what you want it to accomplish. Be as specific as possible—the better the prompt, the better the results!" /></label>
-                <textarea name="prompt" value={formData.prompt} onChange={handleChange} rows={3} 
-                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>INSTRUCTION PROMPT <Tooltip text="This is your agent's main mission. Tell it exactly what you want it to accomplish. Be as specific as possible—the better the prompt, the better the results!" /></label>
+                <textarea name="prompt" value={formData.prompt} onChange={handleChange} rows={2} 
+                  style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', boxShadow: 'none' }} />
               </div>
             </>
           ) : (
             <>
               {node.id !== 'node-openrouter' && node.id !== 'node-google' && (
-                <div>
-                  <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>IP ADDRESS / HOST <Tooltip text="Where does this service live on the network? Usually, it's right here on your computer ('127.0.0.1' or 'localhost'), but it could be a cloud API halfway across the world!" /></label>
-                  <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 95px', gap: '8px' }}>
+                  <div>
+                    <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>IP ADDRESS / HOST <Tooltip text="Where does this service live on the network? Usually, it's right here on your computer ('127.0.0.1' or 'localhost'), but it could be a cloud API halfway across the world!" /></label>
                     {node.id === 'node-frugallm' || node.id === 'node-hermes' || node.id === 'node-opencode' ? (
-                      <div style={{ flex: 1, padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: 'var(--zen-surface-hover)', color: '#4b5563', fontFamily: 'inherit', fontWeight: 600 }}>
+                      <div style={{ padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: 'var(--zen-surface-hover)', color: '#4b5563', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem' }}>
                         {node.id === 'node-frugallm' ? (formData.bind_all_interfaces ? '0.0.0.0' : '127.0.0.1') : formData.ip}
                       </div>
                     ) : (
                       <input type="text" name="ip" value={formData.ip} onChange={handleChange} 
-                        style={{ flex: 1, padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
+                        style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', boxShadow: 'none' }} />
                     )}
                   </div>
-                </div>
-              )}
-              {node.id !== 'node-openrouter' && node.id !== 'node-google' && (
-                <div>
-                  <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>PORT <Tooltip text="Think of the IP address as the building, and the Port as the specific door to knock on. It's how our hub knows exactly where to send its messages." /></label>
-                  <div style={{ display: 'flex', gap: '8px' }}>
+                  <div>
+                    <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>PORT <Tooltip text="Think of the IP address as the building, and the Port as the specific door to knock on. It's how our hub knows exactly where to send its messages." /></label>
                     {node.id === 'node-hermes' || node.id === 'node-opencode' || node.id === 'node-frugallm' ? (
-                      <div style={{ flex: 1, padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: 'var(--zen-surface-hover)', color: '#4b5563', fontFamily: 'inherit', fontWeight: 600 }}>
+                      <div style={{ padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: 'var(--zen-surface-hover)', color: '#4b5563', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem' }}>
                         {formData.port}
                       </div>
                     ) : (
                       <input type="text" name="port" value={formData.port} onChange={handleChange} 
-                        style={{ flex: 1, padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
+                        style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', boxShadow: 'none' }} />
                     )}
                   </div>
                 </div>
@@ -321,91 +456,148 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
                          console.error('Clipboard write failed:', err);
                        }
                     }}
-                    style={{ marginBottom: '15px', width: '100%', padding: '10px', backgroundColor: ipCopied ? '#059669' : 'var(--zen-accent)', color: '#ffffff', border: '1px solid transparent', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}>
+                    style={{ width: '100%', padding: '7px 10px', backgroundColor: ipCopied ? '#059669' : 'var(--zen-accent)', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}>
                     {ipCopied ? '✓ OK' : 'COPY IP & PORT'}
                   </button>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700, color: 'var(--zen-text)' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '2px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, color: 'var(--zen-text)' }}>
                       <input 
                         type="checkbox" 
                         name="bind_all_interfaces" 
                         checked={formData.bind_all_interfaces} 
                         onChange={(e) => setFormData(prev => ({ ...prev, bind_all_interfaces: e.target.checked }))} 
                       />
-                      Make available everywhere
-                      <Tooltip text="Making FrugaLLM available everywhere means it will detect traffic from all your network connections. Do not enable this if you only using FrugaLLM on one machine." />
+                      {en.routingGraph.nodeConfigPanel.inputs.bindAllInterfaces.label}
+                      <Tooltip text={en.routingGraph.nodeConfigPanel.inputs.bindAllInterfaces.helpText} />
                     </label>
                   </div>
 
-                  <div style={{ marginTop: '10px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', margin: 0 }}>API PASSWORD (OPTIONAL) <Tooltip text="Set an API token to secure your FrugalLM node." /></label>
-                      {frugalConfig?.api_password && (
-                        <span style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: 700 }}>• ACTIVE</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '2px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, color: 'var(--zen-text)' }}>
+                        <input 
+                          type="checkbox" 
+                          name="enable_api_password"
+                          data-testid="api-password-checkbox"
+                          checked={enablePassword} 
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setEnablePassword(checked);
+                            if (!checked) {
+                              setFormData(prev => ({ ...prev, api_password: '' }));
+                            }
+                          }} 
+                        />
+                        {en.routingGraph.nodeConfigPanel.inputs.apiPassword.checkboxLabel}
+                        <Tooltip text={en.routingGraph.nodeConfigPanel.inputs.apiPassword.helpText} />
+                      </label>
+                      {enablePassword && formData.api_password && (
+                        <span style={{ fontSize: '0.7rem', color: '#16a34a', fontWeight: 700 }}>
+                          {en.routingGraph.nodeConfigPanel.inputs.apiPassword.active}
+                        </span>
                       )}
                     </div>
-                    {frugalConfig?.api_password ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {confirmUninstall === 'overwrite-password' ? (
-                          <div style={{ padding: '8px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px' }}>
-                            <span style={{ fontSize: '0.8rem', color: 'var(--zen-text)', fontWeight: 700 }}>OVERWRITE EXISTING PASSWORD?</span>
-                            <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
-                              <button onClick={() => {
-                                setFormData(prev => ({ ...prev, api_password: '' }));
-                                setConfirmUninstall(null);
-                              }} style={{ flex: 1, padding: '6px', backgroundColor: '#3b82f6', color: '#FFFFFF', border: 'none', borderRadius: '4px', fontWeight: 700, cursor: 'pointer' }}>YES</button>
-                              <button onClick={() => setConfirmUninstall(null)} style={{ flex: 1, padding: '6px', backgroundColor: '#e5e7eb', color: '#374151', border: 'none', borderRadius: '4px', fontWeight: 700, cursor: 'pointer' }}>NO</button>
-                            </div>
-                          </div>
-                        ) : confirmUninstall === 'remove-password' ? (
-                          <div style={{ padding: '8px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px' }}>
-                            <span style={{ fontSize: '0.8rem', color: '#ef4444', fontWeight: 700 }}>REMOVE PASSWORD?</span>
-                            <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
-                              <button onClick={async () => {
-                                try {
-                                  await invoke('set_frugallm_config', { newConfig: { ...frugalConfig, api_password: null } });
-                                  const updated = await invoke('get_frugallm_config');
-                                  setFrugalConfig(updated);
-                                  setFormData(prev => ({ ...prev, api_password: '' }));
-                                } catch (e) {
-                                  console.error(e);
-                                }
-                                setConfirmUninstall(null);
-                              }} style={{ flex: 1, padding: '6px', backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '4px', fontWeight: 700, cursor: 'pointer' }}>YES</button>
-                              <button onClick={() => setConfirmUninstall(null)} style={{ flex: 1, padding: '6px', backgroundColor: '#e5e7eb', color: '#374151', border: 'none', borderRadius: '4px', fontWeight: 700, cursor: 'pointer' }}>NO</button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <button onClick={() => setConfirmUninstall('overwrite-password')} style={{ flex: 1, padding: '8px', backgroundColor: 'transparent', color: '#3b82f6', border: '1px solid #3b82f6', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontSize: '0.75rem' }}>APPLY PASSWORD</button>
-                            <button onClick={() => setConfirmUninstall('remove-password')} style={{ flex: 1, padding: '8px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #ef4444', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontSize: '0.75rem' }}>REMOVE</button>
-                          </div>
-                        )}
+
+                    {enablePassword && (
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '2px' }}>
+                        <input 
+                          type={showPassword ? "text" : "password"} 
+                          name="api_password" 
+                          data-testid="api-password-input"
+                          value={formData.api_password} 
+                          onChange={handleChange} 
+                          placeholder={en.routingGraph.nodeConfigPanel.inputs.apiPassword.placeholder}
+                          style={{ 
+                            flex: 1, 
+                            padding: '7px 10px', 
+                            border: '1px solid var(--zen-border)', 
+                            borderRadius: '6px', 
+                            backgroundColor: '#ffffff', 
+                            color: 'var(--zen-text)', 
+                            outline: 'none', 
+                            boxSizing: 'border-box', 
+                            fontFamily: 'inherit', 
+                            fontWeight: 600, 
+                            fontSize: '0.85rem',
+                            boxShadow: 'none' 
+                          }} 
+                        />
+                        <button
+                          type="button"
+                          data-testid="toggle-password-visibility"
+                          onClick={() => setShowPassword(prev => !prev)}
+                          title={showPassword ? en.routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.hide : en.routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.show}
+                          aria-label={showPassword ? en.routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.hide : en.routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.show}
+                          style={{
+                            padding: '7px 10px',
+                            backgroundColor: 'var(--zen-surface-hover)',
+                            color: 'var(--zen-text)',
+                            border: '1px solid var(--zen-border)',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontFamily: 'inherit'
+                          }}
+                        >
+                          {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                        </button>
+                        <button
+                          type="button"
+                          data-testid="copy-password-button"
+                          disabled={!formData.api_password}
+                          onClick={async () => {
+                            if (!formData.api_password) return;
+                            try {
+                              await writeText(formData.api_password);
+                              setPasswordCopied(true);
+                              setTimeout(() => setPasswordCopied(false), 1500);
+                            } catch (err) {
+                              console.error('Clipboard write failed:', err);
+                            }
+                          }}
+                          title={passwordCopied ? en.routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.copied : en.routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.copy}
+                          aria-label={passwordCopied ? en.routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.copied : en.routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.copy}
+                          style={{
+                            padding: '7px 10px',
+                            backgroundColor: passwordCopied ? '#059669' : 'var(--zen-surface-hover)',
+                            color: passwordCopied ? '#ffffff' : 'var(--zen-text)',
+                            border: '1px solid var(--zen-border)',
+                            borderRadius: '6px',
+                            cursor: formData.api_password ? 'pointer' : 'not-allowed',
+                            opacity: formData.api_password ? 1 : 0.5,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontFamily: 'inherit',
+                            transition: 'all 0.15s'
+                          }}
+                        >
+                          {passwordCopied ? <Check size={15} /> : <Copy size={15} />}
+                        </button>
                       </div>
-                    ) : (
-                      <input type="password" name="api_password" value={formData.api_password} onChange={handleChange} placeholder="Super secret..."
-                        style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
                     )}
                   </div>
 
-                  <div style={{ marginTop: '0px' }}>
+                  <div style={{ marginTop: '4px' }}>
                     <CloudRoutingPanel />
                   </div>
                 </>
               )}
               {node.id === 'node-openrouter' && (
-                <div style={{ marginTop: '16px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>API KEY <Tooltip text="Your OpenRouter API Key. This will be securely saved into your operating system's native Keychain!" /></label>
+                <div>
+                  <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>API KEY <Tooltip text="Your OpenRouter API Key. This will be securely saved into your operating system's native Keychain!" /></label>
                   <input type="password" name="apiKey" value={formData.apiKey || ''} onChange={handleChange} placeholder={node.data.status === 'active' ? "•••••••••••••••• (Key Configured)" : "sk-or-v1-..."}
-                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
+                    style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', boxShadow: 'none' }} />
                 </div>
               )}
               {node.id === 'node-google' && (
-                <div style={{ marginTop: '16px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>API KEY <Tooltip text="Your Google AI Studio API Key. This will be securely saved into your operating system's native Keychain!" /></label>
+                <div>
+                  <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>API KEY <Tooltip text="Your Google AI Studio API Key. This will be securely saved into your operating system's native Keychain!" /></label>
                   <input type="password" name="googleApiKey" value={formData.googleApiKey || ''} onChange={handleChange} placeholder={node.data.status === 'active' ? "•••••••••••••••• (Key Configured)" : "AIzaSy..."}
-                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: 'none' }} />
+                    style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', boxShadow: 'none' }} />
                 </div>
               )}
             </>
@@ -413,77 +605,79 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
           
         </div>
         
-        <p style={{ fontSize: '0.85rem', color: '#4b5563', marginTop: '32px', marginBottom: '0', lineHeight: 1.5, fontFamily: 'sans-serif', borderTop: '1px dashed #d1d5db', paddingTop: '16px' }}>
-          {node.data.description}
-        </p>
+        {node.data.description ? (
+          <p style={{ fontSize: '0.75rem', color: '#4b5563', marginTop: '12px', marginBottom: '0', lineHeight: 1.35, fontFamily: 'sans-serif', borderTop: '1px dashed #d1d5db', paddingTop: '10px' }}>
+            {node.data.description}
+          </p>
+        ) : null}
 
       {node.id === 'node-hermes' && isHermesInstalled === false && (
-        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px' }}>
-          <h4 style={{ margin: '0 0 10px 0', color: 'var(--zen-text)', fontSize: '0.9rem' }}>HERMES AGENT MISSING</h4>
+        <div style={{ marginTop: '10px', padding: '12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px' }}>
+          <h4 style={{ margin: '0 0 6px 0', color: 'var(--zen-text)', fontSize: '0.8rem' }}>HERMES AGENT MISSING</h4>
           {!hasActiveBackend ? (
-            <p style={{ fontSize: '0.8rem', color: 'var(--zen-text)', margin: 0, fontWeight: 600 }}>Prerequisite: Connect Ollama or OpenRouter first.</p>
+            <p style={{ fontSize: '0.75rem', color: 'var(--zen-text)', margin: 0, fontWeight: 600 }}>Please connect an intelligence source to FrugaLLM first.</p>
           ) : (
             <button 
               onClick={(e) => { e.stopPropagation(); handleInitializeHermes(); }}
-              style={{ width: '100%', padding: '12px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', border: '2px solid #9a3412', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-              INITIALIZE HERMES
+              style={{ width: '100%', padding: '9px 12px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', border: '2px solid #9a3412', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+              INSTALL HERMES
             </button>
           )}
         </div>
       )}
       
       {node.id === 'node-hermes' && isHermesInstalled === true && (
-        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px' }}>
-          <h4 style={{ margin: '0 0 10px 0', color: 'var(--zen-text)', fontSize: '0.9rem' }}>HERMES AGENT INSTALLED</h4>
+        <div style={{ marginTop: '10px', padding: '12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px' }}>
+          <h4 style={{ margin: '0 0 6px 0', color: 'var(--zen-text)', fontSize: '0.8rem' }}>HERMES AGENT INSTALLED</h4>
           {confirmUninstall === 'hermes' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <span style={{ fontSize: '0.8rem', color: 'var(--zen-text)', fontWeight: 700 }}>ARE YOU SURE?</span>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={(e) => { e.stopPropagation(); handleUninstallHermes(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#FFFFFF', border: '2px solid #991b1b', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
-                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#e5e7eb', color: '#374151', border: '2px solid #9ca3af', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 700 }}>ARE YOU SURE?</span>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button onClick={(e) => { e.stopPropagation(); handleUninstallHermes(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#ef4444', color: '#FFFFFF', border: '2px solid #991b1b', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
+                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#e5e7eb', color: '#374151', border: '2px solid #9ca3af', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
               </div>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>WORKSPACE FOLDER</label>
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>WORKSPACE FOLDER</label>
                 <input type="text" name="hermes_workspace" value={formData.hermes_workspace || ''} onChange={handleChange}
-                  style={{ width: '100%', padding: '10px 12px', border: '2px solid #166534', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600 }} />
+                  style={{ width: '100%', padding: '7px 10px', border: '2px solid #166534', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem' }} />
               </div>
               <button 
                 onClick={(e) => { e.stopPropagation(); handleOpenHermes(); }}
-                style={{ width: '100%', padding: '12px', backgroundColor: '#16a34a', color: '#FFFFFF', border: '2px solid #166534', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                style={{ width: '100%', padding: '9px 12px', backgroundColor: '#16a34a', color: '#FFFFFF', border: '2px solid #166534', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
                 LAUNCH HERMES
               </button>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '6px' }}>
                 <button 
                   onClick={(e) => { e.stopPropagation(); handleOpenHermesDesktop(); }}
-                  style={{ flex: 1, padding: '8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
+                  style={{ flex: 1, padding: '6px 8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                   LAUNCH DESKTOP
                 </button>
                 <button 
                   onClick={(e) => { e.stopPropagation(); handleOpenHermesWeb(); }}
-                  style={{ flex: 1, padding: '8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
+                  style={{ flex: 1, padding: '6px 8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                   LAUNCH WEBUI
                 </button>
               </div>
               {['run-hermes', 'run-hermes-desktop', 'run-hermes-web'].map(mode => activeProcesses && activeProcesses[mode] && (
-                <div key={mode} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px', marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--zen-text)', fontWeight: 700, fontSize: '0.8rem' }}>
-                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#16a34a', boxShadow: '0 0 4px #16a34a' }} />
+                <div key={mode} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px', marginBottom: '4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--zen-text)', fontWeight: 700, fontSize: '0.75rem' }}>
+                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#16a34a', boxShadow: '0 0 4px #16a34a' }} />
                     {mode.replace('run-', '').toUpperCase()} ACTIVE
                   </div>
-                  <button onClick={(e) => { e.stopPropagation(); handleKillProcess(mode); }} style={{ backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', padding: '4px 8px', fontSize: '0.7rem', fontWeight: 'bold', cursor: 'pointer' }}>KILL</button>
+                  <button onClick={(e) => { e.stopPropagation(); handleKillProcess(mode); }} style={{ backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '4px', padding: '3px 6px', fontSize: '0.65rem', fontWeight: 'bold', cursor: 'pointer' }}>KILL</button>
                 </div>
               ))}
               <button 
                 onClick={(e) => { e.stopPropagation(); invoke('edit_hermes_soul').catch(console.error); }}
-                style={{ width: '100%', padding: '8px', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '8px', color: '#374151', border: '2px solid #d1d5db', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
+                style={{ width: '100%', padding: '6px 8px', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '6px', color: '#374151', border: '1px solid #d1d5db', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                 EDIT SOUL.MD
               </button>
               <button 
                 onClick={(e) => { e.stopPropagation(); setConfirmUninstall('hermes'); }}
-                style={{ width: '100%', padding: '8px', backgroundColor: 'transparent', color: '#ef4444', border: '2px dashed #ef4444', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
+                style={{ width: '100%', padding: '6px 8px', backgroundColor: 'transparent', color: '#ef4444', border: '1px dashed #ef4444', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                 UNINSTALL HERMES
               </button>
             </div>
@@ -492,60 +686,60 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
       )}
 
       {node.id === 'node-opencode' && isOpenCodeInstalled === false && (
-        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px' }}>
-          <h4 style={{ margin: '0 0 10px 0', color: 'var(--zen-text)', fontSize: '0.9rem' }}>OPENCODE AGENT MISSING</h4>
+        <div style={{ marginTop: '10px', padding: '12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px' }}>
+          <h4 style={{ margin: '0 0 6px 0', color: 'var(--zen-text)', fontSize: '0.8rem' }}>OPENCODE AGENT MISSING</h4>
           {!hasActiveBackend ? (
-            <p style={{ fontSize: '0.8rem', color: 'var(--zen-text)', margin: 0, fontWeight: 600 }}>Prerequisite: Connect Ollama or OpenRouter first.</p>
+            <p style={{ fontSize: '0.75rem', color: 'var(--zen-text)', margin: 0, fontWeight: 600 }}>Please connect an intelligence source to FrugaLLM first.</p>
           ) : (
             <button 
               onClick={(e) => { e.stopPropagation(); handleInitializeOpenCode(); }}
-              style={{ width: '100%', padding: '12px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', border: '2px solid #9a3412', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-              INITIALIZE OPENCODE
+              style={{ width: '100%', padding: '9px 12px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', border: '2px solid #9a3412', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+              INSTALL OPENCODE
             </button>
           )}
         </div>
       )}
       
       {node.id === 'node-opencode' && isOpenCodeInstalled === true && (
-        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px' }}>
-          <h4 style={{ margin: '0 0 10px 0', color: 'var(--zen-text)', fontSize: '0.9rem' }}>OPENCODE AGENT INSTALLED</h4>
+        <div style={{ marginTop: '10px', padding: '12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px' }}>
+          <h4 style={{ margin: '0 0 6px 0', color: 'var(--zen-text)', fontSize: '0.8rem' }}>OPENCODE AGENT INSTALLED</h4>
           {confirmUninstall === 'opencode' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <span style={{ fontSize: '0.8rem', color: 'var(--zen-text)', fontWeight: 700 }}>ARE YOU SURE?</span>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={(e) => { e.stopPropagation(); handleUninstallOpenCode(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#FFFFFF', border: '2px solid #991b1b', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
-                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#e5e7eb', color: '#374151', border: '2px solid #9ca3af', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 700 }}>ARE YOU SURE?</span>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button onClick={(e) => { e.stopPropagation(); handleUninstallOpenCode(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#ef4444', color: '#FFFFFF', border: '2px solid #991b1b', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
+                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#e5e7eb', color: '#374151', border: '2px solid #9ca3af', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
               </div>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>WORKSPACE FOLDER</label>
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>WORKSPACE FOLDER</label>
                 <input type="text" name="opencode_workspace" value={formData.opencode_workspace || ''} onChange={handleChange}
-                  style={{ width: '100%', padding: '10px 12px', border: '2px solid #166534', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600 }} />
+                  style={{ width: '100%', padding: '7px 10px', border: '2px solid #166534', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem' }} />
               </div>
               <button 
                 onClick={(e) => { e.stopPropagation(); handleOpenOpenCode(); }}
-                style={{ width: '100%', padding: '12px', backgroundColor: '#16a34a', color: '#FFFFFF', border: '2px solid #166534', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                style={{ width: '100%', padding: '9px 12px', backgroundColor: '#16a34a', color: '#FFFFFF', border: '2px solid #166534', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
                 LAUNCH OPENCODE
               </button>
               <button 
                 onClick={(e) => { e.stopPropagation(); handleOpenOpenCodeWeb(); }}
-                style={{ width: '100%', padding: '8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
+                style={{ width: '100%', padding: '6px 8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                 LAUNCH WEBUI
               </button>
               {['run-opencode', 'run-opencode-web'].map(mode => activeProcesses && activeProcesses[mode] && (
-                <div key={mode} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px', marginBottom: '8px', marginTop: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--zen-text)', fontWeight: 700, fontSize: '0.8rem' }}>
-                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#16a34a', boxShadow: '0 0 4px #16a34a' }} />
+                <div key={mode} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px', marginBottom: '4px', marginTop: '4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--zen-text)', fontWeight: 700, fontSize: '0.75rem' }}>
+                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#16a34a', boxShadow: '0 0 4px #16a34a' }} />
                     {mode.replace('run-', '').toUpperCase()} ACTIVE
                   </div>
-                  <button onClick={(e) => { e.stopPropagation(); handleKillProcess(mode); }} style={{ backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', padding: '4px 8px', fontSize: '0.7rem', fontWeight: 'bold', cursor: 'pointer' }}>KILL</button>
+                  <button onClick={(e) => { e.stopPropagation(); handleKillProcess(mode); }} style={{ backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '4px', padding: '3px 6px', fontSize: '0.65rem', fontWeight: 'bold', cursor: 'pointer' }}>KILL</button>
                 </div>
               ))}
               <button 
                 onClick={(e) => { e.stopPropagation(); setConfirmUninstall('opencode'); }}
-                style={{ width: '100%', padding: '8px', backgroundColor: 'transparent', color: '#ef4444', border: '2px dashed #ef4444', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
+                style={{ width: '100%', padding: '6px 8px', backgroundColor: 'transparent', color: '#ef4444', border: '1px dashed #ef4444', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                 UNINSTALL OPENCODE
               </button>
             </div>
@@ -554,50 +748,90 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
       )}
 
       {node.id === 'node-ollama' && isOllamaInstalled === false && (
-        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px' }}>
-          <h4 style={{ margin: '0 0 10px 0', color: 'var(--zen-text)', fontSize: '0.9rem' }}>OLLAMA MISSING</h4>
+        <div style={{ marginTop: '10px', padding: '12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px' }}>
+          <h4 style={{ margin: '0 0 6px 0', color: 'var(--zen-text)', fontSize: '0.8rem' }}>OLLAMA MISSING</h4>
           
-          <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>VRAM DETECTED (GB) <Tooltip text="We tried to auto-detect your Video RAM, but you can correct this if it's wrong." /></label>
-            <input type="text" value={detectedVram} onChange={(e) => setDetectedVram(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', border: '2px solid #9a3412', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, boxShadow: '2px 2px 0px #9a3412' }} />
+          <div style={{ marginBottom: '8px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>VRAM DETECTED (GB) <Tooltip text="We tried to auto-detect your Video RAM, but you can correct this if it's wrong." /></label>
+            <input 
+              type="text" 
+              value={detectedVram} 
+              onChange={(e) => {
+                setDetectedVram(e.target.value);
+                const num = Number(e.target.value) || 0;
+                if (num > 0) memory.setDetectedVramGb(num);
+              }}
+              data-testid="vram-detected-input"
+              style={{ width: '100%', padding: '7px 10px', border: '2px solid #9a3412', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', boxShadow: '2px 2px 0px #9a3412' }} 
+            />
           </div>
 
-          <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '6px' }}>RECOMMENDED MODEL <Tooltip text="Based on your VRAM, we'll pull this model for you!" /></label>
-            <input type="text" readOnly value={Number(detectedVram) >= 32 ? 'gemma4:31b' : Number(detectedVram) >= 24 ? 'gemma4:26b' : Number(detectedVram) >= 12 ? 'gemma4:12b' : Number(detectedVram) >= 8 ? 'gemma4:e4b' : Number(detectedVram) >= 4 ? 'gemma4:e2b' : 'Unsupported (< 4GB VRAM)'}
-              style={{ width: '100%', padding: '10px 12px', border: '2px solid #9a3412', backgroundColor: '#fed7aa', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, cursor: 'not-allowed' }} />
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>RECOMMENDED MODEL <Tooltip text="Based on your VRAM, we'll pull this model for you!" /></label>
+            <select 
+              value={memory.activeModelName} 
+              onChange={(e) => memory.setActiveModelName(e.target.value)}
+              data-testid="recommended-model-input"
+              style={{ width: '100%', padding: '7px 10px', border: '2px solid #9a3412', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239a3412' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center', paddingRight: '30px' }} 
+            >
+              {AVAILABLE_MODELS.map((model) => {
+                const totalGb = (model.weightsGb + model.kvCacheGb + GRAPH_OVERHEAD_GB).toFixed(1);
+                const isRecommended = model.tag === memory.defaultRecommendedModel;
+                return (
+                  <option key={model.tag} value={model.tag}>
+                    {isRecommended ? '⭐ ' : ''}{model.tag} ({totalGb} GB)
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          <div style={{ marginBottom: '12px' }}>
+            <MemoryPipelineWidget 
+              modelTag={memory.activeModelName} 
+              segments={memory.effectiveSegments} 
+              hardwareProfile={hardwareProfile || memory.hardwareProfile || latestTelemetry?.hardware_profile} 
+            />
           </div>
 
           <button 
             onClick={(e) => { e.stopPropagation(); handleInitializeOllama(); }}
-            style={{ width: '100%', padding: '12px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', border: '2px solid #9a3412', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-            INITIALIZE OLLAMA
+            style={{ width: '100%', padding: '9px 12px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', border: '2px solid #9a3412', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+            INSTALL OLLAMA
           </button>
         </div>
       )}
       
       {node.id === 'node-ollama' && isOllamaInstalled === true && (
-        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px' }}>
-          <h4 style={{ margin: '0 0 10px 0', color: 'var(--zen-text)', fontSize: '0.9rem' }}>OLLAMA INSTALLED</h4>
+        <div style={{ marginTop: '10px', padding: '12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px' }}>
+          <h4 style={{ margin: '0 0 6px 0', color: 'var(--zen-text)', fontSize: '0.8rem' }}>OLLAMA INSTALLED</h4>
+          
+          <div style={{ marginBottom: '12px' }}>
+            <MemoryPipelineWidget 
+              modelTag={latestTelemetry?.ollama?.model_name || memory.activeModelName} 
+              segments={memory.effectiveSegments} 
+              hardwareProfile={hardwareProfile || memory.hardwareProfile || latestTelemetry?.hardware_profile} 
+            />
+          </div>
+
           {confirmUninstall === 'ollama' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <span style={{ fontSize: '0.8rem', color: 'var(--zen-text)', fontWeight: 700 }}>ARE YOU SURE?</span>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={(e) => { e.stopPropagation(); handleUninstallOllama(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#FFFFFF', border: '2px solid #991b1b', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
-                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#e5e7eb', color: '#374151', border: '2px solid #9ca3af', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 700 }}>ARE YOU SURE?</span>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button onClick={(e) => { e.stopPropagation(); handleUninstallOllama(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#ef4444', color: '#FFFFFF', border: '2px solid #991b1b', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
+                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#e5e7eb', color: '#374151', border: '2px solid #9ca3af', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
               </div>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <button 
                 onClick={(e) => { e.stopPropagation(); handleOpenOllama(); }}
-                style={{ width: '100%', padding: '12px', backgroundColor: '#16a34a', color: '#FFFFFF', border: '2px solid #166534', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                style={{ width: '100%', padding: '9px 12px', backgroundColor: '#16a34a', color: '#FFFFFF', border: '2px solid #166534', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
                 CHAT WITH OLLAMA
               </button>
               <button 
                 onClick={(e) => { e.stopPropagation(); setConfirmUninstall('ollama'); }}
-                style={{ width: '100%', padding: '8px', backgroundColor: 'transparent', color: '#ef4444', border: '2px dashed #ef4444', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
+                style={{ width: '100%', padding: '6px 8px', backgroundColor: 'transparent', color: '#ef4444', border: '1px dashed #ef4444', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                 UNINSTALL OLLAMA
               </button>
             </div>
@@ -606,15 +840,15 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
       )}
 
       {node.id === 'node-ollama' && isOllamaInstalled === true && (
-        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <h4 style={{ margin: 0, color: 'var(--zen-text)', fontSize: '0.85rem', fontWeight: 700, letterSpacing: '0.5px' }}>
+        <div style={{ marginTop: '10px', padding: '12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+            <h4 style={{ margin: 0, color: 'var(--zen-text)', fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.5px' }}>
               {en.routingGraph.nodeConfigPanel.actions.toolGateway.title}
             </h4>
             <span 
               data-testid="tool-gateway-status"
               style={{ 
-              fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '4px',
+              fontSize: '0.65rem', fontWeight: 700, padding: '2px 6px', borderRadius: '4px',
               backgroundColor: isToolGatewayInstalled ? '#dcfce7' : '#f3f4f6',
               color: isToolGatewayInstalled ? '#15803d' : '#6b7280',
               border: `1px solid ${isToolGatewayInstalled ? '#86efac' : '#d1d5db'}`
@@ -623,11 +857,11 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
             </span>
           </div>
 
-          <p style={{ margin: '0 0 12px 0', fontSize: '0.75rem', color: 'var(--zen-text-secondary)', lineHeight: '1.4' }}>
+          <p style={{ margin: '0 0 8px 0', fontSize: '0.7rem', color: 'var(--zen-text-secondary)', lineHeight: '1.3' }}>
             {en.routingGraph.nodeConfigPanel.actions.toolGateway.description}
           </p>
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', userSelect: 'none' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
             <input 
               type="checkbox"
               name="toolGatewayCheckbox"
@@ -653,22 +887,22 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
                   }
                 }
               }}
-              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+              style={{ width: '15px', height: '15px', cursor: 'pointer' }}
             />
-            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--zen-text)' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--zen-text)' }}>
               {en.routingGraph.nodeConfigPanel.actions.toolGateway.checkboxLabel}
             </span>
           </label>
 
           {showToolGatewayPrompt === 'install' && (
-            <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '6px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <span style={{ fontSize: '0.8rem', color: '#9a3412', fontWeight: 700 }}>
+            <div style={{ marginTop: '8px', padding: '10px', backgroundColor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '6px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '0.75rem', color: '#9a3412', fontWeight: 700 }}>
                 {en.routingGraph.nodeConfigPanel.actions.toolGateway.installPromptTitle}
               </span>
-              <span style={{ fontSize: '0.75rem', color: '#9a3412', lineHeight: '1.3' }}>
+              <span style={{ fontSize: '0.7rem', color: '#9a3412', lineHeight: '1.3' }}>
                 {en.routingGraph.nodeConfigPanel.actions.toolGateway.installPromptText}
               </span>
-              <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+              <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
                 <button 
                   data-testid="confirm-install-tool-gateway"
                   onClick={(e) => {
@@ -676,7 +910,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
                     setShowToolGatewayPrompt(null);
                     handleInstallToolGateway();
                   }}
-                  style={{ flex: 1, padding: '8px', backgroundColor: 'var(--zen-accent)', color: '#ffffff', border: 'none', borderRadius: '4px', fontWeight: 700, cursor: 'pointer', fontSize: '0.75rem' }}
+                  style={{ flex: 1, padding: '6px', backgroundColor: 'var(--zen-accent)', color: '#ffffff', border: 'none', borderRadius: '4px', fontWeight: 700, cursor: 'pointer', fontSize: '0.75rem' }}
                 >
                   {en.routingGraph.nodeConfigPanel.actions.toolGateway.installButton}
                 </button>
@@ -685,7 +919,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
                     e.stopPropagation();
                     setShowToolGatewayPrompt(null);
                   }}
-                  style={{ flex: 1, padding: '8px', backgroundColor: '#f3f4f6', color: '#374151', border: '1px solid #d1d5db', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '0.75rem' }}
+                  style={{ flex: 1, padding: '6px', backgroundColor: '#f3f4f6', color: '#374151', border: '1px solid #d1d5db', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '0.75rem' }}
                 >
                   {en.routingGraph.nodeConfigPanel.actions.toolGateway.cancelButton}
                 </button>
@@ -694,14 +928,14 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
           )}
 
           {showToolGatewayPrompt === 'uninstall' && (
-            <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <span style={{ fontSize: '0.8rem', color: '#991b1b', fontWeight: 700 }}>
+            <div style={{ marginTop: '8px', padding: '10px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '0.75rem', color: '#991b1b', fontWeight: 700 }}>
                 {en.routingGraph.nodeConfigPanel.actions.toolGateway.uninstallPromptTitle}
               </span>
-              <span style={{ fontSize: '0.75rem', color: '#991b1b', lineHeight: '1.3' }}>
+              <span style={{ fontSize: '0.7rem', color: '#991b1b', lineHeight: '1.3' }}>
                 {en.routingGraph.nodeConfigPanel.actions.toolGateway.uninstallPromptText}
               </span>
-              <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+              <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
                 <button 
                   data-testid="confirm-uninstall-tool-gateway"
                   onClick={(e) => {
@@ -709,7 +943,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
                     setShowToolGatewayPrompt(null);
                     handleUninstallToolGateway();
                   }}
-                  style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#ffffff', border: 'none', borderRadius: '4px', fontWeight: 700, cursor: 'pointer', fontSize: '0.75rem' }}
+                  style={{ flex: 1, padding: '6px', backgroundColor: '#ef4444', color: '#ffffff', border: 'none', borderRadius: '4px', fontWeight: 700, cursor: 'pointer', fontSize: '0.75rem' }}
                 >
                   {en.routingGraph.nodeConfigPanel.actions.toolGateway.uninstallButton}
                 </button>
@@ -718,7 +952,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
                     e.stopPropagation();
                     setShowToolGatewayPrompt(null);
                   }}
-                  style={{ flex: 1, padding: '8px', backgroundColor: '#f3f4f6', color: '#374151', border: '1px solid #d1d5db', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '0.75rem' }}
+                  style={{ flex: 1, padding: '6px', backgroundColor: '#f3f4f6', color: '#374151', border: '1px solid #d1d5db', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '0.75rem' }}
                 >
                   {en.routingGraph.nodeConfigPanel.actions.toolGateway.cancelButton}
                 </button>
@@ -729,21 +963,21 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
       )}
       
       {node.id === 'node-openrouter' && node.data.status === 'active' && (
-        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px' }}>
-          <h4 style={{ margin: '0 0 10px 0', color: 'var(--zen-text)', fontSize: '0.9rem' }}>OPENROUTER CONNECTED</h4>
+        <div style={{ marginTop: '10px', padding: '12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px' }}>
+          <h4 style={{ margin: '0 0 6px 0', color: 'var(--zen-text)', fontSize: '0.8rem' }}>OPENROUTER CONNECTED</h4>
           {confirmUninstall === 'openrouter' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <span style={{ fontSize: '0.8rem', color: 'var(--zen-text)', fontWeight: 700 }}>ARE YOU SURE?</span>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={(e) => { e.stopPropagation(); handleDisconnectOpenRouter(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#FFFFFF', border: '2px solid #991b1b', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
-                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#e5e7eb', color: '#374151', border: '2px solid #9ca3af', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 700 }}>ARE YOU SURE?</span>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button onClick={(e) => { e.stopPropagation(); handleDisconnectOpenRouter(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#ef4444', color: '#FFFFFF', border: '2px solid #991b1b', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>YES</button>
+                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#e5e7eb', color: '#374151', border: '2px solid #9ca3af', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>NO</button>
               </div>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <button 
                 onClick={(e) => { e.stopPropagation(); setConfirmUninstall('openrouter'); }}
-                style={{ width: '100%', padding: '8px', backgroundColor: 'transparent', color: '#ef4444', border: '2px dashed #ef4444', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
+                style={{ width: '100%', padding: '6px 8px', backgroundColor: 'transparent', color: '#ef4444', border: '1px dashed #ef4444', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                 DISCONNECT
               </button>
             </div>
@@ -752,21 +986,21 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
       )}
 
       {node.id === 'node-google' && node.data.status === 'active' && (
-        <div style={{ marginTop: '20px', padding: '16px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px' }}>
-          <h4 style={{ margin: '0 0 10px 0', color: 'var(--zen-text)', fontSize: '0.9rem' }}>GOOGLE AI STUDIO CONNECTED</h4>
+        <div style={{ marginTop: '10px', padding: '12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px' }}>
+          <h4 style={{ margin: '0 0 6px 0', color: 'var(--zen-text)', fontSize: '0.8rem' }}>GOOGLE AI STUDIO CONNECTED</h4>
           {confirmUninstall === 'google' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <span style={{ fontSize: '0.8rem', color: 'var(--zen-text)', fontWeight: 700 }}>ARE YOU SURE?</span>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={(e) => { e.stopPropagation(); handleDisconnectGoogle(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#FFFFFF', border: '2px solid #991b1b', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
-                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#e5e7eb', color: '#374151', border: '2px solid #9ca3af', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 700 }}>ARE YOU SURE?</span>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button onClick={(e) => { e.stopPropagation(); handleDisconnectGoogle(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#ef4444', color: '#FFFFFF', border: '2px solid #991b1b', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>YES</button>
+                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#e5e7eb', color: '#374151', border: '2px solid #9ca3af', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>NO</button>
               </div>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <button 
                 onClick={(e) => { e.stopPropagation(); setConfirmUninstall('google'); }}
-                style={{ width: '100%', padding: '8px', backgroundColor: 'transparent', color: '#ef4444', border: '2px dashed #ef4444', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
+                style={{ width: '100%', padding: '6px 8px', backgroundColor: 'transparent', color: '#ef4444', border: '1px dashed #ef4444', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                 DISCONNECT
               </button>
             </div>
@@ -775,13 +1009,13 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
       )}
       </div>
       
-      <div style={{ padding: '20px', borderTop: '1px solid var(--zen-border)', backgroundColor: '#ffffff', display: 'flex', gap: '10px' }}>
+      <div style={{ padding: '10px 16px', borderTop: '1px solid var(--zen-border)', backgroundColor: '#ffffff', display: 'flex', gap: '8px' }}>
         <button onClick={handleSave} style={{ 
-          flex: 1, padding: '12px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', 
-          border: '1px solid var(--zen-border)', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', 
+          flex: 1, padding: '9px 14px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', 
+          border: '1px solid var(--zen-border)', borderRadius: '6px', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', fontFamily: 'inherit', 
           boxShadow: 'none', transition: 'all 0.1s'
         }}
-        onMouseDown={e => { e.currentTarget.style.transform = 'translate(2px, 2px)'; e.currentTarget.style.opacity = '0.9'; }}
+        onMouseDown={e => { e.currentTarget.style.transform = 'translate(1px, 1px)'; e.currentTarget.style.opacity = '0.9'; }}
         onMouseUp={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.opacity = '1'; }}
         >
           SAVE CHANGES
@@ -1221,7 +1455,13 @@ const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, 
   );
 };
 
-export default function App() {
+function AppContent() {
+  const memory = useMemory();
+  const memoryRef = useRef(memory);
+  useEffect(() => {
+    memoryRef.current = memory;
+  }, [memory]);
+
   const { onboardingState, handleDecision, isLoaded } = useOnboarding();
   const [nodes, setNodes] = useState(initialNodes);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -1247,6 +1487,8 @@ export default function App() {
   const [terminalMode, setTerminalMode] = useState<'install-hermes' | 'run-hermes' | 'run-hermes-web' | 'run-hermes-desktop' | 'install-opencode' | 'run-opencode' | 'run-opencode-web' | 'install-ollama' | 'run-ollama' | 'install-tool-gateway' | 'uninstall-tool-gateway' | null>(null);
   const [isHermesInstalled, setIsHermesInstalled] = useState<boolean | null>(null);
   const [isOpenCodeInstalled, setIsOpenCodeInstalled] = useState<boolean | null>(null);
+  const [hermesVersion, setHermesVersion] = useState<string>('N/A');
+  const [opencodeVersion, setOpencodeVersion] = useState<string>('N/A');
   const [isOllamaInstalled, setIsOllamaInstalled] = useState<boolean | null>(null);
   const [isToolGatewayInstalled, setIsToolGatewayInstalled] = useState<boolean | null>(null);
 
@@ -1279,6 +1521,9 @@ export default function App() {
       try {
         const hermesStatus = await invoke('check_hermes_status');
         setIsHermesInstalled(hermesStatus as boolean);
+        if (hermesStatus) {
+          invoke<string>('get_hermes_version').then(v => setHermesVersion(v)).catch(() => setHermesVersion('N/A'));
+        }
         addLog(hermesStatus ? "OK: Hermes installed." : "INFO: Hermes not installed.");
       } catch(e) {}
       
@@ -1286,6 +1531,9 @@ export default function App() {
       try {
         const opencodeStatus = await invoke('check_opencode_status');
         setIsOpenCodeInstalled(opencodeStatus as boolean);
+        if (opencodeStatus) {
+          invoke<string>('get_opencode_version').then(v => setOpencodeVersion(v)).catch(() => setOpencodeVersion('N/A'));
+        }
         addLog(opencodeStatus ? "OK: OpenCode installed." : "INFO: OpenCode not installed.");
       } catch(e) {}
       await new Promise(r => setTimeout(r, 200));
@@ -1310,6 +1558,13 @@ export default function App() {
         if (vram !== null && vram !== undefined) {
           const vramGb = Math.round(Number(vram) / 1024);
           setDetectedVram(String(vramGb));
+          memoryRef.current.setDetectedVramGb(vramGb);
+          try {
+            const tag = await invoke<string>('get_model_tag_for_vram', { detectedVramGb: vramGb });
+            if (tag) {
+              memoryRef.current.setActiveModelName(tag);
+            }
+          } catch(e) {}
           addLog(`OK: Detected ${vramGb}GB VRAM.`);
         }
       } catch(e) {}
@@ -1317,8 +1572,12 @@ export default function App() {
 
       addLog("Verifying OpenRouter credentials...");
       try {
-        await invoke('get_credential', { service: 'openrouter' });
-        setNodes(nds => nds.map(n => n.id === 'node-openrouter' ? { ...n, data: { ...n.data, status: 'active' } } : n));
+        const key = await invoke<string | null>('get_credential', { service: 'openrouter' });
+        if (key && typeof key === 'string') {
+          setNodes(nds => nds.map(n => n.id === 'node-openrouter' ? { ...n, data: { ...n.data, status: 'active', keyPrefix: key.slice(0, 5) } } : n));
+        } else {
+          setNodes(nds => nds.map(n => n.id === 'node-openrouter' ? { ...n, data: { ...n.data, status: 'active' } } : n));
+        }
         addLog("OK: OpenRouter authenticated.");
       } catch(e) {
         addLog("INFO: OpenRouter credentials missing.");
@@ -1327,8 +1586,12 @@ export default function App() {
 
       addLog("Verifying Google AI Studio credentials...");
       try {
-        await invoke('get_credential', { service: 'google' });
-        setNodes(nds => nds.map(n => n.id === 'node-google' ? { ...n, data: { ...n.data, status: 'active' } } : n));
+        const key = await invoke<string | null>('get_credential', { service: 'google' });
+        if (key && typeof key === 'string') {
+          setNodes(nds => nds.map(n => n.id === 'node-google' ? { ...n, data: { ...n.data, status: 'active', keyPrefix: key.slice(0, 5) } } : n));
+        } else {
+          setNodes(nds => nds.map(n => n.id === 'node-google' ? { ...n, data: { ...n.data, status: 'active' } } : n));
+        }
         addLog("OK: Google AI Studio authenticated.");
       } catch(e) {
         addLog("INFO: Google AI Studio credentials missing.");
@@ -1381,15 +1644,65 @@ export default function App() {
   // UI State
 
   const [detectedVram, setDetectedVram] = useState<string>('8'); // Default placeholder
+  const [latestTelemetry, setLatestTelemetry] = useState<any>(null);
+  const [hardwareProfile, setHardwareProfile] = useState<HardwareProfile | null>(null);
 
   const [activeProxyState, setActiveProxyState] = useState<{source: string, target: string} | null>(null);
   const proxyTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    invoke<HardwareProfile>('detect_hardware_profile')
+      .then((profile) => {
+        setHardwareProfile(profile);
+        memoryRef.current.setHardwareProfile(profile);
+        let vramGb = 8;
+        if (profile.is_unified) {
+          vramGb = Math.round(profile.execution_ceiling / 1024 / 1024 / 1024);
+        } else if (profile.dedicated_vram > 0) {
+          vramGb = Math.round(profile.dedicated_vram / 1024 / 1024 / 1024);
+        }
+        setDetectedVram(vramGb.toString());
+        memoryRef.current.setDetectedVramGb(vramGb);
+        invoke<string>('get_model_tag_for_vram', { detectedVramGb: vramGb })
+          .then((tag) => {
+            if (tag) memoryRef.current.setActiveModelName(tag);
+          })
+          .catch(() => {});
+      })
+      .catch(() => {
+        invoke<number>('detect_vram')
+          .then((vram) => {
+            const vramGb = Math.round(vram / 1024);
+            setDetectedVram(vramGb.toString());
+            memoryRef.current.setDetectedVramGb(vramGb);
+            invoke<string>('get_model_tag_for_vram', { detectedVramGb: vramGb })
+              .then((tag) => {
+                if (tag) memoryRef.current.setActiveModelName(tag);
+              })
+              .catch(() => {});
+          })
+          .catch(() => {
+            setDetectedVram('8');
+            memoryRef.current.setDetectedVramGb(8);
+            invoke<string>('get_model_tag_for_vram', { detectedVramGb: 8.0 })
+              .then((tag) => {
+                if (tag) memoryRef.current.setActiveModelName(tag);
+              })
+              .catch(() => {});
+          });
+      });
+  }, []);
 
   useEffect(() => {
     if (isHermesInstalled !== null) {
       const isRunning = activeProcesses['run-hermes'] || activeProcesses['run-hermes-desktop'] || activeProcesses['run-hermes-web'];
       const status = isRunning ? 'active' : (isHermesInstalled ? 'ready' : 'not_installed');
       setNodes(nds => nds.map(n => n.id === 'node-hermes' && n.data.status !== status ? { ...n, data: { ...n.data, status } } : n));
+      if (isHermesInstalled) {
+        invoke<string>('get_hermes_version').then(v => setHermesVersion(v)).catch(() => setHermesVersion('N/A'));
+      } else {
+        setHermesVersion('N/A');
+      }
     }
   }, [isHermesInstalled, activeProcesses]);
 
@@ -1398,19 +1711,28 @@ export default function App() {
       const isRunning = activeProcesses['run-opencode'] || activeProcesses['run-opencode-web'];
       const status = isRunning ? 'active' : (isOpenCodeInstalled ? 'ready' : 'not_installed');
       setNodes(nds => nds.map(n => n.id === 'node-opencode' && n.data.status !== status ? { ...n, data: { ...n.data, status } } : n));
+      if (isOpenCodeInstalled) {
+        invoke<string>('get_opencode_version').then(v => setOpencodeVersion(v)).catch(() => setOpencodeVersion('N/A'));
+      } else {
+        setOpencodeVersion('N/A');
+      }
     }
   }, [isOpenCodeInstalled, activeProcesses]);
 
   useEffect(() => {
-    
-    
-    
-    
-    
-    
-
     const setupTelemetryListener = async () => {
       let unlisten = await listen<any>('telemetry_update', (event) => {
+        setLatestTelemetry(event.payload);
+        if (event.payload) {
+          memoryRef.current.setLatestTelemetry(event.payload);
+          if (event.payload.hardware_profile) {
+            setHardwareProfile(event.payload.hardware_profile);
+            memoryRef.current.setHardwareProfile(event.payload.hardware_profile);
+          }
+          if (event.payload.hardware?.vram_total) {
+            memoryRef.current.setDetectedVramGb(Math.round(event.payload.hardware.vram_total / 1024 / 1024 / 1024));
+          }
+        }
         const status = event.payload?.ollama?.status;
         if (status === 'active' || status === 'idle') {
           setIsOllamaInstalled(true);
@@ -1477,17 +1799,22 @@ export default function App() {
     setIsOpenCodeInstalled(false);
   };
   const handleUninstallOllama = async () => {
-    await invoke('spawn_pty', { command: 'bash', args: ['-c', 'rm -rf /usr/local/bin/ollama ~/.ollama /Applications/Ollama.app'] });
+    try {
+      await invoke('uninstall_ollama');
+    } catch (e) {
+      console.error('Failed to uninstall Ollama:', e);
+    }
     setIsOllamaInstalled(false);
+    setNodes(nds => nds.map(n => n.id === 'node-ollama' ? { ...n, data: { ...n.data, status: 'ready' } } : n));
   };
   const handleDisconnectOpenRouter = async () => {
     await invoke('delete_credential', { service: 'openrouter' }).catch(console.error);
-    setNodes(nds => nds.map(n => n.id === 'node-openrouter' ? { ...n, data: { ...n.data, status: 'needs_activation', apiKey: '' } } : n));
+    setNodes(nds => nds.map(n => n.id === 'node-openrouter' ? { ...n, data: { ...n.data, status: 'needs_activation', apiKey: '', keyPrefix: '', lastStatus: '' } } : n));
     await invoke('refresh_routing_chain').catch(console.error);
   };
   const handleDisconnectGoogle = async () => {
     await invoke('delete_credential', { service: 'google' }).catch(console.error);
-    setNodes(nds => nds.map(n => n.id === 'node-google' ? { ...n, data: { ...n.data, status: 'needs_activation', googleApiKey: '' } } : n));
+    setNodes(nds => nds.map(n => n.id === 'node-google' ? { ...n, data: { ...n.data, status: 'needs_activation', googleApiKey: '', keyPrefix: '', lastStatus: '' } } : n));
     await invoke('refresh_routing_chain').catch(console.error);
   };
 
@@ -1557,6 +1884,8 @@ export default function App() {
             await invoke('set_credential', { service: 'google', secret: finalConfig.googleApiKey });
             await invoke('refresh_routing_chain').catch(console.error);
             finalConfig.status = 'active';
+            finalConfig.keyPrefix = finalConfig.googleApiKey.slice(0, 5);
+            finalConfig.lastStatus = '200 OK';
             confetti({
               particleCount: 150,
               spread: 70,
@@ -1566,10 +1895,12 @@ export default function App() {
           } else {
              console.error("Google API key test failed", res.status);
              finalConfig.status = 'error';
+             finalConfig.lastStatus = `${res.status} Error`;
           }
         } catch (e) {
           console.error("Failed to save google credential", e);
           finalConfig.status = 'error';
+          finalConfig.lastStatus = 'Error';
         }
         delete finalConfig.googleApiKey;
       }
@@ -1586,6 +1917,8 @@ export default function App() {
             await invoke('set_credential', { service: 'openrouter', secret: finalConfig.apiKey });
             await invoke('refresh_routing_chain').catch(console.error);
             finalConfig.status = 'active';
+            finalConfig.keyPrefix = finalConfig.apiKey.slice(0, 5);
+            finalConfig.lastStatus = '200 OK';
             confetti({
               particleCount: 150,
               spread: 70,
@@ -1595,10 +1928,12 @@ export default function App() {
           } else {
             console.error("OpenRouter API key test failed", res.status);
             finalConfig.status = 'error';
+            finalConfig.lastStatus = `${res.status} Error`;
           }
         } catch (e) {
           console.error("Failed to save openrouter credential", e);
           finalConfig.status = 'error';
+          finalConfig.lastStatus = 'Error';
         }
         delete finalConfig.apiKey;
       }
@@ -1708,42 +2043,6 @@ export default function App() {
           .terminal-drawer {
             transition: transform 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
           }
-          .tooltip-text {
-            visibility: hidden;
-            width: 200px;
-            background-color: #111827;
-            color: #fff;
-            text-align: center;
-            border-radius: 4px;
-            padding: 8px;
-            position: absolute;
-            z-index: 1000;
-            bottom: 150%;
-            left: 50%;
-            margin-left: -100px;
-            opacity: 0;
-            transition: opacity 0.2s;
-            font-size: 0.75rem;
-            font-family: 'sans-serif';
-            font-weight: normal;
-            pointer-events: none;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-            text-transform: none;
-          }
-          .tooltip-text::after {
-            content: "";
-            position: absolute;
-            top: 100%;
-            left: 50%;
-            margin-left: -5px;
-            border-width: 5px;
-            border-style: solid;
-            border-color: #111827 transparent transparent transparent;
-          }
-          .tooltip-container:hover .tooltip-text {
-            visibility: visible;
-            opacity: 1;
-          }
         `}
       </style>
 
@@ -1818,7 +2117,7 @@ export default function App() {
                 statusText: 'var(--zen-text-secondary)',
                 boxShadow: 'var(--tw-shadow-glass)',
                 borderStyle: 'solid',
-                borderWidth: '1px'
+                borderWidth: '2px'
               };
 
               let Icon = Icons.cpu;
@@ -1850,7 +2149,7 @@ export default function App() {
                     onMouseDown={(e) => handleCanvasMouseDown(e)}
                     onClick={(e) => handleNodeClick(e, node.id)}
                   >
-                    <HardwareNode isGenerating={isOllamaGenerating} />
+                    <HardwareNode isGenerating={isOllamaGenerating} label={node.data.label} subheader={node.data.subheader} />
                   </div>
                 );
               }
@@ -1871,6 +2170,8 @@ export default function App() {
                     cursor: 'pointer',
                     backgroundColor: stateColors.bodyBg,
                     border: `${stateColors.borderWidth} ${stateColors.borderStyle} ${stateColors.border}`,
+                    borderRadius: '8px',
+                    overflow: 'hidden',
                     boxShadow: isSelected ? `0 0 0 4px #cbd5e1, ${stateColors.boxShadow}` : stateColors.boxShadow,
                     zIndex: isSelected ? 5 : 1,
                     display: 'flex',
@@ -1890,9 +2191,18 @@ export default function App() {
                     alignItems: 'center',
                     borderBottom: `2px ${stateColors.borderStyle} ${stateColors.border}`
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '0.8rem', letterSpacing: '0.5px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       {Icon}
-                      {node.data.label}
+                      <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
+                        <span style={{ fontWeight: 700, fontSize: '0.8rem', color: stateColors.headerText, letterSpacing: '0.5px' }}>
+                          {node.data.label}
+                        </span>
+                        {node.data.subheader && (
+                          <span style={{ fontWeight: 500, fontSize: '0.62rem', color: 'var(--zen-text-secondary)', opacity: 0.9 }}>
+                            {node.data.subheader}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <div 
@@ -1921,52 +2231,94 @@ export default function App() {
                   <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: stateColors.bodyBg, color: 'var(--zen-text)' }}>
                     {isCore ? (
                       <>
-                        <StatusLight status="active" text="HUB ONLINE" />
-                        <CopyableField label="ENDPOINT" value={`${frugalConfig?.bind_all_interfaces ? '0.0.0.0' : '127.0.0.1'}:${frugalConfig?.port || '8080'}`} />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>Session tokens:</span>
+                          <span data-testid="frugallm-session-tokens" style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)' }}>
+                            {((frugalConfig?.input_tokens_session || 0) + (frugalConfig?.output_tokens_session || 0)).toLocaleString()}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>Total tokens:</span>
+                          <span data-testid="frugallm-total-tokens" style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)' }}>
+                            {((frugalConfig?.input_tokens_lifetime || 0) + (frugalConfig?.output_tokens_lifetime || 0)).toLocaleString()}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>$ Saved:</span>
+                          <span data-testid="frugallm-money-saved" style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-success)' }}>
+                            ${((((frugalConfig?.input_tokens_lifetime || 0) * 3.0) + ((frugalConfig?.output_tokens_lifetime || 0) * 15.0)) / 1_000_000).toFixed(2)}
+                          </span>
+                        </div>
                       </>
-                    ) : node.data.isAgent ? (
+                    ) : (node.id === 'node-openrouter' || node.id === 'node-google') ? (
                       <>
-                        <StatusLight status={node.data.status as any} />
-                        <CopyableField label="BINARY" value={node.data.bin || 'N/A'} />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>API Key</span>
+                          {node.data.status === 'active' ? (
+                            <span data-testid={`${node.id}-api-key`} style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', fontFamily: 'monospace', letterSpacing: '0.5px' }}>
+                              {node.data.keyPrefix ? `${node.data.keyPrefix}...` : (node.id === 'node-google' ? 'AIzaS...' : 'sk-or...')}
+                            </span>
+                          ) : (
+                            <a
+                              href={node.id === 'node-openrouter' ? 'https://openrouter.ai' : 'https://aistudio.google.com'}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openUrl(node.id === 'node-openrouter' ? 'https://openrouter.ai' : 'https://aistudio.google.com').catch(() => {});
+                              }}
+                              style={{
+                                fontSize: '0.72rem',
+                                fontWeight: 600,
+                                color: 'var(--zen-accent)',
+                                textDecoration: 'underline',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Get key
+                            </a>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>Status</span>
+                          <span data-testid={`${node.id}-status`} style={{ fontSize: '0.75rem', fontWeight: 600, color: node.data.status === 'active' ? 'var(--zen-success)' : 'var(--zen-text-secondary)' }}>
+                            {node.data.status === 'active' ? (node.data.lastStatus || '200 OK') : 'N/A'}
+                          </span>
+                        </div>
                       </>
+                    ) : (node.id === 'node-hermes' || node.id === 'node-opencode') ? (
+                      (() => {
+                        const isHermes = node.id === 'node-hermes';
+                        const isInstalled = isHermes ? isHermesInstalled : isOpenCodeInstalled;
+                        const isRunning = isHermes 
+                          ? !!(activeProcesses['run-hermes'] || activeProcesses['run-hermes-desktop'] || activeProcesses['run-hermes-web'] || node.data.status === 'active')
+                          : !!(activeProcesses['run-opencode'] || activeProcesses['run-opencode-web'] || node.data.status === 'active');
+                        
+                        const statusText = !isInstalled ? 'N/A' : (isRunning ? 'Active' : 'Standby');
+                        const statusColor = !isInstalled ? 'var(--zen-text-secondary)' : (isRunning ? 'var(--zen-success)' : '#eab308');
+                        const versionText = !isInstalled ? 'N/A' : (isHermes ? hermesVersion : opencodeVersion);
+
+                        return (
+                          <>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>Status:</span>
+                              <span data-testid={`${node.id}-status`} style={{ fontSize: '0.75rem', fontWeight: 600, color: statusColor }}>
+                                {statusText}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>Version:</span>
+                              <span data-testid={`${node.id}-version`} style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--zen-text)' }}>
+                                {versionText}
+                              </span>
+                            </div>
+                          </>
+                        );
+                      })()
                     ) : (
                       <>
                         <StatusLight status={node.data.status as any} text={node.data.status === 'active' ? 'Connected' : node.data.status === 'ready' ? (node.id === 'node-ollama' && isOllamaInstalled ? 'Stopped' : 'Ready') : (node.data.status.replace('_', ' ').toUpperCase())} />
-                        {(node.id === 'node-hermes' || node.id === 'node-opencode') ? (
-                          <button 
-                            onClick={(e) => { 
-                              e.stopPropagation(); 
-                              if (node.id === 'node-hermes') handleOpenHermes(); 
-                              else handleOpenOpenCode(); 
-                            }} 
-                            style={{ 
-                              padding: '4px 10px', 
-                              backgroundColor: 'transparent', 
-                              color: '#4b5563', 
-                              border: '1.5px solid #d1d5db', 
-                              borderRadius: '4px',
-                              fontSize: '0.7rem', 
-                              fontWeight: 700, 
-                              cursor: 'pointer', 
-                              fontFamily: 'inherit', 
-                              width: '100%', 
-                              textAlign: 'center',
-                              transition: 'all 0.15s'
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = '#f3f4f6';
-                              e.currentTarget.style.color = '#111827';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = 'transparent';
-                              e.currentTarget.style.color = '#4b5563';
-                            }}
-                          >
-                            LAUNCH APP
-                          </button>
-                        ) : (
-                          <InfoField label={(node.id.includes('openrouter') || node.id.includes('google')) ? 'HOST' : 'ENDPOINT'} value={node.data.port ? `${node.data.ip}:${node.data.port}` : `${node.data.ip}`} />
-                        )}
+                        <InfoField label={'ENDPOINT'} value={node.data.port ? `${node.data.ip}:${node.data.port}` : `${node.data.ip}`} />
                       </>
                     )}
                   </div>
@@ -1980,7 +2332,7 @@ export default function App() {
       {/* Settings Modal */}
       {selectedNode && !terminalMode && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setSelectedNodeId(null)}>
-          <NodeConfigPanel node={selectedNode} onClose={() => setSelectedNodeId(null)} onSave={handleSaveNodeConfig} onOpenGuide={setActiveGuide} isHermesInstalled={isHermesInstalled} isOpenCodeInstalled={isOpenCodeInstalled} isOllamaInstalled={isOllamaInstalled} isToolGatewayInstalled={isToolGatewayInstalled} detectedVram={detectedVram} setDetectedVram={setDetectedVram} hasActiveBackend={hasActiveBackend} handleInitializeHermes={handleInitializeHermes} handleOpenHermes={handleOpenHermes} handleUninstallHermes={handleUninstallHermes} handleInitializeOpenCode={handleInitializeOpenCode} handleOpenOpenCode={handleOpenOpenCode} handleUninstallOpenCode={handleUninstallOpenCode} handleInitializeOllama={handleInitializeOllama} handleOpenOllama={handleOpenOllama} handleUninstallOllama={handleUninstallOllama} handleInstallToolGateway={handleInstallToolGateway} handleUninstallToolGateway={handleUninstallToolGateway} handleDisconnectOpenRouter={handleDisconnectOpenRouter} handleDisconnectGoogle={handleDisconnectGoogle} frugalConfig={frugalConfig} setFrugalConfig={setFrugalConfig} handleOpenHermesDesktop={handleOpenHermesDesktop} handleOpenHermesWeb={handleOpenHermesWeb} handleOpenOpenCodeWeb={handleOpenOpenCodeWeb} activeProcesses={activeProcesses} handleKillProcess={(mode: string) => invoke('kill_pty', { sessionId: mode }).catch(console.error)} />
+          <NodeConfigPanel node={selectedNode} onClose={() => setSelectedNodeId(null)} onSave={handleSaveNodeConfig} onOpenGuide={setActiveGuide} isHermesInstalled={isHermesInstalled} isOpenCodeInstalled={isOpenCodeInstalled} isOllamaInstalled={isOllamaInstalled} isToolGatewayInstalled={isToolGatewayInstalled} detectedVram={detectedVram} setDetectedVram={setDetectedVram} hasActiveBackend={hasActiveBackend} handleInitializeHermes={handleInitializeHermes} handleOpenHermes={handleOpenHermes} handleUninstallHermes={handleUninstallHermes} handleInitializeOpenCode={handleInitializeOpenCode} handleOpenOpenCode={handleOpenOpenCode} handleUninstallOpenCode={handleUninstallOpenCode} handleInitializeOllama={handleInitializeOllama} handleOpenOllama={handleOpenOllama} handleUninstallOllama={handleUninstallOllama} handleInstallToolGateway={handleInstallToolGateway} handleUninstallToolGateway={handleUninstallToolGateway} handleDisconnectOpenRouter={handleDisconnectOpenRouter} handleDisconnectGoogle={handleDisconnectGoogle} frugalConfig={frugalConfig} setFrugalConfig={setFrugalConfig} handleOpenHermesDesktop={handleOpenHermesDesktop} handleOpenHermesWeb={handleOpenHermesWeb} handleOpenOpenCodeWeb={handleOpenOpenCodeWeb} activeProcesses={activeProcesses} handleKillProcess={(mode: string) => invoke('kill_pty', { sessionId: mode }).catch(console.error)} latestTelemetry={latestTelemetry} hardwareProfile={hardwareProfile} />
         </div>
       )}
 
@@ -2078,5 +2430,13 @@ export default function App() {
         />
       )}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <MemoryProvider>
+      <AppContent />
+    </MemoryProvider>
   );
 }

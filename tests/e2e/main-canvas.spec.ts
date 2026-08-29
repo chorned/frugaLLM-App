@@ -16,6 +16,7 @@ test.describe('Main Canvas Dashboard', () => {
             if (cmd === 'check_hermes_status') return Promise.resolve(false);
             if (cmd === 'check_opencode_status') return Promise.resolve(false);
             if (cmd === 'detect_vram') return Promise.resolve(8192);
+            if (cmd === 'get_model_tag_for_vram') return Promise.resolve('gemma4:e2b');
             if (cmd === 'get_frugallm_config') return Promise.resolve({});
             if (cmd === 'get_credential') {
               if (args?.service === 'openrouter') return Promise.resolve('mock-key');
@@ -39,7 +40,7 @@ test.describe('Main Canvas Dashboard', () => {
     await expect(canvas.nodes).toHaveCount(6);
     
     // Verify specific nodes
-    const ollamaNode = await canvas.getNode('Ollama (Local LLM)');
+    const ollamaNode = await canvas.getNode('Ollama');
     await expect(ollamaNode).toBeVisible();
     
     // Node status should be updated by mock (Ollama should be STANDBY/CONNECTED initially)
@@ -65,7 +66,7 @@ test.describe('Main Canvas Dashboard', () => {
     }).toPass();
 
     // Test drag node (even if it doesn't move it in v1, we simulate it)
-    await canvas.dragNode('FRUGALLM CORE', 50, 50);
+    await canvas.dragNode('FrugaLLM', 50, 50);
     
     await page.waitForTimeout(500);
     await page.screenshot({ path: './copy-audit/main-canvas.png', fullPage: true });
@@ -76,13 +77,27 @@ test.describe('Main Canvas Dashboard', () => {
     const canvas = new MainCanvas(page);
     await canvas.goto();
 
-    await canvas.clickNode('FRUGALLM CORE');
+    // Click FrugalLM node to open panel
+    await canvas.clickNode('FrugaLLM');
 
     // Verify config panel is open
-    const panel = page.getByRole('heading', { name: 'FRUGALLM CORE' });
+    const panel = page.getByRole('heading', { name: /FrugaLLM/i });
     await expect(panel).toBeVisible();
     
     const updateButton = page.getByRole('button', { name: /SAVE CHANGES/i });
     await expect(updateButton).toBeVisible();
+  });
+
+  test('should render session tokens, lifetime tokens, and money saved on FrugaLLM node', async ({ page }) => {
+    const canvas = new MainCanvas(page);
+    await canvas.goto();
+
+    const sessionTokens = page.getByTestId('frugallm-session-tokens');
+    const totalTokens = page.getByTestId('frugallm-total-tokens');
+    const moneySaved = page.getByTestId('frugallm-money-saved');
+
+    await expect(sessionTokens).toBeVisible();
+    await expect(totalTokens).toBeVisible();
+    await expect(moneySaved).toBeVisible();
   });
 });

@@ -1,12 +1,160 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tokio::time::{sleep, Duration};
 use reqwest::Client;
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct HardwareProfile {
+    pub is_unified: bool,
+    pub dedicated_vram: u64, // bytes (0 on Apple Silicon unified)
+    pub system_ram: u64,     // bytes
+    pub execution_ceiling: u64, // bytes (unified available or dedicated_vram)
+    pub os_architecture: String,
+}
+
+impl Default for HardwareProfile {
+    fn default() -> Self {
+        Self {
+            is_unified: false,
+            dedicated_vram: 0,
+            system_ram: 0,
+            execution_ceiling: 0,
+            os_architecture: "unknown".into(),
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, Default)]
+pub struct MemorySegments {
+    pub phase: String, // "preflight" | "live"
+    pub weights_bytes: u64,
+    pub context_128k_bytes: u64,
+    pub overhead_bytes: u64,
+    pub total_projected_bytes: u64,
+    pub execution_ceiling_bytes: u64,
+    pub spillover_bytes: u64,
+    pub spillover_type: String, // "none" | "system_ram" | "ssd_swap"
+    pub triggers_warning: bool,
+    pub warning_message: String,
+}
+
+/// Computes KV cache footprint for Gemma architecture with 5:1 interleaved local/global attention.
+/// - 1/6th of transformer layers attend across the full 128k context window (131,072 tokens).
+/// - 5/6th of transformer layers attend across a 1,024-token local sliding window.
+/// - KV multiplier: 2 (Key + Value) * bytes_per_value (1 byte for Q8) * num_kv_heads * head_dim.
+pub fn calculate_gemma_128k_q8_kv_cache(layers: u32, num_kv_heads: u32, head_dim: u32) -> u64 {
+    let bytes_per_value: u64 = 1; // Q8 quantization multiplier = 1 byte per value
+    let global_tokens: u64 = 131_072;
+    let sliding_tokens: u64 = 1_024;
+
+    // 5:1 interleaved attention ratio (1 global layer for every 5 sliding-window layers)
+    let global_layers = (layers as f64 / 6.0).ceil() as u64;
+    let sliding_layers = (layers as u64).saturating_sub(global_layers);
+
+    let bytes_per_token_per_layer = 2 * bytes_per_value * (num_kv_heads as u64) * (head_dim as u64);
+
+    let global_cache = global_layers * global_tokens * bytes_per_token_per_layer;
+    let sliding_cache = sliding_layers * sliding_tokens * bytes_per_token_per_layer;
+
+    global_cache + sliding_cache
+}
+
+pub fn compute_memory_segments(
+    profile: &HardwareProfile,
+    ollama: &OllamaState,
+    target_model_tag: &str,
+) -> MemorySegments {
+    let overhead_bytes: u64 = 524_288_000; // ~500 MB graph buffer & activations
+    let ceiling = if profile.execution_ceiling > 0 {
+        profile.execution_ceiling
+    } else if profile.dedicated_vram > 0 {
+        profile.dedicated_vram
+    } else if profile.system_ram > 0 {
+        profile.system_ram.saturating_sub(2 * 1024 * 1024 * 1024)
+    } else {
+        8 * 1024 * 1024 * 1024
+    };
+
+    let is_live = ollama.status == "active" && ollama.total_size > 0;
+    let phase = if is_live { "live" } else { "preflight" };
+
+    let effective_tag = if is_live && !ollama.model_name.is_empty() && ollama.model_name != "Unknown" {
+        ollama.model_name.as_str()
+    } else {
+        target_model_tag
+    };
+
+    // Pre-flight weights & 128k Q8 context based on Gemma 4 5:1 interleaved architecture
+    let (preflight_weights, preflight_context_128k) = match effective_tag {
+        t if t.contains("31b") => (
+            20_937_965_568u64,
+            calculate_gemma_128k_q8_kv_cache(56, 16, 256),
+        ),
+        t if t.contains("26b") => (
+            17_716_740_096u64,
+            calculate_gemma_128k_q8_kv_cache(48, 8, 256),
+        ),
+        t if t.contains("12b") => (
+            8_053_063_680u64,
+            calculate_gemma_128k_q8_kv_cache(40, 8, 256),
+        ),
+        t if t.contains("e2b") => (
+            1_717_986_918u64,
+            calculate_gemma_128k_q8_kv_cache(26, 4, 256),
+        ),
+        _ => (
+            5_261_335_552u64,
+            calculate_gemma_128k_q8_kv_cache(32, 8, 256),
+        ),
+    };
+
+    let weights_bytes = if is_live {
+        ollama.total_size
+    } else {
+        preflight_weights
+    };
+
+    let context_128k_bytes = preflight_context_128k;
+    let total_projected_bytes = weights_bytes.saturating_add(context_128k_bytes).saturating_add(overhead_bytes);
+
+    let mut spillover_bytes: u64 = 0;
+    let mut spillover_type = "none".to_string();
+    let mut triggers_warning = false;
+    let mut warning_message = String::new();
+
+    if total_projected_bytes > ceiling {
+        spillover_bytes = total_projected_bytes.saturating_sub(ceiling);
+        if profile.is_unified {
+            spillover_type = "ssd_swap".to_string();
+            triggers_warning = true;
+            warning_message = "Memory exceeds available Unified Memory. Severe disk paging & performance degradation will occur.".to_string();
+        } else {
+            spillover_type = "system_ram".to_string();
+            triggers_warning = true;
+            warning_message = "Model & 128k context exceed Dedicated VRAM. Spillover will route across PCIe into System RAM.".to_string();
+        }
+    }
+
+    MemorySegments {
+        phase: phase.to_string(),
+        weights_bytes,
+        context_128k_bytes,
+        overhead_bytes,
+        total_projected_bytes,
+        execution_ceiling_bytes: ceiling,
+        spillover_bytes,
+        spillover_type,
+        triggers_warning,
+        warning_message,
+    }
+}
 
 #[derive(Clone, Serialize, Default)]
 pub struct TelemetryPayload {
     pub ollama: OllamaState,
     pub hardware: HardwareState,
+    pub hardware_profile: HardwareProfile,
+    pub segments: MemorySegments,
 }
 
 #[derive(Clone, Serialize)]
@@ -56,12 +204,15 @@ pub fn start_telemetry_loop(app: AppHandle) {
         let mut tick_counter = 0;
         let mut last_ollama_state = OllamaState::default();
 
+        let profile = crate::get_hardware_profile().await.unwrap_or_default();
+
         loop {
             // Hardware polling (every 1 second)
             let mut hw_state = HardwareState::default();
             
             sys.refresh_cpu_usage();
             hw_state.cpu_utilization = sys.global_cpu_usage() as f64;
+            hw_state.vram_total = profile.execution_ceiling;
 
             #[cfg(not(target_os = "macos"))]
             {
@@ -79,9 +230,9 @@ pub fn start_telemetry_loop(app: AppHandle) {
             }
             #[cfg(target_os = "macos")]
             {
-                // Getting live GPU utilization on macOS from unprivileged CLI is limited.
-                // We leave it at 0 for now as graceful degradation, or parse powermetrics if root.
-                // In a production app, we'd use IOKit or Metal APIs via Objective-C bindings.
+                if !profile.is_unified && profile.dedicated_vram > 0 {
+                    hw_state.vram_total = profile.dedicated_vram;
+                }
             }
 
             // Ollama polling (every 2 seconds)
@@ -100,7 +251,13 @@ pub fn start_telemetry_loop(app: AppHandle) {
 
                             if let Some(model) = active_model {
                                 new_ollama_state.status = "active".into();
-                                new_ollama_state.model_name = model.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown").to_string();
+                                let raw_name = model.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown");
+                                let clean_name = if raw_name.contains("frugallm-active") {
+                                    "gemma4".to_string()
+                                } else {
+                                    raw_name.trim_start_matches("library/").trim_end_matches(":latest").to_string()
+                                };
+                                new_ollama_state.model_name = clean_name;
                                 
                                 let size = model.get("size").and_then(|s| s.as_u64()).unwrap_or(0);
                                 let size_vram = model.get("size_vram").and_then(|s| s.as_u64()).unwrap_or(0);
@@ -121,20 +278,37 @@ pub fn start_telemetry_loop(app: AppHandle) {
                             }
                         }
                     } else {
-                        // Responded, but invalid JSON -> maybe offline or error
                         new_ollama_state.status = "offline".into();
                     }
                 } else {
-                    // Daemon unreachable
                     new_ollama_state.status = "offline".into();
                 }
                 
                 last_ollama_state = new_ollama_state;
             }
 
+            // Dynamically determine the recommended model based on detected VRAM
+            // using the same zero-spillover logic as get_model_tag_for_vram
+            let vram_gb = (profile.execution_ceiling as f64) / 1024.0 / 1024.0 / 1024.0;
+            let recommended_tag = {
+                let mut tag = "gemma4:e2b";
+                for model in crate::AVAILABLE_MODELS {
+                    let total_footprint = model.weights_gb + model.kv_cache_gb + crate::GRAPH_OVERHEAD_GB;
+                    if total_footprint <= vram_gb {
+                        tag = model.tag;
+                        break;
+                    }
+                }
+                tag
+            };
+
+            let segments = compute_memory_segments(&profile, &last_ollama_state, recommended_tag);
+
             let payload = TelemetryPayload {
                 ollama: last_ollama_state.clone(),
                 hardware: hw_state,
+                hardware_profile: profile.clone(),
+                segments,
             };
 
             let _ = app.emit("telemetry_update", payload);

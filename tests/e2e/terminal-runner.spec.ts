@@ -42,6 +42,7 @@ test.describe('Terminal Runner View', () => {
             if (cmd === 'check_hermes_status') return Promise.resolve(false);
             if (cmd === 'check_opencode_status') return Promise.resolve(false);
             if (cmd === 'detect_vram') return Promise.resolve(8192);
+            if (cmd === 'get_model_tag_for_vram') return Promise.resolve('gemma4:e2b');
             
             if (cmd === 'spawn_pty') return Promise.resolve();
             if (cmd === 'resize_pty') return Promise.resolve();
@@ -70,10 +71,10 @@ test.describe('Terminal Runner View', () => {
     await canvas.goto();
 
     // Click Hermes to open config
-    await canvas.clickNode('HERMES');
+    await canvas.clickNode('Hermes');
     
-    // Click "INITIALIZE HERMES"
-    const initButton = page.getByRole('button', { name: 'INITIALIZE HERMES' });
+    // Click "INSTALL HERMES"
+    const initButton = page.getByRole('button', { name: /INSTALL HERMES/i });
     await expect(initButton).toBeVisible();
     await initButton.click();
 
@@ -127,8 +128,8 @@ test.describe('Terminal Runner View', () => {
     // Click Ollama node to open config
     await canvas.clickNode('Ollama');
 
-    // Click "INITIALIZE OLLAMA"
-    const initButton = page.getByRole('button', { name: 'INITIALIZE OLLAMA' });
+    // Click "INSTALL OLLAMA"
+    const initButton = page.getByRole('button', { name: /INSTALL OLLAMA/i });
     await expect(initButton).toBeVisible();
     await initButton.click();
 

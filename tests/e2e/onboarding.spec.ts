@@ -9,6 +9,7 @@ test.describe('V2 Onboarding Flow', () => {
         value: { transformCallback: () => 1234, plugins: { event: { unregisterListener: () => {} } }, transformCallback: () => 1234,
           invoke: (cmd: string, args: any) => {
             if (cmd === 'is_wipe_mode') return Promise.resolve(false);
+            if (cmd === 'get_model_tag_for_vram') return Promise.resolve('gemma4:e2b');
             return Promise.resolve();
           }
         }
@@ -60,4 +61,46 @@ test.describe('V2 Onboarding Flow', () => {
     const finalState = await page.evaluate(() => localStorage.getItem('onboardingState'));
     expect(finalState).toBe('completed');
   });
+
+  test('should clamp tooltip to viewport bounds and punch cutout in spotlight mask', async ({ page }) => {
+    const canvas = new MainCanvas(page);
+    await canvas.goto();
+
+    // Start tutorial
+    await page.locator('button:has-text("I want to learn")').click();
+
+    // Wait for tooltip card
+    const tooltipHeading = page.locator('text="Local Hardware Node"');
+    await expect(tooltipHeading).toBeVisible();
+
+    // Assert tooltip container stays strictly within viewport margins
+    const tooltipBoundingBox = await tooltipHeading.evaluate((el) => {
+      const card = el.closest('div.bg-zen-surface');
+      if (!card) return null;
+      const rect = card.getBoundingClientRect();
+      return {
+        left: rect.left,
+        right: rect.right,
+        top: rect.top,
+        bottom: rect.bottom,
+        windowWidth: window.innerWidth,
+        windowHeight: window.innerHeight,
+      };
+    });
+
+    expect(tooltipBoundingBox).not.toBeNull();
+    if (tooltipBoundingBox) {
+      expect(tooltipBoundingBox.left).toBeGreaterThanOrEqual(16);
+      expect(tooltipBoundingBox.right).toBeLessThanOrEqual(tooltipBoundingBox.windowWidth - 16);
+      expect(tooltipBoundingBox.top).toBeGreaterThanOrEqual(16);
+      expect(tooltipBoundingBox.bottom).toBeLessThanOrEqual(tooltipBoundingBox.windowHeight - 16);
+    }
+
+    // Verify the 4-quadrant backdrop panels exist surrounding the node
+    await expect(page.locator('[data-testid="spotlight-top"]')).toBeVisible();
+    await expect(page.locator('[data-testid="spotlight-bottom"]')).toBeVisible();
+    await expect(page.locator('[data-testid="spotlight-left"]')).toBeVisible();
+    await expect(page.locator('[data-testid="spotlight-right"]')).toBeVisible();
+  });
 });
+

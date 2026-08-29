@@ -116,18 +116,18 @@ export const CloudRoutingPanel = () => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-        <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--zen-text)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)' }}>
           GLOBAL ROUTING POOL
         </div>
         <button 
           onClick={refreshChain} 
           disabled={loading}
           style={{ 
-            fontSize: '0.7rem', 
+            fontSize: '0.65rem', 
             fontWeight: 600, 
-            padding: '4px 8px', 
+            padding: '2px 6px', 
             borderRadius: '4px',
             backgroundColor: 'var(--zen-surface-hover)', 
             border: '1px solid var(--zen-border)',
@@ -139,9 +139,9 @@ export const CloudRoutingPanel = () => {
         </button>
       </div>
       
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '300px', overflowY: 'auto', paddingRight: '4px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
         {chain.length === 0 && !loading && (
-          <div style={{ fontSize: '0.8rem', color: '#6b7280', textAlign: 'center', padding: '12px' }}>
+          <div style={{ fontSize: '0.75rem', color: '#6b7280', textAlign: 'center', padding: '8px' }}>
             No models found. Please configure a provider.
           </div>
         )}
@@ -162,11 +162,11 @@ export const CloudRoutingPanel = () => {
                 style={{ 
                   display: 'flex', 
                   alignItems: 'center', 
-                  padding: '10px 12px', 
+                  padding: '6px 10px', 
                   backgroundColor: isActive ? 'var(--zen-surface-hover)' : 'var(--zen-surface)', 
                   border: `1px solid ${isActive ? 'var(--zen-accent)' : 'var(--zen-border)'}`,
-                  borderRadius: '8px', 
-                  gap: '12px',
+                  borderRadius: '6px', 
+                  gap: '8px',
                   position: 'relative',
                 }}>
               

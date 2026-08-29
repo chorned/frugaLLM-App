@@ -15,6 +15,10 @@ export class NodeConfigPanel {
   readonly port: Locator;
   readonly apiKey: Locator;
   readonly googleApiKey: Locator;
+  readonly apiPasswordCheckbox: Locator;
+  readonly apiPasswordInput: Locator;
+  readonly togglePasswordVisibilityButton: Locator;
+  readonly copyPasswordButton: Locator;
 
   // Tool Enforcing Gateway
   readonly toolGatewayCheckbox: Locator;
@@ -40,6 +44,10 @@ export class NodeConfigPanel {
     this.port = page.locator('input[name="port"]');
     this.apiKey = page.locator('input[name="apiKey"]');
     this.googleApiKey = page.locator('input[name="googleApiKey"]');
+    this.apiPasswordCheckbox = page.getByTestId('api-password-checkbox');
+    this.apiPasswordInput = page.getByTestId('api-password-input');
+    this.togglePasswordVisibilityButton = page.getByTestId('toggle-password-visibility');
+    this.copyPasswordButton = page.getByTestId('copy-password-button');
 
     this.toolGatewayCheckbox = page.getByTestId('tool-gateway-checkbox');
     this.toolGatewayStatus = page.getByTestId('tool-gateway-status');

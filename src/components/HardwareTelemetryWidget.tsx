@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { Activity, Cpu, Database, Zap, PowerOff, AlertCircle } from 'lucide-react';
+import { MemoryPipelineWidget, MemorySegments, HardwareProfile } from './MemoryPipelineWidget';
 
 interface TelemetryPayload {
   ollama: {
@@ -17,6 +18,8 @@ interface TelemetryPayload {
     vram_used: number;
     vram_total: number;
   };
+  hardware_profile?: HardwareProfile;
+  segments?: MemorySegments;
 }
 
 export function HardwareTelemetryWidget() {
@@ -83,7 +86,7 @@ export function HardwareTelemetryWidget() {
         <div>
           <div className="text-xs text-gray-500 font-bold tracking-wider mb-1">ACTIVE MODEL</div>
           <div className="font-bold text-white text-base truncate w-40">
-            {isIdle ? <span className="text-gray-500 italic">Idle</span> : ollama.model_name}
+            {isIdle ? <span className="text-gray-500 italic">Idle</span> : (ollama.model_name?.replace(/^library\//, '').replace(/frugallm-active.*/, 'gemma4').replace(/:latest$/, '') || 'None')}
           </div>
         </div>
         {!isIdle && getLocationBadge()}
@@ -130,6 +133,9 @@ export function HardwareTelemetryWidget() {
             </div>
           </div>
         )}
+
+        {/* Memory Pipeline Stacked Bar */}
+        <MemoryPipelineWidget segments={telemetry?.segments} hardwareProfile={telemetry?.hardware_profile} />
 
         {isIdle && (
           <div className="mt-2 flex items-center gap-2 text-xs text-yellow-500/80 bg-yellow-500/10 p-2 rounded border border-yellow-500/20">

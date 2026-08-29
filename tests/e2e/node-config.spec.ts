@@ -31,6 +31,7 @@ test.describe('Node Configuration Panel', () => {
             if (cmd === 'check_tool_gateway_status') return Promise.resolve(false);
             if (cmd === 'set_tool_gateway_installed') return Promise.resolve();
             if (cmd === 'detect_vram') return Promise.resolve(8192);
+            if (cmd === 'get_model_tag_for_vram') return Promise.resolve('gemma4:e2b');
             if (cmd === 'get_frugallm_config') return Promise.resolve({});
             if (cmd === 'set_frugallm_config') return Promise.resolve();
             if (cmd === 'get_credential') return Promise.reject('No key');
@@ -98,7 +99,7 @@ test.describe('Node Configuration Panel', () => {
     await canvas.goto();
 
     // Click OpenRouter
-    await canvas.clickNode('OPENROUTER');
+    await canvas.clickNode('Openrouter');
     await expect(configPanel.updateButton).toBeVisible();
 
     // Verify API Key field is password masked
@@ -126,7 +127,7 @@ test.describe('Node Configuration Panel', () => {
     await canvas.goto();
 
     // Click Google AI Studio node
-    await canvas.clickNode('GOOGLE AI STUDIO');
+    await canvas.clickNode('AI Studio');
     await expect(configPanel.updateButton).toBeVisible();
 
     // Verify Google API Key field is password masked
@@ -160,10 +161,11 @@ test.describe('Node Configuration Panel', () => {
     const canvas = new MainCanvas(page);
     await canvas.goto();
 
-    // Verify Google AI Studio node shows Connected status
+    // Verify Google AI Studio node shows API Key prefix and status
     const googleNode = page.locator('[data-node-id="node-google"]');
     await expect(googleNode).toBeVisible();
-    await expect(googleNode.getByText('Connected')).toBeVisible();
+    await expect(googleNode.getByText('AIzaS...')).toBeVisible();
+    await expect(googleNode.getByText('200 OK')).toBeVisible();
   });
 
   test('should render FrugalLM Hub routing panel and filter computer-use models', async ({ page }) => {
@@ -172,10 +174,10 @@ test.describe('Node Configuration Panel', () => {
     await canvas.goto();
 
     // Click FrugalLM Hub node
-    await canvas.clickNode('FRUGALLM CORE');
+    await canvas.clickNode('FrugaLLM');
     
     // Check that the panel opens
-    await expect(page.getByRole('heading', { name: 'FRUGALLM CORE' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /FrugaLLM/i })).toBeVisible();
 
     // The COPY IP & PORT button should be visible
     await expect(page.getByRole('button', { name: /COPY IP & PORT/i })).toBeVisible();
@@ -304,5 +306,94 @@ test.describe('Node Configuration Panel', () => {
       const uninstallCall = cmds.find((c: any) => c.cmd === 'set_tool_gateway_installed' && c.args?.installed === false);
       expect(uninstallCall).toBeDefined();
     }).toPass({ timeout: 5000 });
+  });
+
+  test('should toggle API password checkbox, show/hide password, and save new password on FrugaLLM node', async ({ page }) => {
+    const canvas = new MainCanvas(page);
+    const configPanel = new NodeConfigPanel(page);
+
+    await canvas.goto();
+
+    // Click FrugaLLM Core node
+    await canvas.clickNode('FrugaLLM');
+    await expect(configPanel.updateButton).toBeVisible();
+
+    // Checkbox should be visible and initially unchecked (no password set in default mock)
+    await expect(configPanel.apiPasswordCheckbox).toBeVisible();
+    await expect(configPanel.apiPasswordCheckbox).not.toBeChecked();
+    await expect(configPanel.apiPasswordInput).not.toBeVisible();
+
+    // Check the API Password checkbox
+    await configPanel.apiPasswordCheckbox.click();
+    await expect(configPanel.apiPasswordCheckbox).toBeChecked();
+    await expect(configPanel.apiPasswordInput).toBeVisible();
+    await expect(configPanel.apiPasswordInput).toHaveAttribute('type', 'password');
+
+    // Type a password
+    await configPanel.apiPasswordInput.fill('mySecretP@ss123');
+
+    // Toggle Show/Hide
+    await configPanel.togglePasswordVisibilityButton.click();
+    await expect(configPanel.apiPasswordInput).toHaveAttribute('type', 'text');
+    await configPanel.togglePasswordVisibilityButton.click();
+    await expect(configPanel.apiPasswordInput).toHaveAttribute('type', 'password');
+
+    // Click Copy password button
+    await configPanel.copyPasswordButton.click();
+
+    // Save changes
+    await configPanel.updateButton.click();
+
+    // Verify set_frugallm_config was called with api_password
+    const cmds = await page.evaluate(() => window['invokedCommands']);
+    const saveCall = cmds.find((c: any) => c.cmd === 'set_frugallm_config' && c.args?.newConfig?.api_password === 'mySecretP@ss123');
+    expect(saveCall).toBeDefined();
+  });
+
+  test('should display existing API password active badge and clear password when unchecked and saved', async ({ page }) => {
+    // Override get_frugallm_config mock to return existing password
+    await page.addInitScript(() => {
+      const origInvoke = (window as any).__TAURI_INTERNALS__?.invoke;
+      if (origInvoke) {
+        (window as any).__TAURI_INTERNALS__.invoke = (cmd: string, args: any) => {
+          if (cmd === 'get_frugallm_config') {
+            return Promise.resolve({
+              port: 61721,
+              bind_all_interfaces: false,
+              api_password: 'existingSecret456'
+            });
+          }
+          return origInvoke(cmd, args);
+        };
+      }
+    });
+
+    const canvas = new MainCanvas(page);
+    const configPanel = new NodeConfigPanel(page);
+
+    await canvas.goto();
+
+    // Click FrugaLLM Core node
+    await canvas.clickNode('FrugaLLM');
+    await expect(configPanel.updateButton).toBeVisible();
+
+    // Verify checkbox is checked and active status is shown
+    await expect(configPanel.apiPasswordCheckbox).toBeChecked();
+    await expect(configPanel.apiPasswordInput).toBeVisible();
+    await expect(configPanel.apiPasswordInput).toHaveValue('existingSecret456');
+    await expect(page.getByText('• ACTIVE')).toBeVisible();
+
+    // Uncheck API password checkbox
+    await configPanel.apiPasswordCheckbox.click();
+    await expect(configPanel.apiPasswordCheckbox).not.toBeChecked();
+    await expect(configPanel.apiPasswordInput).not.toBeVisible();
+
+    // Save changes
+    await configPanel.updateButton.click();
+
+    // Verify set_frugallm_config was called with api_password: null
+    const cmds = await page.evaluate(() => window['invokedCommands']);
+    const saveCall = cmds.find((c: any) => c.cmd === 'set_frugallm_config' && c.args?.newConfig?.api_password === null);
+    expect(saveCall).toBeDefined();
   });
 });

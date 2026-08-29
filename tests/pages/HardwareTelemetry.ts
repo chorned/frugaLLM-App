@@ -37,11 +37,11 @@ export class HardwareTelemetryPage {
     
     this.panel = page.getByTestId('hardware-telemetry-panel');
     
-    this.loadLabel = this.panel.locator('div').filter({ hasText: /^(CPU|GPU|CPU Load|GPU Load).*$/ }).locator('span').first();
-    this.loadValue = this.panel.locator('div').filter({ hasText: /^(CPU|GPU|CPU Load|GPU Load).*$/ }).locator('span').last();
+    this.loadLabel = this.panel.getByTestId('telemetry-load-label');
+    this.loadValue = this.panel.getByTestId('telemetry-load-value');
     
-    this.memoryLabel = this.panel.locator('div').filter({ hasText: /^(Memory|RAM Allocation|VRAM Allocation).*$/ }).locator('span').first();
-    this.memoryValue = this.panel.locator('div').filter({ hasText: /^(Memory|RAM Allocation|VRAM Allocation).*$/ }).locator('span').last();
+    this.memoryLabel = this.panel.getByTestId('telemetry-memory-label');
+    this.memoryValue = this.panel.getByTestId('telemetry-memory-value');
     
     this.throughputLabel = this.panel.locator('text=Avg. Throughput');
     this.throughputValue = this.panel.getByTestId('live-throughput-stat');

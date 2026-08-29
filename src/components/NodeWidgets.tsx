@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { listen } from '@tauri-apps/api/event';
 import en from '../locales/en.json';
+import { MemoryPipelineWidget } from './MemoryPipelineWidget';
+import { useMemory } from '../context/MemoryContext';
 
 const InfoIconSVG = (props: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="-50 -50 590 590" fill="currentColor" {...props}>
@@ -327,7 +329,21 @@ export const SettingsToggle = ({
 // =============================================================================
 // HardwareNode — Infrastructure node for local GPU/CPU telemetry
 // =============================================================================
-export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean }) => {
+export const HardwareNode = ({ 
+  isGenerating = false,
+  label = en.routingGraph.nodes.ollamaLocal.label || 'Ollama',
+  subheader = (en.routingGraph.nodes.ollamaLocal as any).subheader || 'Open source (local)'
+}: { 
+  isGenerating?: boolean;
+  label?: string;
+  subheader?: string;
+}) => {
+  const memory = useMemory();
+  const memoryRef = useRef(memory);
+  useEffect(() => {
+    memoryRef.current = memory;
+  }, [memory]);
+
   const [telemetry, setTelemetry] = useState<any>(null);
   const [showPanel, setShowPanel] = useState(false);
   const [showBenchmarks, setShowBenchmarks] = useState(false);
@@ -346,6 +362,12 @@ export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean 
     const setupListener = async () => {
       unlisten = await listen<any>('telemetry_update', (event) => {
         setTelemetry(event.payload);
+        if (event.payload) {
+          memoryRef.current.setLatestTelemetry(event.payload);
+          if (event.payload.hardware_profile) {
+            memoryRef.current.setHardwareProfile(event.payload.hardware_profile);
+          }
+        }
       });
     };
     setupListener();
@@ -360,12 +382,19 @@ export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean 
       : (telemetry.hardware.gpu_utilization || telemetry.hardware.cpu_utilization)
     : 0;
 
-  const isCpuMode = !telemetry || telemetry.ollama.location_state === 'cpu' || telemetry.hardware.vram_total === 0;
-  const memUsedRaw = isCpuMode ? (telemetry?.ollama?.total_size || 0) : (telemetry?.hardware?.vram_used || 0);
-  const memTotalRaw = isCpuMode ? (16 * 1024 * 1024 * 1024) : (telemetry?.hardware?.vram_total || 0);
+  const effectiveProfile = memory.hardwareProfile || telemetry?.hardware_profile;
+  const isUnified = effectiveProfile?.is_unified ?? false;
+  const executionCeiling =
+    effectiveProfile?.execution_ceiling ||
+    memory.effectiveSegments?.execution_ceiling_bytes ||
+    (telemetry?.hardware?.vram_total || 0) ||
+    (8 * 1024 * 1024 * 1024);
+  const isCpuMode = !telemetry || telemetry.ollama?.location_state === 'cpu' || (!isUnified && (telemetry.hardware?.vram_total || 0) === 0);
+  const memUsedRaw = isCpuMode ? (telemetry?.ollama?.total_size || 0) : (telemetry?.hardware?.vram_used || telemetry?.ollama?.total_size || 0);
+  const memTotalRaw = executionCeiling;
 
-  const memUsed = telemetry ? (memUsedRaw / 1024 / 1024 / 1024).toFixed(1) : '0.0';
-  const memTotal = telemetry ? (memTotalRaw / 1024 / 1024 / 1024).toFixed(1) : '0.0';
+  const memUsed = telemetry && memUsedRaw > 0 ? (memUsedRaw / 1024 / 1024 / 1024).toFixed(1) : '0.0';
+  const memTotal = (memTotalRaw / 1024 / 1024 / 1024).toFixed(1);
   const memPercent = telemetry && memTotalRaw > 0 ? (memUsedRaw / memTotalRaw) * 100 : 0;
     
   const isActive = telemetry?.ollama?.status === 'active';
@@ -402,8 +431,8 @@ export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean 
         // Require at least 300ms of hot generation to eliminate instant buffer flush artifacts
         if (totalElapsedSec >= 0.3) {
           const rawAvgTps = runTokens / totalElapsedSec;
-          // Clamp realistic physical generation boundaries (e.g. 0.1 to 250 t/s)
-          const smoothedAvg = Math.min(Math.max(rawAvgTps, 0.1), 250);
+          // Compute physical generation speed without artificial upper clamp
+          const smoothedAvg = Math.max(rawAvgTps, 0.0);
           const rounded = Math.round(smoothedAvg * 10) / 10;
           setLiveThroughput(rounded);
           setAvgThroughput(rounded);
@@ -450,12 +479,23 @@ export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean 
         <div 
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--zen-border)', padding: '8px 12px', backgroundColor: 'var(--zen-surface-hover)' }}
         >
-          <div id="local-hardware-heading" style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--zen-text)', display: 'flex', gap: '8px', alignItems: 'center', letterSpacing: '0.5px' }}>
+          <div id="local-hardware-heading" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <CpuIconSVG />
-            Ollama (Local LLM)
+            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
+              <span style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--zen-text)', letterSpacing: '0.5px' }}>
+                {label}
+              </span>
+              {subheader && (
+                <span style={{ fontWeight: 500, fontSize: '0.62rem', color: 'var(--zen-text-secondary)', opacity: 0.9 }}>
+                  {subheader}
+                </span>
+              )}
+            </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <StatusLight status={isStatusActive ? 'active' : 'standby'} text={headerStatusText} />
+            {isStatusActive && (
+              <StatusLight status="active" text={headerStatusText} />
+            )}
             <div 
               data-testid="hardware-info-btn"
               onClick={(e) => {
@@ -481,16 +521,23 @@ export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean 
         <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: 'var(--zen-surface)', color: 'var(--zen-text)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>Active Model</span>
-            <span data-testid="active-model-name" style={{ fontSize: '0.75rem', fontWeight: 700, color: isLoaded ? 'var(--zen-text)' : 'var(--zen-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }} title={isLoaded ? telemetry?.ollama?.model_name : 'None'}>
-              {isLoaded ? telemetry?.ollama?.model_name : 'None'}
-            </span>
+            {(() => {
+              const rawName = isLoaded ? (telemetry?.ollama?.model_name || memory.activeModelName) : 'None';
+              const displayName = rawName.replace(/^library\//, '').replace(/frugallm-active.*/, 'gemma4').replace(/:latest$/, '');
+              return (
+                <span data-testid="active-model-name" style={{ fontSize: '0.75rem', fontWeight: 700, color: isLoaded ? 'var(--zen-text)' : 'var(--zen-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }} title={isLoaded ? displayName : 'None'}>
+                  {isLoaded ? displayName : 'None'}
+                </span>
+              );
+            })()}
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>Allocation</span>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>
+            <span data-testid="hardware-node-allocation" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>
               {memUsed} / {memTotal} GB
             </span>
           </div>
+          <MemoryPipelineWidget compact segments={telemetry?.segments} hardwareProfile={effectiveProfile} />
         </div>
       </div>
 
@@ -501,7 +548,7 @@ export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean 
         >
           <div 
             data-testid="hardware-telemetry-panel"
-            style={{ width: '360px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '16px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '20px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }} 
+            style={{ width: '420px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '16px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)', maxHeight: '90vh', overflowY: 'auto' }} 
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--zen-border)', paddingBottom: '8px' }}>
@@ -510,12 +557,15 @@ export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean 
               </span>
               <span onClick={() => setShowPanel(false)} style={{ color: '#9ca3af', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem', padding: '2px 6px' }}>✕</span>
             </div>
+
+            {/* Memory Pipeline Stacked Bar Visualization */}
+            <MemoryPipelineWidget segments={telemetry?.segments} hardwareProfile={effectiveProfile} />
             
             {/* Utilization Bar (Load) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>
-                <span>{isCpuMode ? en.routingGraph.hardwareTelemetryWidget.cpuLoad : en.routingGraph.hardwareTelemetryWidget.gpuLoad}</span>
-                <span>{loadPercent.toFixed(1)}%</span>
+                <span data-testid="telemetry-load-label">{isCpuMode ? en.routingGraph.hardwareTelemetryWidget.cpuLoad : en.routingGraph.hardwareTelemetryWidget.gpuLoad}</span>
+                <span data-testid="telemetry-load-value">{loadPercent.toFixed(1)}%</span>
               </div>
               <div style={{ width: '100%', height: '10px', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '5px', overflow: 'hidden' }}>
                 <div 
@@ -532,8 +582,8 @@ export const HardwareNode = ({ isGenerating = false }: { isGenerating?: boolean 
             {/* Utilization Bar (Memory) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>
-                <span>{isCpuMode ? en.routingGraph.hardwareTelemetryWidget.ramAllocation : en.routingGraph.hardwareTelemetryWidget.vramAllocation}</span>
-                <span>{memUsed} / {memTotal} GB</span>
+                <span data-testid="telemetry-memory-label">{isCpuMode ? en.routingGraph.hardwareTelemetryWidget.ramAllocation : en.routingGraph.hardwareTelemetryWidget.vramAllocation}</span>
+                <span data-testid="telemetry-memory-value">{memUsed} / {memTotal} GB</span>
               </div>
               <div style={{ width: '100%', height: '10px', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '5px', overflow: 'hidden' }}>
                 <div 

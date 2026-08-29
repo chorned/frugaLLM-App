@@ -39,6 +39,7 @@ test.describe('Hardware Telemetry Widget', () => {
             if (cmd === 'check_hermes_status') return Promise.resolve(false);
             if (cmd === 'check_opencode_status') return Promise.resolve(false);
             if (cmd === 'detect_vram') return Promise.resolve(8192);
+            if (cmd === 'get_model_tag_for_vram') return Promise.resolve('gemma4:e2b');
             if (cmd === 'get_frugallm_config') return Promise.resolve({ port: 1234 });
             if (cmd === 'get_credential') return Promise.resolve(null);
             
@@ -61,8 +62,8 @@ test.describe('Hardware Telemetry Widget', () => {
   test('should render offline state by default', async ({ page }) => {
     const telemetry = new HardwareTelemetryPage(page);
     
-    // Header should show IDLE
-    await expect(telemetry.statusLight).toHaveText('Standby');
+    // Header should not show standby indicator by default
+    await expect(telemetry.statusLight).not.toBeVisible();
     await expect(telemetry.activeModel).toHaveText('None');
 
     // Expand the widget
@@ -73,7 +74,7 @@ test.describe('Hardware Telemetry Widget', () => {
     await expect(telemetry.loadValue).toHaveText('0.0%');
 
     await expect(telemetry.memoryLabel).toHaveText('RAM Allocation');
-    await expect(telemetry.memoryValue).toHaveText('0.0 / 0.0 GB');
+    await expect(telemetry.memoryValue).toHaveText('0.0 / 8.0 GB');
 
     await expect(telemetry.throughputValue).toContainText('0.0');
   });
@@ -115,6 +116,74 @@ test.describe('Hardware Telemetry Widget', () => {
     await page.screenshot({ path: './copy-audit/hardware-telemetry-widget.png', fullPage: true });
   });
 
+  test('should render Memory Pipeline stacked bar with 128k context and spillover warning', async ({ page }) => {
+    const telemetry = new HardwareTelemetryPage(page);
+    await telemetry.toggle();
+
+    // Emit telemetry with Pre-Flight state on Discrete GPU exceeding 8GB VRAM (e.g. gemma4:e4b + 128k Q8 context)
+    await telemetry.emitTelemetry({
+      ollama: { status: 'idle', model_name: 'None', location_state: 'unknown' },
+      hardware: { cpu_utilization: 0, vram_total: 8589934592 },
+      hardware_profile: {
+        is_unified: false,
+        dedicated_vram: 8589934592,
+        system_ram: 34359738368,
+        execution_ceiling: 8589934592,
+        os_architecture: 'macos-x86_64'
+      },
+      segments: {
+        phase: 'preflight',
+        weights_bytes: 5261335552,
+        context_128k_bytes: 17179869184,
+        overhead_bytes: 524288000,
+        total_projected_bytes: 22965492736,
+        execution_ceiling_bytes: 8589934592,
+        spillover_bytes: 14375558144,
+        spillover_type: 'system_ram',
+        triggers_warning: true,
+        warning_message: 'Model & 128k context exceed Dedicated VRAM. Spillover will route across PCIe into System RAM.'
+      }
+    });
+
+    const panel = page.getByTestId('hardware-telemetry-panel');
+    await expect(panel.getByTestId('memory-pipeline-widget')).toBeVisible();
+    await expect(panel.getByTestId('memory-phase-badge')).toContainText('PRE-FLIGHT ESTIMATION');
+    await expect(panel.getByTestId('architecture-badge')).toContainText('Discrete GPU');
+    await expect(panel.getByTestId('segment-weights')).toBeVisible();
+    await expect(panel.getByTestId('segment-context')).toBeVisible();
+    await expect(panel.getByTestId('segment-spillover')).toBeVisible();
+    await expect(panel.getByTestId('spillover-warning-banner')).toContainText('PCIe Bus Bottleneck Warning');
+
+    // Transition to Apple Silicon Unified Memory Live state
+    await telemetry.emitTelemetry({
+      ollama: { status: 'active', model_name: 'gemma4:e2b', location_state: 'gpu', total_size: 1717986918, vram_size: 1717986918 },
+      hardware: { cpu_utilization: 12, gpu_utilization: 45, vram_total: 15032385536 },
+      hardware_profile: {
+        is_unified: true,
+        dedicated_vram: 0,
+        system_ram: 17179869184,
+        execution_ceiling: 15032385536,
+        os_architecture: 'macos-arm64'
+      },
+      segments: {
+        phase: 'live',
+        weights_bytes: 1717986918,
+        context_128k_bytes: 6979321856,
+        overhead_bytes: 524288000,
+        total_projected_bytes: 9221596774,
+        execution_ceiling_bytes: 15032385536,
+        spillover_bytes: 0,
+        spillover_type: 'none',
+        triggers_warning: false,
+        warning_message: ''
+      }
+    });
+
+    await expect(panel.getByTestId('memory-phase-badge')).toContainText('LIVE RUNTIME');
+    await expect(panel.getByTestId('architecture-badge')).toContainText('Apple Silicon (Unified Memory)');
+    await expect(panel.getByTestId('spillover-warning-banner')).not.toBeVisible();
+  });
+
   test('should update throughput when bytes are emitted', async ({ page }) => {
     const telemetry = new HardwareTelemetryPage(page);
     await telemetry.toggle();
@@ -154,6 +223,35 @@ test.describe('Hardware Telemetry Widget', () => {
     await expect(telemetry.statusLight).toHaveText('Loaded');
     // Avg throughput should retain the computed average value
     await expect(telemetry.throughputValue).not.toContainText('0.0 t/s');
+  });
+
+  test('should support high-throughput speed exceeding 250 t/s without clamping', async ({ page }) => {
+    const telemetry = new HardwareTelemetryPage(page);
+    await telemetry.toggle();
+    
+    await telemetry.emitTelemetry({
+      ollama: { status: 'active', model_name: 'vllm-engine', location_state: 'gpu' },
+      hardware: { cpu_utilization: 20, vram_total: 16000 }
+    });
+    
+    // First high-volume chunk (2000 bytes = 500 tokens)
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('pty_bytes', { detail: 2000 }));
+    });
+    
+    await page.waitForTimeout(400); // 0.4s elapsed
+    
+    // Second chunk (2000 bytes = 500 tokens, total = 1000 tokens / 0.4s = ~2500 t/s)
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('pty_bytes', { detail: 2000 }));
+    });
+    
+    // Live throughput should exceed 250 t/s without artificial clamping
+    await expect(async () => {
+      const text = await telemetry.throughputValue.textContent();
+      const speed = parseFloat(text || '0');
+      expect(speed).toBeGreaterThan(250);
+    }).toPass();
   });
 
   test('should toggle benchmark reference panel showing Claude Sonnet and cloud tiers', async ({ page }) => {

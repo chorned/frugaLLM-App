@@ -18,6 +18,7 @@ pub struct ModelIntelligenceRegistry {
 }
 
 impl ModelIntelligenceRegistry {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         let json_str = include_str!(concat!(env!("OUT_DIR"), "/model_db.json"));
         let db: HashMap<String, ModelScore> = serde_json::from_str(json_str).unwrap_or_default();

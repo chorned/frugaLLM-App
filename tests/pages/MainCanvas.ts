@@ -17,7 +17,10 @@ export class MainCanvas {
     await this.page.goto('/');
   }
 
-  async getNode(label: string) {
+  async getNode(label: string | RegExp) {
+    if (typeof label === 'string') {
+      return this.nodes.filter({ hasText: new RegExp(label, 'i') });
+    }
     return this.nodes.filter({ hasText: label });
   }
 

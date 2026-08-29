@@ -4,6 +4,8 @@
 mod telemetry;
 mod model_db;
 
+pub use telemetry::{HardwareProfile, MemorySegments, TelemetryPayload};
+
 use std::env;
 #[cfg(not(debug_assertions))]
 use keyring::Entry;
@@ -70,6 +72,7 @@ impl Default for FrugalConfig {
 pub struct FrugalConfigState {
     pub config: std::sync::Arc<tokio::sync::Mutex<FrugalConfig>>,
     pub server_abort_handle: std::sync::Arc<tokio::sync::Mutex<Option<tauri::async_runtime::JoinHandle<()>>>>,
+    pub is_dirty: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 #[derive(serde::Serialize)]
@@ -354,13 +357,16 @@ async fn check_ollama_status() -> bool {
     }
 
     // 2. Check if the binary is in PATH or common paths
-    if std::process::Command::new(get_ollama_binary())
-        .arg("--version")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
-    {
-        return true;
+    let bin = get_ollama_binary();
+    if bin != std::path::PathBuf::from("ollama") && bin.exists() {
+        if std::process::Command::new(&bin)
+            .arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+        {
+            return true;
+        }
     }
     
     // 3. Fallback: check common installation paths
@@ -373,6 +379,105 @@ async fn check_ollama_status() -> bool {
         "/Applications/Ollama.app"
     ];
     is_ollama_in_paths(&paths)
+}
+
+#[tauri::command(async)]
+async fn get_hermes_version(app: tauri::AppHandle) -> String {
+    if let Ok(home) = app.path().home_dir() {
+        if is_hermes_installed(&home) {
+            let hermes_bin = home.join(".hermes").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" });
+            if let Ok(output) = tokio::process::Command::new(&hermes_bin).arg("--version").output().await {
+                if output.status.success() {
+                    let v = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    if !v.is_empty() {
+                        return v;
+                    }
+                }
+            }
+            return "v0.3.1".to_string();
+        }
+    }
+    "N/A".to_string()
+}
+
+#[tauri::command(async)]
+async fn get_opencode_version(app: tauri::AppHandle) -> String {
+    if let Ok(home) = app.path().home_dir() {
+        if is_opencode_installed(&home) {
+            let opencode_bin = home.join(".opencode").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
+            if let Ok(output) = tokio::process::Command::new(&opencode_bin).arg("--version").output().await {
+                if output.status.success() {
+                    let v = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    if !v.is_empty() {
+                        return v;
+                    }
+                }
+            }
+            let local_bin = home.join(".local").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
+            if let Ok(output) = tokio::process::Command::new(&local_bin).arg("--version").output().await {
+                if output.status.success() {
+                    let v = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    if !v.is_empty() {
+                        return v;
+                    }
+                }
+            }
+            return "v1.0.0".to_string();
+        }
+    }
+    "N/A".to_string()
+}
+
+#[tauri::command(async)]
+async fn uninstall_ollama(app: tauri::AppHandle) -> Result<(), String> {
+    // 1. Kill daemon child process if managed by app
+    let daemon_state = app.state::<OllamaDaemonState>();
+    let mut child_guard = daemon_state.child.lock().await;
+    if let Some(mut child) = child_guard.take() {
+        let _ = child.kill().await;
+    }
+
+    // 2. Terminate system-wide Ollama processes
+    #[cfg(target_os = "macos")]
+    {
+        let _ = tokio::process::Command::new("pkill").args(["-9", "-f", "ollama"]).output().await;
+        let _ = tokio::process::Command::new("pkill").args(["-9", "-f", "Ollama"]).output().await;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = tokio::process::Command::new("pkill").args(["-9", "-f", "ollama"]).output().await;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = tokio::process::Command::new("taskkill").args(["/F", "/IM", "ollama.exe", "/T"]).output().await;
+    }
+
+    // 3. Remove application binaries and model directories
+    #[cfg(target_os = "macos")]
+    {
+        let _ = tokio::fs::remove_dir_all("/Applications/Ollama.app").await;
+        let _ = tokio::fs::remove_file("/usr/local/bin/ollama").await;
+        let _ = tokio::process::Command::new("rm").args(["-rf", "/Applications/Ollama.app", "/usr/local/bin/ollama"]).output().await;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = tokio::fs::remove_file("/usr/local/bin/ollama").await;
+        let _ = tokio::fs::remove_file("/usr/bin/ollama").await;
+        let _ = tokio::process::Command::new("rm").args(["-rf", "/usr/local/bin/ollama", "/usr/bin/ollama"]).output().await;
+    }
+
+    if let Ok(home) = app.path().home_dir() {
+        let ollama_home = home.join(".ollama");
+        let _ = tokio::fs::remove_dir_all(&ollama_home).await;
+        let _ = tokio::process::Command::new("rm").args(["-rf", &ollama_home.to_string_lossy()]).output().await;
+    }
+
+    if let Ok(app_dir) = app.path().app_data_dir() {
+        let models_dir = app_dir.join("models");
+        let _ = tokio::fs::remove_dir_all(&models_dir).await;
+    }
+
+    Ok(())
 }
 
 #[tauri::command(async)]
@@ -402,71 +507,120 @@ fn set_tool_gateway_installed(app: tauri::AppHandle, installed: bool) -> Result<
     Ok(())
 }
 
-#[tauri::command(async)]
-async fn detect_vram() -> Result<u64, String> {
-    // Step 1: NVIDIA via NVML
-    #[cfg(not(target_os = "macos"))]
-    {
-        use nvml_wrapper::Nvml;
-        if let Ok(nvml) = Nvml::init() {
-            if let Ok(device) = nvml.device_by_index(0) {
-                if let Ok(memory) = device.memory_info() {
-                    return Ok(memory.total / 1024 / 1024);
-                }
-            }
-        }
-    }
+pub async fn get_hardware_profile() -> Result<HardwareProfile, String> {
+    let is_unified: bool;
+    let mut dedicated_vram: u64 = 0;
+    let mut system_ram: u64 = 0;
+    let os_architecture: String;
 
-    // Step 2: Apple Silicon / Mac OS
     #[cfg(target_os = "macos")]
     {
-        // Try Apple Silicon first
-        if let Ok(output) = tokio::process::Command::new("sysctl").arg("-n").arg("iogpu.wired_limit_mb").output().await {
+        let is_arm = std::env::consts::ARCH == "aarch64";
+        os_architecture = format!("macos-{}", std::env::consts::ARCH);
+
+        // Query total system RAM via sysctl hw.memsize
+        if let Ok(output) = tokio::process::Command::new("sysctl").arg("-n").arg("hw.memsize").output().await {
             if output.status.success() {
-                if let Ok(mem_str) = String::from_utf8(output.stdout) {
-                    if let Ok(mem_mb) = mem_str.trim().parse::<u64>() {
-                        if mem_mb > 0 {
-                            return Ok(mem_mb);
-                        }
+                if let Ok(s) = String::from_utf8(output.stdout) {
+                    if let Ok(bytes) = s.trim().parse::<u64>() {
+                        system_ram = bytes;
                     }
                 }
             }
         }
-        
-        // Fallback to Intel Mac (system_profiler)
-        if let Ok(output) = tokio::process::Command::new("system_profiler").arg("SPDisplaysDataType").output().await {
-            if output.status.success() {
-                if let Ok(prof_str) = String::from_utf8(output.stdout) {
-                    let mut max_vram_mb: u64 = 0;
-                    for line in prof_str.lines() {
-                        if line.contains("VRAM (Total):") || line.contains("VRAM (Dynamic, Max):") {
-                            let parts: Vec<&str> = line.split(':').collect();
-                            if parts.len() > 1 {
-                                let val_str = parts[1].trim();
-                                let val_parts: Vec<&str> = val_str.split_whitespace().collect();
-                                if val_parts.len() == 2 {
-                                    if let Ok(mut val) = val_parts[0].parse::<u64>() {
-                                        if val_parts[1] == "GB" {
-                                            val *= 1024;
-                                        }
-                                        if val > max_vram_mb {
-                                            max_vram_mb = val;
+
+        if is_arm {
+            // Apple Silicon Unified Memory: Do not differentiate RAM/VRAM
+            is_unified = true;
+            dedicated_vram = 0;
+        } else {
+            // Intel Mac: Detect discrete GPU via system_profiler
+            is_unified = false;
+            if let Ok(output) = tokio::process::Command::new("system_profiler").arg("SPDisplaysDataType").output().await {
+                if output.status.success() {
+                    if let Ok(prof_str) = String::from_utf8(output.stdout) {
+                        let mut max_vram_mb: u64 = 0;
+                        for line in prof_str.lines() {
+                            if line.contains("VRAM (Total):") || line.contains("VRAM (Dynamic, Max):") {
+                                let parts: Vec<&str> = line.split(':').collect();
+                                if parts.len() > 1 {
+                                    let val_str = parts[1].trim();
+                                    let val_parts: Vec<&str> = val_str.split_whitespace().collect();
+                                    if val_parts.len() == 2 {
+                                        if let Ok(mut val) = val_parts[0].parse::<u64>() {
+                                            if val_parts[1] == "GB" {
+                                                val *= 1024;
+                                            }
+                                            if val > max_vram_mb {
+                                                max_vram_mb = val;
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
-                    }
-                    if max_vram_mb > 0 {
-                        return Ok(max_vram_mb);
+                        dedicated_vram = max_vram_mb * 1024 * 1024;
                     }
                 }
             }
         }
     }
 
-    // Step 3: Fallback (CPU-only / Unknown)
-    Ok(0)
+    #[cfg(not(target_os = "macos"))]
+    {
+        os_architecture = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
+        is_unified = false;
+
+        let mut sys = sysinfo::System::new_all();
+        sys.refresh_memory();
+        system_ram = sys.total_memory();
+
+        // NVIDIA NVML check
+        use nvml_wrapper::Nvml;
+        if let Ok(nvml) = Nvml::init() {
+            if let Ok(device) = nvml.device_by_index(0) {
+                if let Ok(memory) = device.memory_info() {
+                    dedicated_vram = memory.total;
+                }
+            }
+        }
+    }
+
+    let execution_ceiling = if is_unified {
+        // Unified Memory minus ~2GB macOS reserve buffer
+        system_ram.saturating_sub(2 * 1024 * 1024 * 1024)
+    } else if dedicated_vram > 0 {
+        dedicated_vram
+    } else if system_ram > 0 {
+        system_ram.saturating_sub(2 * 1024 * 1024 * 1024)
+    } else {
+        8 * 1024 * 1024 * 1024
+    };
+
+    Ok(HardwareProfile {
+        is_unified,
+        dedicated_vram,
+        system_ram,
+        execution_ceiling,
+        os_architecture,
+    })
+}
+
+#[tauri::command(async)]
+async fn detect_hardware_profile() -> Result<HardwareProfile, String> {
+    get_hardware_profile().await
+}
+
+#[tauri::command(async)]
+async fn detect_vram() -> Result<u64, String> {
+    let profile = get_hardware_profile().await?;
+    if profile.is_unified {
+        Ok(profile.execution_ceiling / 1024 / 1024)
+    } else if profile.dedicated_vram > 0 {
+        Ok(profile.dedicated_vram / 1024 / 1024)
+    } else {
+        Ok(profile.system_ram / 1024 / 1024)
+    }
 }
 
 #[tauri::command]
@@ -636,28 +790,105 @@ impl Drop for NotifyOnDrop {
             is_active: false,
         });
 
-        let exact_out = self.exact_output_tokens.load(std::sync::atomic::Ordering::Relaxed);
-        let output_tokens = if exact_out > 0 { exact_out } else { self.token_estimate.load(std::sync::atomic::Ordering::Relaxed) / 4 };
+        let exact_out = self.exact_output_tokens.load(std::sync::atomic::Ordering::Acquire);
+        let output_tokens = if exact_out > 0 { exact_out } else { self.token_estimate.load(std::sync::atomic::Ordering::Acquire) / 4 };
         
-        let exact_in = self.exact_input_tokens.load(std::sync::atomic::Ordering::Relaxed);
+        let exact_in = self.exact_input_tokens.load(std::sync::atomic::Ordering::Acquire);
         let input_tokens = if exact_in > 0 { exact_in } else { self.input_tokens_estimate / 4 };
         
         if output_tokens > 0 || input_tokens > 0 {
             let app_handle = self.app.clone();
             tauri::async_runtime::spawn(async move {
                 let state = app_handle.state::<FrugalConfigState>();
-                let mut config = state.config.lock().await;
-                config.input_tokens_session += input_tokens as u64;
-                config.output_tokens_session += output_tokens as u64;
-                config.input_tokens_lifetime += input_tokens as u64;
-                config.output_tokens_lifetime += output_tokens as u64;
-                if let Ok(path) = get_config_path(&app_handle) {
-                    if let Ok(json) = serde_json::to_string_pretty(&*config) {
-                        let _ = std::fs::write(path, json);
-                    }
+                {
+                    let mut config = state.config.lock().await;
+                    config.input_tokens_session += input_tokens as u64;
+                    config.output_tokens_session += output_tokens as u64;
+                    config.input_tokens_lifetime += input_tokens as u64;
+                    config.output_tokens_lifetime += output_tokens as u64;
                 }
+                state.is_dirty.store(true, std::sync::atomic::Ordering::Release);
                 let _ = app_handle.emit("frugallm_config_updated", ());
             });
+        }
+    }
+}
+
+fn process_stream_chunk_for_tokens(
+    chunk_bytes: &[u8],
+    drop_guard: &NotifyOnDrop,
+) {
+    if let Ok(text) = std::str::from_utf8(chunk_bytes) {
+        for line in text.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            let json_candidate = if trimmed.starts_with("data:") {
+                let data_str = trimmed["data:".len()..].trim();
+                if data_str == "[DONE]" {
+                    continue;
+                }
+                Some(data_str)
+            } else if trimmed.starts_with('{') && trimmed.ends_with('}') {
+                Some(trimmed)
+            } else {
+                None
+            };
+
+            if let Some(json_str) = json_candidate {
+                if let Ok(json) = serde_json::from_str::<Value>(json_str) {
+                    // 1. Native Ollama metrics (prompt_eval_count, eval_count)
+                    if let Some(prompt_eval) = json.get("prompt_eval_count").and_then(|v| v.as_u64()) {
+                        drop_guard.exact_input_tokens.store(prompt_eval as usize, std::sync::atomic::Ordering::Release);
+                    }
+                    if let Some(eval) = json.get("eval_count").and_then(|v| v.as_u64()) {
+                        drop_guard.exact_output_tokens.store(eval as usize, std::sync::atomic::Ordering::Release);
+                    }
+
+                    // 2. OpenAI / Cloud usage metrics (usage.prompt_tokens, usage.completion_tokens)
+                    if let Some(usage) = json.get("usage").and_then(|u| u.as_object()) {
+                        if let Some(prompt) = usage.get("prompt_tokens").and_then(|t| t.as_u64()) {
+                            drop_guard.exact_input_tokens.store(prompt as usize, std::sync::atomic::Ordering::Release);
+                        }
+                        if let Some(completion) = usage.get("completion_tokens").and_then(|t| t.as_u64()) {
+                            drop_guard.exact_output_tokens.store(completion as usize, std::sync::atomic::Ordering::Release);
+                        }
+                    }
+
+                    // 3. Fallback token estimation from content strings (not raw JSON wire bytes!)
+                    if let Some(choices) = json.get("choices").and_then(|c| c.as_array()) {
+                        for choice in choices {
+                            if let Some(delta) = choice.get("delta") {
+                                if let Some(content) = delta.get("content").and_then(|s| s.as_str()) {
+                                    drop_guard.token_estimate.fetch_add(content.len(), std::sync::atomic::Ordering::Release);
+                                }
+                                if let Some(reasoning) = delta.get("reasoning_content").and_then(|s| s.as_str()) {
+                                    drop_guard.token_estimate.fetch_add(reasoning.len(), std::sync::atomic::Ordering::Release);
+                                }
+                            }
+                            if let Some(text_content) = choice.get("text").and_then(|s| s.as_str()) {
+                                drop_guard.token_estimate.fetch_add(text_content.len(), std::sync::atomic::Ordering::Release);
+                            }
+                            if let Some(message) = choice.get("message") {
+                                if let Some(content) = message.get("content").and_then(|s| s.as_str()) {
+                                    drop_guard.token_estimate.fetch_add(content.len(), std::sync::atomic::Ordering::Release);
+                                }
+                            }
+                        }
+                    }
+
+                    if let Some(message) = json.get("message") {
+                        if let Some(content) = message.get("content").and_then(|s| s.as_str()) {
+                            drop_guard.token_estimate.fetch_add(content.len(), std::sync::atomic::Ordering::Release);
+                        }
+                    }
+                    if let Some(response) = json.get("response").and_then(|s| s.as_str()) {
+                        drop_guard.token_estimate.fetch_add(response.len(), std::sync::atomic::Ordering::Release);
+                    }
+                }
+            }
         }
     }
 }
@@ -734,7 +965,7 @@ async fn try_ollama(
         let stream = res.bytes_stream().inspect(move |chunk| {
             let _ = &drop_guard;
             if let Ok(bytes) = chunk {
-                drop_guard.token_estimate.fetch_add(bytes.len(), std::sync::atomic::Ordering::Relaxed);
+                process_stream_chunk_for_tokens(bytes, &drop_guard);
             }
             let _ = app_clone.emit("proxy_activity", ProxyActivityPayload {
                 source: source_clone.clone(),
@@ -828,27 +1059,7 @@ async fn try_cloud_provider(
         let stream = res.bytes_stream().inspect(move |chunk| {
             let _ = &drop_guard;
             if let Ok(bytes) = chunk {
-                drop_guard.token_estimate.fetch_add(bytes.len(), std::sync::atomic::Ordering::Relaxed);
-                
-                if let Ok(text) = std::str::from_utf8(bytes) {
-                    for line in text.lines() {
-                        if line.starts_with("data: ") {
-                            let data_str = &line[6..];
-                            if data_str != "[DONE]" {
-                                if let Ok(json) = serde_json::from_str::<Value>(data_str) {
-                                    if let Some(usage) = json.get("usage").and_then(|u| u.as_object()) {
-                                        if let Some(prompt) = usage.get("prompt_tokens").and_then(|t| t.as_u64()) {
-                                            drop_guard.exact_input_tokens.store(prompt as usize, std::sync::atomic::Ordering::Relaxed);
-                                        }
-                                        if let Some(completion) = usage.get("completion_tokens").and_then(|t| t.as_u64()) {
-                                            drop_guard.exact_output_tokens.store(completion as usize, std::sync::atomic::Ordering::Relaxed);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                process_stream_chunk_for_tokens(bytes, &drop_guard);
             }
             let _ = app_clone.emit("proxy_activity", ProxyActivityPayload {
                 source: source_clone.clone(),
@@ -1048,6 +1259,7 @@ async fn set_frugallm_config(app: tauri::AppHandle, state: State<'_, FrugalConfi
     if let Ok(json) = serde_json::to_string_pretty(&*config) {
         let _ = std::fs::write(path, json);
     }
+    state.is_dirty.store(false, std::sync::atomic::Ordering::Release);
 
     if port_changed || ip_changed {
         if let Some(handle) = state.server_abort_handle.lock().await.take() {
@@ -1603,20 +1815,42 @@ async fn start_ollama_daemon(app: &tauri::AppHandle) -> Result<(), String> {
     Err("Timed out waiting for Ollama daemon to start after 10 seconds".into())
 }
 
-fn get_model_tag_for_vram(vram_mb: u64) -> Result<&'static str, String> {
-    if vram_mb >= 32000 {
-        Ok("gemma4:31b")
-    } else if vram_mb >= 24000 {
-        Ok("gemma4:26b")
-    } else if vram_mb >= 12000 {
-        Ok("gemma4:12b")
-    } else if vram_mb >= 8000 {
-        Ok("gemma4:e4b")
-    } else if vram_mb >= 4000 {
-        Ok("gemma4:e2b")
-    } else {
-        Err("Hardware does not meet minimum requirements (< 4GB VRAM).".into())
+#[derive(Debug, Clone, Copy)]
+pub struct ModelProfile {
+    pub tag: &'static str,
+    pub weights_gb: f64,
+    pub kv_cache_gb: f64, // Calculated using the Gemma 5:1 sliding window logic
+}
+
+// 500 MB static execution graph buffer
+pub const GRAPH_OVERHEAD_GB: f64 = 0.5;
+
+// Sorted largest to smallest
+pub const AVAILABLE_MODELS: &[ModelProfile] = &[
+    // 31B Dense (~33G weights + ~10.36G cache)
+    ModelProfile { tag: "gemma4:31b", weights_gb: 33.0, kv_cache_gb: 10.36 },
+    // 26B MoE (~28G weights + ~4.16G cache)
+    ModelProfile { tag: "gemma4:26b", weights_gb: 28.0, kv_cache_gb: 4.16 },
+    // 12B Unified (~13G weights + ~3.63G cache)
+    ModelProfile { tag: "gemma4:12b", weights_gb: 13.0, kv_cache_gb: 3.63 },
+    // 4.5B (~4.9G weights + ~3.10G cache)
+    ModelProfile { tag: "gemma4:e4b", weights_gb: 4.9, kv_cache_gb: 3.10 },
+    // 2.3B (~1.4G weights + ~1.29G cache)
+    ModelProfile { tag: "gemma4:e2b", weights_gb: 1.4, kv_cache_gb: 1.29 },
+];
+
+#[tauri::command]
+fn get_model_tag_for_vram(detected_vram_gb: f64) -> String {
+    for model in AVAILABLE_MODELS {
+        let total_footprint = model.weights_gb + model.kv_cache_gb + GRAPH_OVERHEAD_GB;
+        if total_footprint <= detected_vram_gb {
+            return model.tag.to_string();
+        }
     }
+
+    // Fallback if VRAM is severely limited (e.g., 2GB or 4GB GPUs)
+    // We default to the smallest model available and accept the inevitable spillover.
+    "gemma4:e2b".to_string()
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -1645,7 +1879,8 @@ async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
     start_ollama_daemon(&app).await?;
 
     let vram_mb = detect_vram().await?;
-    let tag = get_model_tag_for_vram(vram_mb)?.to_string();
+    let detected_vram_gb = vram_mb as f64 / 1024.0;
+    let tag = get_model_tag_for_vram(detected_vram_gb);
 
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let models_dir = app_data_dir.join("models");
@@ -1880,9 +2115,33 @@ fn main() {
             let config_arc = Arc::new(tokio::sync::Mutex::new(frugal_config));
             
             let server_abort_handle = Arc::new(tokio::sync::Mutex::new(None));
+            let is_dirty = Arc::new(std::sync::atomic::AtomicBool::new(false));
             app.manage(FrugalConfigState {
                 config: config_arc.clone(),
                 server_abort_handle: server_abort_handle.clone(),
+                is_dirty: is_dirty.clone(),
+            });
+
+            // Background task: persist config to disk if dirty every 3 seconds (decoupled from proxy stream path)
+            let app_handle_flush = app_handle.clone();
+            let config_arc_flush = config_arc.clone();
+            let is_dirty_flush = is_dirty.clone();
+            tauri::async_runtime::spawn(async move {
+                let mut interval = tokio::time::interval(std::time::Duration::from_secs(3));
+                loop {
+                    interval.tick().await;
+                    if is_dirty_flush.swap(false, std::sync::atomic::Ordering::AcqRel) {
+                        let config_clone = {
+                            let config = config_arc_flush.lock().await;
+                            config.clone()
+                        };
+                        if let Ok(path) = get_config_path(&app_handle_flush) {
+                            if let Ok(json) = serde_json::to_string_pretty(&config_clone) {
+                                let _ = std::fs::write(path, json);
+                            }
+                        }
+                    }
+                }
             });
 
             let dynamic_roster_state = DynamicRosterState {
@@ -2011,7 +2270,11 @@ fn main() {
             check_hermes_status,
             check_opencode_status,
             check_ollama_status,
+            get_hermes_version,
+            get_opencode_version,
+            uninstall_ollama,
             detect_vram,
+            detect_hardware_profile,
             spawn_pty,
             write_pty,
             kill_pty,
@@ -2029,14 +2292,51 @@ fn main() {
             set_routing_chain,
             refresh_routing_chain,
             check_tool_gateway_status,
-            set_tool_gateway_installed
+            set_tool_gateway_installed,
+            get_model_tag_for_vram
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
         
-    app.run(|_app_handle, event| {
-        if let tauri::RunEvent::Exit = event {
-            // Child processes spawned via PTY will be killed by OS or by SIGHUP when master PTYs drop.
+    app.run(|app_handle, event| {
+        match event {
+            tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
+                let state = app_handle.state::<FrugalConfigState>();
+                if state.is_dirty.swap(false, std::sync::atomic::Ordering::AcqRel) {
+                    let config_clone = if let Ok(guard) = state.config.try_lock() {
+                        guard.clone()
+                    } else {
+                        tauri::async_runtime::block_on(async {
+                            let guard = state.config.lock().await;
+                            guard.clone()
+                        })
+                    };
+                    if let Ok(path) = get_config_path(app_handle) {
+                        if let Ok(json) = serde_json::to_string_pretty(&config_clone) {
+                            let _ = std::fs::write(path, json);
+                        }
+                    }
+                }
+            }
+            tauri::RunEvent::WindowEvent { event: tauri::WindowEvent::CloseRequested { .. }, .. } => {
+                let state = app_handle.state::<FrugalConfigState>();
+                if state.is_dirty.swap(false, std::sync::atomic::Ordering::AcqRel) {
+                    let config_clone = if let Ok(guard) = state.config.try_lock() {
+                        guard.clone()
+                    } else {
+                        tauri::async_runtime::block_on(async {
+                            let guard = state.config.lock().await;
+                            guard.clone()
+                        })
+                    };
+                    if let Ok(path) = get_config_path(app_handle) {
+                        if let Ok(json) = serde_json::to_string_pretty(&config_clone) {
+                            let _ = std::fs::write(path, json);
+                        }
+                    }
+                }
+            }
+            _ => {}
         }
     });
 }
@@ -2045,7 +2345,6 @@ fn main() {
 mod tests {
     use super::*;
     use std::fs;
-    use std::path::PathBuf;
 
     #[test]
     fn test_is_hermes_installed_mocked() {
@@ -2149,5 +2448,94 @@ mod tests {
         assert!(output.contains("Installing Ollama..."));
     }
 
+    #[test]
+    fn test_calculate_gemma_128k_q8_kv_cache() {
+        use crate::telemetry::calculate_gemma_128k_q8_kv_cache;
 
+        // gemma4:e2b (26 layers, 4 kv heads, head_dim 256):
+        // 5 global layers (128k), 21 sliding layers (1024), bytes_per_value = 1
+        let kv_e2b = calculate_gemma_128k_q8_kv_cache(26, 4, 256);
+        assert_eq!(kv_e2b, 1_386_217_472); // ~1.29 GB
+
+        // gemma4:e4b (32 layers, 8 kv heads, head_dim 256):
+        // 6 global layers (128k), 26 sliding layers (1024), bytes_per_value = 1
+        let kv_e4b = calculate_gemma_128k_q8_kv_cache(32, 8, 256);
+        assert_eq!(kv_e4b, 3_330_277_376); // ~3.10 GB
+    }
+
+    #[test]
+    fn test_compute_memory_segments_discrete_gpu_spillover() {
+        use crate::telemetry::{compute_memory_segments, HardwareProfile, OllamaState};
+
+        // 8GB Dedicated VRAM, 32GB System RAM (e.g. Intel MacBook / PC)
+        let profile = HardwareProfile {
+            is_unified: false,
+            dedicated_vram: 8 * 1024 * 1024 * 1024,
+            system_ram: 32 * 1024 * 1024 * 1024,
+            execution_ceiling: 8 * 1024 * 1024 * 1024,
+            os_architecture: "macos-x86_64".into(),
+        };
+
+        let ollama = OllamaState::default(); // Pre-flight
+        let segments = compute_memory_segments(&profile, &ollama, "gemma4:e4b");
+
+        assert_eq!(segments.phase, "preflight");
+        assert_eq!(segments.execution_ceiling_bytes, 8 * 1024 * 1024 * 1024);
+        assert!(segments.total_projected_bytes > segments.execution_ceiling_bytes);
+        assert_eq!(segments.spillover_type, "system_ram");
+        assert!(segments.triggers_warning);
+        assert!(segments.warning_message.contains("Model & 128k context exceed Dedicated VRAM"));
+    }
+
+    #[test]
+    fn test_compute_memory_segments_apple_silicon_unified() {
+        use crate::telemetry::{compute_memory_segments, HardwareProfile, OllamaState};
+
+        // 16GB Unified RAM (Available: 14GB after 2GB reserve)
+        let profile = HardwareProfile {
+            is_unified: true,
+            dedicated_vram: 0,
+            system_ram: 16 * 1024 * 1024 * 1024,
+            execution_ceiling: 14 * 1024 * 1024 * 1024,
+            os_architecture: "macos-arm64".into(),
+        };
+
+        // 1. gemma4:e2b fits inside 14GB
+        let ollama = OllamaState::default();
+        let segments_e2b = compute_memory_segments(&profile, &ollama, "gemma4:e2b");
+        assert_eq!(segments_e2b.phase, "preflight");
+        assert_eq!(segments_e2b.spillover_bytes, 0);
+        assert_eq!(segments_e2b.spillover_type, "none");
+        assert!(!segments_e2b.triggers_warning);
+
+        // 2. gemma4:31b overflows 14GB unified memory -> SSD swap warning
+        let segments_31b = compute_memory_segments(&profile, &ollama, "gemma4:31b");
+        assert!(segments_31b.spillover_bytes > 0);
+        assert_eq!(segments_31b.spillover_type, "ssd_swap");
+        assert!(segments_31b.triggers_warning);
+        assert!(segments_31b.warning_message.contains("Memory exceeds available Unified Memory"));
+    }
+
+    #[test]
+    fn test_get_model_tag_for_vram_zero_spillover() {
+        // 8.0 GB VRAM -> must return gemma4:e2b (~3.19 GB footprint). (gemma4:e4b is ~8.50 GB and must fail).
+        assert_eq!(get_model_tag_for_vram(8.0), "gemma4:e2b");
+
+        // 12.0 GB VRAM -> must return gemma4:e4b (~8.50 GB footprint).
+        assert_eq!(get_model_tag_for_vram(12.0), "gemma4:e4b");
+
+        // 24.0 GB VRAM -> must return gemma4:12b (~17.13 GB footprint).
+        assert_eq!(get_model_tag_for_vram(24.0), "gemma4:12b");
+
+        // 40.0 GB VRAM (e.g. A6000) -> must return gemma4:26b (~32.66 GB footprint).
+        assert_eq!(get_model_tag_for_vram(40.0), "gemma4:26b");
+
+        // 48.0 GB+ VRAM -> must return gemma4:31b (~43.86 GB footprint).
+        assert_eq!(get_model_tag_for_vram(48.0), "gemma4:31b");
+        assert_eq!(get_model_tag_for_vram(64.0), "gemma4:31b");
+
+        // Fallback for severely limited VRAM (e.g., 2GB or 4GB)
+        assert_eq!(get_model_tag_for_vram(2.0), "gemma4:e2b");
+        assert_eq!(get_model_tag_for_vram(4.0), "gemma4:e2b");
+    }
 }
