@@ -29,7 +29,8 @@ dist-ssr
 playwright-report/
 test-results/
 *.spec.ts-snapshots/
-production_artifacts/
+production_artifacts/*
+!production_artifacts/release_notes.md
 app_build/
 src-tauri/target/
 src-tauri/target_test/
