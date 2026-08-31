@@ -318,3 +318,83 @@ pub fn start_telemetry_loop(app: AppHandle) {
         }
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_calculate_gemma_128k_q8_kv_cache_formula() {
+        // Gemma 4 12B configuration: 40 layers, 8 KV heads, head_dim 256
+        let cache_12b = calculate_gemma_128k_q8_kv_cache(40, 8, 256);
+        // layers: 40, global_layers = ceil(40/6) = 7, sliding_layers = 33
+        // bytes_per_token_per_layer = 2 * 1 * 8 * 256 = 4096
+        // global = 7 * 131072 * 4096 = 3,758,096,384
+        // sliding = 33 * 1024 * 4096 = 138,412,032
+        // total = 3,896,508,416 (~3.63 GB)
+        assert_eq!(cache_12b, 3_896_508_416);
+    }
+
+    #[test]
+    fn test_compute_memory_segments_preflight_no_spillover() {
+        let profile = HardwareProfile {
+            is_unified: false,
+            dedicated_vram: 24 * 1024 * 1024 * 1024, // 24 GB
+            system_ram: 32 * 1024 * 1024 * 1024,
+            execution_ceiling: 24 * 1024 * 1024 * 1024,
+            os_architecture: "macos-x86_64".into(),
+        };
+        let ollama = OllamaState::default(); // offline
+
+        let segments = compute_memory_segments(&profile, &ollama, "gemma4:12b");
+        assert_eq!(segments.phase, "preflight");
+        assert_eq!(segments.spillover_bytes, 0);
+        assert_eq!(segments.spillover_type, "none");
+        assert!(!segments.triggers_warning);
+        assert_eq!(segments.execution_ceiling_bytes, 24 * 1024 * 1024 * 1024);
+    }
+
+    #[test]
+    fn test_compute_memory_segments_live_state_with_spillover() {
+        let profile = HardwareProfile {
+            is_unified: false,
+            dedicated_vram: 8 * 1024 * 1024 * 1024, // 8 GB
+            system_ram: 32 * 1024 * 1024 * 1024,
+            execution_ceiling: 8 * 1024 * 1024 * 1024,
+            os_architecture: "linux-x86_64".into(),
+        };
+        let ollama = OllamaState {
+            status: "active".into(),
+            model_name: "gemma4:26b".into(),
+            location_state: "hybrid".into(),
+            hybrid_percent: 50.0,
+            total_size: 17_716_740_096,
+            vram_size: 8_589_934_592,
+        };
+
+        let segments = compute_memory_segments(&profile, &ollama, "gemma4:26b");
+        assert_eq!(segments.phase, "live");
+        assert!(segments.spillover_bytes > 0);
+        assert_eq!(segments.spillover_type, "system_ram");
+        assert!(segments.triggers_warning);
+        assert!(segments.warning_message.contains("System RAM"));
+    }
+
+    #[test]
+    fn test_compute_memory_segments_unified_apple_silicon_warning() {
+        let profile = HardwareProfile {
+            is_unified: true,
+            dedicated_vram: 0,
+            system_ram: 16 * 1024 * 1024 * 1024,
+            execution_ceiling: 11 * 1024 * 1024 * 1024, // 11 GB ceiling
+            os_architecture: "macos-arm64".into(),
+        };
+        let ollama = OllamaState::default();
+
+        let segments = compute_memory_segments(&profile, &ollama, "gemma4:31b");
+        assert_eq!(segments.spillover_type, "ssd_swap");
+        assert!(segments.triggers_warning);
+        assert!(segments.warning_message.contains("Unified Memory"));
+    }
+}
+

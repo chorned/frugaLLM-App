@@ -32,6 +32,9 @@ test-results/
 production_artifacts/
 app_build/
 src-tauri/target/
+src-tauri/target_test/
+coverage/
+junit-report.xml
 
 # Secrets
 .env

@@ -3,6 +3,8 @@
 
 mod telemetry;
 mod model_db;
+#[cfg(test)]
+mod test_restart;
 
 pub use telemetry::{HardwareProfile, MemorySegments, TelemetryPayload};
 

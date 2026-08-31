@@ -85,3 +85,71 @@ impl ModelIntelligenceRegistry {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_normalize_model_id_google_prefix() {
+        assert_eq!(
+            ModelIntelligenceRegistry::normalize_model_id("models/gemini-2.5-flash"),
+            "google/gemini-2.5-flash"
+        );
+        assert_eq!(
+            ModelIntelligenceRegistry::normalize_model_id("MODELS/GEMINI-PRO"),
+            "google/gemini-pro"
+        );
+    }
+
+    #[test]
+    fn test_normalize_model_id_strip_colon_suffixes() {
+        assert_eq!(
+            ModelIntelligenceRegistry::normalize_model_id("anthropic/claude-3.5-sonnet:free"),
+            "anthropic/claude-3.5-sonnet"
+        );
+        assert_eq!(
+            ModelIntelligenceRegistry::normalize_model_id("meta-llama/llama-3.3-70b-instruct:nitro"),
+            "meta-llama/llama-3.3-70b-instruct"
+        );
+    }
+
+    #[test]
+    fn test_registry_fuzzy_matching_and_scoring() {
+        let registry = ModelIntelligenceRegistry {
+            scores: Arc::new(RwLock::new(HashMap::new())),
+        };
+
+        let mut test_scores = HashMap::new();
+        test_scores.insert("anthropic/claude-3.5-sonnet".to_string(), ModelScore { score: 92.5 });
+        test_scores.insert("minimax/minimax-m3-20260531".to_string(), ModelScore { score: 85.0 });
+        registry.update_scores(test_scores);
+
+        // Exact match with suffix stripped
+        assert_eq!(registry.get_score("anthropic/claude-3.5-sonnet:free"), 92.5);
+
+        // Fuzzy match on prefix with dash
+        assert_eq!(registry.get_score("minimax/minimax-m3"), 85.0);
+
+        // Unknown model returns 0.0
+        assert_eq!(registry.get_score("unrecognized/custom-model"), 0.0);
+    }
+
+    #[test]
+    fn test_sort_models_by_intelligence() {
+        let registry = ModelIntelligenceRegistry {
+            scores: Arc::new(RwLock::new(HashMap::new())),
+        };
+
+        let mut test_scores = HashMap::new();
+        test_scores.insert("model-high".to_string(), ModelScore { score: 98.0 });
+        test_scores.insert("model-mid".to_string(), ModelScore { score: 75.0 });
+        test_scores.insert("model-low".to_string(), ModelScore { score: 40.0 });
+        registry.update_scores(test_scores);
+
+        let mut models = vec!["model-low", "model-high", "model-mid", "model-unknown"];
+        registry.sort_models_by_intelligence(&mut models, |m| m);
+
+        assert_eq!(models, vec!["model-high", "model-mid", "model-low", "model-unknown"]);
+    }
+}

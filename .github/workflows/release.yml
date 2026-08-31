@@ -40,6 +40,11 @@ jobs:
   release:
     name: Build and Release
     needs: test
+    
+    # CRITICAL INJECTION: Required for the Tauri action to upload artifacts to GitHub Releases.
+    permissions:
+      contents: write
+      
     strategy:
       fail-fast: false
       matrix:
@@ -58,11 +63,16 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      # CRITICAL INJECTION: Caches Rust build artifacts to massively reduce Windows/macOS compile times.
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+
       - name: Install Ubuntu dependencies
         if: matrix.platform == 'ubuntu-latest'
+        # Note: If this step still fails in 20 seconds, see the Ubuntu 24.04 analysis below.
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.0-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
 
       - name: Install frontend dependencies
         run: npm install
