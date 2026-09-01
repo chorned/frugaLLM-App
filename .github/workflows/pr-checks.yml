@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -39,7 +39,7 @@ jobs:
 
       # 2. BACKEND TESTS
       - name: Run Rust Tests
-        run: cargo test
+        run: cargo test --manifest-path src-tauri/Cargo.toml
 
       # 3. E2E TESTS
       - name: Install Playwright browsers

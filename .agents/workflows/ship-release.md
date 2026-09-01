@@ -2,7 +2,7 @@
 description: Automate the Playwright testing, version bumping, cross-compilation, and GitHub release pipeline.
 ---
 
-When the user types `/ship-release <version_number>`, orchestrate the deployment strictly using the `@engineer` persona. You are acting as the Release Manager. Do not guess or auto-fix source code during this sequence.
+When the user types `/ship-release <version_number>`, orchestrate the deployment strictly using the `@engineer` persona. You are acting as the Release Manager. 
 
 ### Execution Sequence:
 
@@ -10,20 +10,22 @@ When the user types `/ship-release <version_number>`, orchestrate the deployment
    Locate `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `package.json`. Update the version strings in all three files to the provided `<version_number>`.
 
 2. **Changelog Generation:** 
-   Read the recent git commit history since the last release tag. Generate a clean, user-facing markdown summary of the changes, categorizing them into "Features", "Fixes", and "Under the Hood". Save this summary to `production_artifacts/release_notes.md`.
+   Read the recent git commit history since the last release tag. Generate a clean, user-facing markdown summary of the changes, categorizing them into "Features", "Fixes", and "Under the Hood". Save this to `production_artifacts/release_notes.md`.
 
 3. **Halt for Approval:** 
-   Pause the workflow and explicitly ask the user: *"Do you approve these version bumps and release notes? You can edit the `production_artifacts/release_notes.md` file directly if needed. Type 'Approved' to continue."*
-   *Halt Condition:* Do not proceed until the user explicitly confirms approval.
+   Pause and explicitly ask: *"Do you approve these version bumps and release notes? You can edit `production_artifacts/release_notes.md` directly. Type 'Approved' to continue."*
+   *Halt Condition:* Do not proceed until explicit confirmation.
 
 4. **Commit & The Local Gate:** 
-   Stage and commit the modified version files and changelog with the message: "chore(release): prepare v<version_number>".
-   Instead of standard validation, use the `/no-mistakes` agent skill (or run `git push no-mistakes`) to gate this commit. This will automatically spin up a disposable worktree and run the test, linting, and documentation pipeline. 
-   *Halt Condition:* Nothing reaches the configured push target until every check is green. If `no-mistakes` stops with a finding for the user to act on, halt the release sequence and await human intervention.
+   Stage and commit the modified files with the message: "chore(release): prepare v<version_number>".
+   Push directly to the local proxy: `git push no-mistakes HEAD:main`. 
+   *Halt Condition:* If `no-mistakes` finds an error and blocks the push, halt the release sequence immediately so the human can intervene.
 
 5. **Tag & CI Handoff:** 
-   Once `no-mistakes` has successfully verified the pipeline and pushed the commit to the upstream repository, create a git tag for the new version matching the format: `v<version_number>`.
-   Push the tag to the remote using standard Git: `git push origin v<version_number>`.
+   Once the push to `main` succeeds, create a git tag: `v<version_number>`.
+   Push the tag to the remote: `git push origin v<version_number>`. (This triggers the production GitHub Actions matrix).
 
-6. **Wrap-Up:** 
-   Inform the user that the release tag has been pushed successfully and that the GitHub Actions release matrix has taken over to compile the binaries and draft the public release.
+6. **Changelog Injection:**
+   Run the following command to update the CI-generated release with our generated markdown notes:
+   `gh release edit v<version_number> --notes-file production_artifacts/release_notes.md`
+   Inform the user the release is building in the cloud!
