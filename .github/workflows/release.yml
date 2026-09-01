@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [macos-13, ubuntu-latest, windows-latest]
+        platform: [macos-latest, ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.platform }}
     steps:
       - name: Checkout repository
@@ -26,6 +26,10 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install macOS Universal Rust Targets
+        if: matrix.platform == 'macos-latest'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
       - name: Cache Rust dependencies
         uses: swatinem/rust-cache@v2
@@ -49,9 +53,10 @@ jobs:
           releaseBody: 'See the assets to download this version and install.'
           releaseDraft: true
           prerelease: false
+          args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin' || '' }}
 
       - name: Install tauri-driver
-        if: matrix.platform != 'macos-13'
+        if: matrix.platform != 'macos-latest'
         run: cargo install tauri-driver --locked
 
       - name: Install Linux WebDriver dependencies
