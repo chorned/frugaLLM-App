@@ -21,6 +21,7 @@ import { CloudRoutingPanel } from './components/CloudRoutingPanel';
 import { useOnboarding } from './hooks/useOnboarding';
 import { OnboardingDecision } from './components/OnboardingDecision';
 import { OnboardingOverlay } from './components/OnboardingOverlay';
+import { PortConflictBanner } from './components/PortConflictBanner';
 import en from './locales/en.json';
 import { Eye, EyeOff, Copy, Check } from 'lucide-react';
 import { loadOnnxClassifier, clearOnnxCache } from './services/onnxGateway';
@@ -270,7 +271,7 @@ const Tooltip = ({ text }: { text: string }) => {
   );
 };
 
-const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeInstalled, isOllamaInstalled, isToolGatewayInstalled, detectedVram, setDetectedVram, hasActiveBackend, handleInitializeHermes, handleOpenHermes, handleUninstallHermes, handleInitializeOpenCode, handleOpenOpenCode, handleUninstallOpenCode, handleInitializeOllama, handleOpenOllama, handleUninstallOllama, handleInstallToolGateway, handleUninstallToolGateway, handleDisconnectOpenRouter, handleDisconnectGoogle, frugalConfig, handleOpenHermesDesktop, handleOpenHermesWeb, handleOpenOpenCodeWeb, activeProcesses, handleKillProcess, setFrugalConfig, latestTelemetry, hardwareProfile }: any) => {
+const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeInstalled, isOllamaInstalled, isToolGatewayInstalled, detectedVram, setDetectedVram, hasActiveBackend, handleInitializeHermes, handleOpenHermes, handleUninstallHermes, handleInitializeOpenCode, handleOpenOpenCode, handleUninstallOpenCode, handleInitializeOllama, handleOpenOllama, handleUninstallOllama, handleInstallToolGateway, handleUninstallToolGateway, handleDisconnectOpenRouter, handleDisconnectGoogle, frugalConfig, handleOpenHermesDesktop, handleOpenHermesWeb, handleOpenOpenCodeWeb, activeProcesses, handleKillProcess, setFrugalConfig, latestTelemetry, hardwareProfile, portConflict }: any) => {
   const memory = useMemory();
   const [confirmUninstall, setConfirmUninstall] = useState<string | null>(null);
   const [showToolGatewayPrompt, setShowToolGatewayPrompt] = useState<'install' | 'uninstall' | null>(null);
@@ -433,13 +434,37 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
                   </div>
                   <div>
                     <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>PORT <Tooltip text="Think of the IP address as the building, and the Port as the specific door to knock on. It's how our hub knows exactly where to send its messages." /></label>
-                    {node.id === 'node-hermes' || node.id === 'node-opencode' || node.id === 'node-frugallm' ? (
+                    {node.id === 'node-hermes' || node.id === 'node-opencode' ? (
                       <div style={{ padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: 'var(--zen-surface-hover)', color: '#4b5563', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem' }}>
                         {formData.port}
                       </div>
                     ) : (
-                      <input type="text" name="port" value={formData.port} onChange={handleChange} 
-                        style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', boxShadow: 'none' }} />
+                      <input 
+                        type="text" 
+                        name="port" 
+                        data-testid={node.id === 'node-frugallm' ? 'input-frugallm-port' : 'input-port'}
+                        value={formData.port} 
+                        onChange={handleChange} 
+                        style={{ 
+                          width: '100%', 
+                          padding: '7px 10px', 
+                          border: portConflict && node.id === 'node-frugallm' ? '2px solid #ef4444' : '1px solid var(--zen-border)', 
+                          borderRadius: '6px', 
+                          backgroundColor: '#ffffff', 
+                          color: 'var(--zen-text)', 
+                          outline: 'none', 
+                          boxSizing: 'border-box', 
+                          fontFamily: 'inherit', 
+                          fontWeight: 600, 
+                          fontSize: '0.85rem', 
+                          boxShadow: 'none' 
+                        }} 
+                      />
+                    )}
+                    {portConflict && node.id === 'node-frugallm' && (
+                      <div data-testid="port-conflict-hint" style={{ fontSize: '0.72rem', color: '#ef4444', fontWeight: 600, marginTop: '4px', lineHeight: 1.2 }}>
+                        Port {portConflict.port} in use: Close conflicting service and restart, or enter a new port.
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1598,6 +1623,19 @@ function AppContent() {
       }
       await new Promise(r => setTimeout(r, 300));
 
+      addLog("Checking server status...");
+      try {
+        const status = await invoke<any>('get_frugallm_server_status');
+        if (status?.status === 'PortConflict') {
+          setPortConflict({
+            port: status.data?.port || 61721,
+            message: status.data?.message || `Close the service currently using port [${status.data?.port || 61721}] and restart the app.`
+          });
+        }
+      } catch (e) {
+        console.error("Failed to query server status:", e);
+      }
+
       addLog("All systems nominal. Launching UI...");
       await new Promise(r => setTimeout(r, 500));
       
@@ -1615,13 +1653,29 @@ function AppContent() {
     });
     const unlistenError = listen('frugallm_port_error', (event: any) => {
       const port = event.payload;
-      alert(`This port seems taken, please select a new port or disable the service currently using ${port}. Note that changing the port here might disrupt any apps that are already connected.`);
+      const numericPort = typeof port === 'number' ? port : parseInt(port, 10);
+      setPortConflict({
+        port: numericPort || 61721,
+        message: `Close the service currently using port [${numericPort || 61721}] and restart the app.`
+      });
+    });
+    const unlistenStatus = listen('frugallm_server_status', (event: any) => {
+      const statusObj = event.payload;
+      if (statusObj?.status === 'PortConflict') {
+        setPortConflict({
+          port: statusObj.data?.port || 61721,
+          message: statusObj.data?.message || `Close the service currently using port [${statusObj.data?.port || 61721}] and restart the app.`
+        });
+      } else if (statusObj?.status === 'Running') {
+        setPortConflict(null);
+      }
     });
     return () => {
       unlistenConfig.then(f => f());
       unlistenError.then(f => f());
+      unlistenStatus.then(f => f());
     };
-      }, []);
+  }, []);
 
   useEffect(() => {
     // Resize observer logic moved to useCanvasLogic
@@ -1643,6 +1697,7 @@ function AppContent() {
 
   // UI State
 
+  const [portConflict, setPortConflict] = useState<{ port: number; message: string } | null>(null);
   const [detectedVram, setDetectedVram] = useState<string>('8'); // Default placeholder
   const [latestTelemetry, setLatestTelemetry] = useState<any>(null);
   const [hardwareProfile, setHardwareProfile] = useState<HardwareProfile | null>(null);
@@ -1842,6 +1897,11 @@ function AppContent() {
         };
         await invoke('set_frugallm_config', { newConfig: newConf });
         invoke('get_frugallm_config').then((conf: any) => setFrugalConfig(conf)).catch(console.error);
+        invoke<any>('get_frugallm_server_status').then((st: any) => {
+          if (st?.status === 'Running') {
+            setPortConflict(null);
+          }
+        }).catch(() => {});
         confetti({
           particleCount: 150,
           spread: 70,
@@ -2089,6 +2149,15 @@ function AppContent() {
             display: terminalMode ? 'none' : 'block'
           }}
         >
+        {portConflict && !terminalMode && (
+          <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: '12px', left: 0, right: 0, zIndex: 40, pointerEvents: 'auto', display: 'flex', justifyContent: 'center' }}>
+            <PortConflictBanner
+              port={portConflict.port}
+              onConfigurePort={() => setSelectedNodeId('node-frugallm')}
+              onDismiss={() => setPortConflict(null)}
+            />
+          </div>
+        )}
 
 
         <div style={{
@@ -2109,13 +2178,13 @@ function AppContent() {
               const isCore = node.id === 'node-frugallm';
               
               let stateColors = {
-                border: 'var(--zen-border)',
-                headerBg: 'var(--zen-surface-hover)', 
-                headerText: 'var(--zen-text)',
+                border: isCore && portConflict ? '#ef4444' : 'var(--zen-border)',
+                headerBg: isCore && portConflict ? '#fef2f2' : 'var(--zen-surface-hover)', 
+                headerText: isCore && portConflict ? '#991b1b' : 'var(--zen-text)',
                 bodyBg: 'var(--zen-surface)',
-                dot: 'var(--zen-success)',
+                dot: isCore && portConflict ? '#ef4444' : 'var(--zen-success)',
                 statusText: 'var(--zen-text-secondary)',
-                boxShadow: 'var(--tw-shadow-glass)',
+                boxShadow: isCore && portConflict ? '0 0 16px rgba(239, 68, 68, 0.4), var(--tw-shadow-glass)' : 'var(--tw-shadow-glass)',
                 borderStyle: 'solid',
                 borderWidth: '2px'
               };
@@ -2203,6 +2272,22 @@ function AppContent() {
                           </span>
                         )}
                       </div>
+                      {isCore && portConflict && (
+                        <span
+                          data-testid="frugallm-port-conflict-badge"
+                          style={{
+                            fontSize: '0.6rem',
+                            fontWeight: 800,
+                            backgroundColor: '#ef4444',
+                            color: '#ffffff',
+                            padding: '2px 5px',
+                            borderRadius: '4px',
+                            letterSpacing: '0.05em'
+                          }}
+                        >
+                          PORT CONFLICT
+                        </span>
+                      )}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <div 
@@ -2231,6 +2316,23 @@ function AppContent() {
                   <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: stateColors.bodyBg, color: 'var(--zen-text)' }}>
                     {isCore ? (
                       <>
+                        {portConflict && (
+                          <div
+                            data-testid="frugallm-node-conflict-warning"
+                            style={{
+                              backgroundColor: '#fee2e2',
+                              border: '1px solid #fca5a5',
+                              color: '#991b1b',
+                              borderRadius: '4px',
+                              padding: '4px 6px',
+                              fontSize: '0.68rem',
+                              fontWeight: 700,
+                              textAlign: 'center'
+                            }}
+                          >
+                            Port {portConflict.port} Conflict
+                          </div>
+                        )}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>Session tokens:</span>
                           <span data-testid="frugallm-session-tokens" style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)' }}>
@@ -2332,7 +2434,7 @@ function AppContent() {
       {/* Settings Modal */}
       {selectedNode && !terminalMode && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setSelectedNodeId(null)}>
-          <NodeConfigPanel node={selectedNode} onClose={() => setSelectedNodeId(null)} onSave={handleSaveNodeConfig} onOpenGuide={setActiveGuide} isHermesInstalled={isHermesInstalled} isOpenCodeInstalled={isOpenCodeInstalled} isOllamaInstalled={isOllamaInstalled} isToolGatewayInstalled={isToolGatewayInstalled} detectedVram={detectedVram} setDetectedVram={setDetectedVram} hasActiveBackend={hasActiveBackend} handleInitializeHermes={handleInitializeHermes} handleOpenHermes={handleOpenHermes} handleUninstallHermes={handleUninstallHermes} handleInitializeOpenCode={handleInitializeOpenCode} handleOpenOpenCode={handleOpenOpenCode} handleUninstallOpenCode={handleUninstallOpenCode} handleInitializeOllama={handleInitializeOllama} handleOpenOllama={handleOpenOllama} handleUninstallOllama={handleUninstallOllama} handleInstallToolGateway={handleInstallToolGateway} handleUninstallToolGateway={handleUninstallToolGateway} handleDisconnectOpenRouter={handleDisconnectOpenRouter} handleDisconnectGoogle={handleDisconnectGoogle} frugalConfig={frugalConfig} setFrugalConfig={setFrugalConfig} handleOpenHermesDesktop={handleOpenHermesDesktop} handleOpenHermesWeb={handleOpenHermesWeb} handleOpenOpenCodeWeb={handleOpenOpenCodeWeb} activeProcesses={activeProcesses} handleKillProcess={(mode: string) => invoke('kill_pty', { sessionId: mode }).catch(console.error)} latestTelemetry={latestTelemetry} hardwareProfile={hardwareProfile} />
+          <NodeConfigPanel node={selectedNode} onClose={() => setSelectedNodeId(null)} onSave={handleSaveNodeConfig} onOpenGuide={setActiveGuide} isHermesInstalled={isHermesInstalled} isOpenCodeInstalled={isOpenCodeInstalled} isOllamaInstalled={isOllamaInstalled} isToolGatewayInstalled={isToolGatewayInstalled} detectedVram={detectedVram} setDetectedVram={setDetectedVram} hasActiveBackend={hasActiveBackend} handleInitializeHermes={handleInitializeHermes} handleOpenHermes={handleOpenHermes} handleUninstallHermes={handleUninstallHermes} handleInitializeOpenCode={handleInitializeOpenCode} handleOpenOpenCode={handleOpenOpenCode} handleUninstallOpenCode={handleUninstallOpenCode} handleInitializeOllama={handleInitializeOllama} handleOpenOllama={handleOpenOllama} handleUninstallOllama={handleUninstallOllama} handleInstallToolGateway={handleInstallToolGateway} handleUninstallToolGateway={handleUninstallToolGateway} handleDisconnectOpenRouter={handleDisconnectOpenRouter} handleDisconnectGoogle={handleDisconnectGoogle} frugalConfig={frugalConfig} setFrugalConfig={setFrugalConfig} handleOpenHermesDesktop={handleOpenHermesDesktop} handleOpenHermesWeb={handleOpenHermesWeb} handleOpenOpenCodeWeb={handleOpenOpenCodeWeb} activeProcesses={activeProcesses} handleKillProcess={(mode: string) => invoke('kill_pty', { sessionId: mode }).catch(console.error)} latestTelemetry={latestTelemetry} hardwareProfile={hardwareProfile} portConflict={portConflict} />
         </div>
       )}
 

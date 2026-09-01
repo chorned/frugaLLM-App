@@ -269,5 +269,15 @@
     "hardwareNodeTitle": "Local Hardware Node",
     "hardwareNodeDescription": "This node represents your machine's physical GPU and CPU. FrugalLLM monitors telemetry in real-time to optimize local AI inference.",
     "finishTour": "Finish Tour"
+  },
+  "portConflict": {
+    "title": "PORT CONFLICT DETECTED",
+    "message": "Port {{port}} is currently in use by another service.",
+    "actionCloseRestart": "Close the service currently using port [{{port}}] and restart the app.",
+    "actionOrChange": "Or choose a different port in Hub settings.",
+    "badge": "PORT CONFLICT",
+    "configurePort": "Configure Port",
+    "dismiss": "Dismiss",
+    "helperText": "Port {{port}} is in use. Close the conflicting service and restart, or enter a new port."
   }
 }

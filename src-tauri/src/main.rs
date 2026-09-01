@@ -3,6 +3,8 @@
 
 mod telemetry;
 mod model_db;
+#[cfg(test)]
+mod test_restart;
 
 pub use telemetry::{HardwareProfile, MemorySegments, TelemetryPayload};
 
@@ -69,10 +71,20 @@ impl Default for FrugalConfig {
     }
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
+#[serde(tag = "status", content = "data")]
+pub enum ServerStatus {
+    Starting,
+    Running { port: u16, ip: String },
+    PortConflict { port: u16, ip: String, message: String },
+    Error { message: String },
+}
+
 pub struct FrugalConfigState {
     pub config: std::sync::Arc<tokio::sync::Mutex<FrugalConfig>>,
     pub server_abort_handle: std::sync::Arc<tokio::sync::Mutex<Option<tauri::async_runtime::JoinHandle<()>>>>,
     pub is_dirty: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    pub server_status: std::sync::Arc<tokio::sync::RwLock<ServerStatus>>,
 }
 
 #[derive(serde::Serialize)]
@@ -1242,6 +1254,12 @@ async fn get_frugallm_config(state: State<'_, FrugalConfigState>) -> Result<Frug
 }
 
 #[tauri::command]
+async fn get_frugallm_server_status(state: State<'_, FrugalConfigState>) -> Result<ServerStatus, String> {
+    let status = state.server_status.read().await;
+    Ok(status.clone())
+}
+
+#[tauri::command]
 async fn set_frugallm_config(app: tauri::AppHandle, state: State<'_, FrugalConfigState>, new_config: FrugalConfig) -> Result<(), String> {
     let mut config = state.config.lock().await;
     let mut updated_config = new_config.clone();
@@ -1262,6 +1280,12 @@ async fn set_frugallm_config(app: tauri::AppHandle, state: State<'_, FrugalConfi
     state.is_dirty.store(false, std::sync::atomic::Ordering::Release);
 
     if port_changed || ip_changed {
+        {
+            let mut status = state.server_status.write().await;
+            *status = ServerStatus::Starting;
+        }
+        let _ = app.emit("frugallm_server_status", ServerStatus::Starting);
+
         if let Some(handle) = state.server_abort_handle.lock().await.take() {
             handle.abort();
         }
@@ -1531,25 +1555,55 @@ async fn start_frugallm_server(app: tauri::AppHandle) {
     let ip = if bind_all { "0.0.0.0" } else { "127.0.0.1" };
     let addr = format!("{}:{}", ip, port);
 
-    if let Ok(listener) = TcpListener::bind(&addr).await {
-        if let Ok(local_addr) = listener.local_addr() {
-            println!("FrugalLLM core server listening on {}", local_addr);
-            if port == 0 {
-                let state = app.state::<FrugalConfigState>();
-                let mut config = state.config.lock().await;
-                config.port = local_addr.port();
-                if let Ok(path) = get_config_path(&app) {
-                    if let Ok(json) = serde_json::to_string_pretty(&*config) {
-                        let _ = std::fs::write(path, json);
+    match TcpListener::bind(&addr).await {
+        Ok(listener) => {
+            let actual_port = match listener.local_addr() {
+                Ok(local_addr) => {
+                    println!("FrugalLLM core server listening on {}", local_addr);
+                    if port == 0 {
+                        let state = app.state::<FrugalConfigState>();
+                        let mut config = state.config.lock().await;
+                        config.port = local_addr.port();
+                        if let Ok(path) = get_config_path(&app) {
+                            if let Ok(json) = serde_json::to_string_pretty(&*config) {
+                                let _ = std::fs::write(path, json);
+                            }
+                        }
                     }
+                    local_addr.port()
                 }
+                Err(_) => port,
+            };
+
+            let running_status = ServerStatus::Running {
+                port: actual_port,
+                ip: ip.to_string(),
+            };
+            {
+                let state = app.state::<FrugalConfigState>();
+                let mut status = state.server_status.write().await;
+                *status = running_status.clone();
             }
+            let _ = app.emit("frugallm_server_status", running_status);
+
+            let _ = axum::serve(listener, router).await;
         }
-        
-        let _ = axum::serve(listener, router).await;
-    } else {
-        eprintln!("Failed to bind FrugalLLM server to {}", addr);
-        let _ = app.emit("frugallm_port_error", port);
+        Err(e) => {
+            eprintln!("Failed to bind FrugalLLM server to {}: {}", addr, e);
+            let conflict_msg = format!("Close the service currently using port [{}] and restart the app, or choose a different port.", port);
+            let conflict_status = ServerStatus::PortConflict {
+                port,
+                ip: ip.to_string(),
+                message: conflict_msg,
+            };
+            {
+                let state = app.state::<FrugalConfigState>();
+                let mut status = state.server_status.write().await;
+                *status = conflict_status.clone();
+            }
+            let _ = app.emit("frugallm_port_error", port);
+            let _ = app.emit("frugallm_server_status", conflict_status);
+        }
     }
 }
 
@@ -2116,10 +2170,12 @@ fn main() {
             
             let server_abort_handle = Arc::new(tokio::sync::Mutex::new(None));
             let is_dirty = Arc::new(std::sync::atomic::AtomicBool::new(false));
+            let server_status = Arc::new(tokio::sync::RwLock::new(ServerStatus::Starting));
             app.manage(FrugalConfigState {
                 config: config_arc.clone(),
                 server_abort_handle: server_abort_handle.clone(),
                 is_dirty: is_dirty.clone(),
+                server_status: server_status.clone(),
             });
 
             // Background task: persist config to disk if dirty every 3 seconds (decoupled from proxy stream path)
@@ -2284,6 +2340,7 @@ fn main() {
             deploy_local_model,
             get_frugallm_config,
             set_frugallm_config,
+            get_frugallm_server_status,
             edit_hermes_soul,
             is_wipe_mode,
             get_local_ips,
@@ -2537,5 +2594,26 @@ mod tests {
         // Fallback for severely limited VRAM (e.g., 2GB or 4GB)
         assert_eq!(get_model_tag_for_vram(2.0), "gemma4:e2b");
         assert_eq!(get_model_tag_for_vram(4.0), "gemma4:e2b");
+    }
+
+    #[test]
+    fn test_server_status_serialization() {
+        let running = ServerStatus::Running {
+            port: 61721,
+            ip: "127.0.0.1".to_string(),
+        };
+        let json = serde_json::to_string(&running).expect("serialize running");
+        assert!(json.contains("\"status\":\"Running\""));
+        assert!(json.contains("\"port\":61721"));
+
+        let conflict = ServerStatus::PortConflict {
+            port: 5050,
+            ip: "127.0.0.1".to_string(),
+            message: "Close the service currently using port [5050] and restart the app".to_string(),
+        };
+        let conflict_json = serde_json::to_string(&conflict).expect("serialize conflict");
+        assert!(conflict_json.contains("\"status\":\"PortConflict\""));
+        assert!(conflict_json.contains("5050"));
+        assert!(conflict_json.contains("Close the service currently using port [5050] and restart the app"));
     }
 }

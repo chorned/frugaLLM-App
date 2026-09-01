@@ -396,4 +396,66 @@ test.describe('Node Configuration Panel', () => {
     const saveCall = cmds.find((c: any) => c.cmd === 'set_frugallm_config' && c.args?.newConfig?.api_password === null);
     expect(saveCall).toBeDefined();
   });
+
+  test('should display port conflict banner, error badge on FrugaLLM node, and allow editing port', async ({ page }) => {
+    await page.addInitScript(() => {
+      const origInvoke = (window as any).__TAURI_INTERNALS__?.invoke;
+      if (origInvoke) {
+        (window as any).__TAURI_INTERNALS__.invoke = (cmd: string, args: any) => {
+          if (cmd === 'get_frugallm_server_status') {
+            return Promise.resolve({
+              status: 'PortConflict',
+              data: {
+                port: 5050,
+                ip: '127.0.0.1',
+                message: 'Close the service currently using port [5050] and restart the app.',
+              },
+            });
+          }
+          if (cmd === 'get_frugallm_config') {
+            return Promise.resolve({
+              port: 5050,
+              bind_all_interfaces: false,
+              api_password: '',
+            });
+          }
+          return origInvoke(cmd, args);
+        };
+      }
+    });
+
+    const canvas = new MainCanvas(page);
+    await canvas.goto();
+
+    // Verify Port Conflict Banner is visible
+    const banner = page.getByTestId('port-conflict-banner');
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText('PORT CONFLICT DETECTED');
+    await expect(banner).toContainText('Close the service currently using port [5050] and restart the app.');
+
+    // Verify FrugaLLM node badge
+    const badge = page.getByTestId('frugallm-port-conflict-badge');
+    await expect(badge).toBeVisible();
+    await expect(badge).toHaveText('PORT CONFLICT');
+
+    // Click "Configure Port" in the banner
+    await page.getByTestId('port-conflict-configure').click();
+
+    // Verify the Hub settings panel opens with editable port field
+    const portInput = page.getByTestId('input-frugallm-port');
+    await expect(portInput).toBeVisible();
+    await expect(portInput).toHaveValue('5050');
+    await expect(page.getByTestId('port-conflict-hint')).toBeVisible();
+
+    const configPanel = new NodeConfigPanel(page);
+
+    // Edit port to 61722 and save
+    await portInput.fill('61722');
+    await configPanel.updateButton.click();
+
+    // Verify set_frugallm_config was invoked with port 61722
+    const cmds = await page.evaluate(() => window['invokedCommands']);
+    const saveCall = cmds.find((c: any) => c.cmd === 'set_frugallm_config' && c.args?.newConfig?.port === 61722);
+    expect(saveCall).toBeDefined();
+  });
 });

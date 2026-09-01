@@ -24,16 +24,13 @@ We are undergoing a massive UI redesign using the **Strangler Fig Pattern**.
 *   **Resilient Primitives:** Build UI components to handle extreme edge cases natively (text overflow, empty states, loading skeletons, and network error boundaries).
 *   **Copy & Text (JSON CMS):** All user-facing strings must be extracted into a localized JSON dictionary pattern (`en.json`). No hardcoded display text in the React components.
 
-# 4. QA & Automation (Playwright E2E)
-End-to-End testing is our safety net and is strictly required before any UI refactoring is considered complete. Tests run against a Vite server on port `1420`.
-*   **Test Before Build:** Tests must be written and verified passing against the `v1` codebase to establish a baseline *before* the `v2` equivalent is built.
-*   **Tauri IPC Mocking:** To ensure fast, deterministic testing of the React UI, bypass the Rust backend by mocking `window.__TAURI_INTERNALS__`.
-*   **Page Object Model (POM):** Always abstract selectors into the POM. Use stable, semantic selectors (`getByRole`, `getByTestId`).
-*   **Required Coverage Domains:**
-    *   *Main Canvas:* Validate the workspace grid, zoom/pan controls, and ensure all 6 primary nodes correctly trigger their respective property panels.
-    *   *Node Configuration:* Assert data entry forms and edge cases (e.g., Hub network binding toggles).
-    *   *Terminal Runner:* Intercept Tauri PTY IPC events to assert `xterm.js` mounting, resizing, and PTY teardown sequences.
-    *   *Hardware Telemetry:* Stream mocked `telemetry_update` events to verify RAM/VRAM allocations, and simulate token streaming to verify throughput meters and the "THINKING" state.
+# 4. QA & SDET Testing Mandate (Strict Quality Gate)
+End-to-End, Integration, and Unit testing are our safety nets. You must enforce high-value, mutation-proof coverage and are strictly forbidden from writing tests that optimize only for a passing exit code.
+*   **The Anti-Tautology Rule:** Never mock a function to return a hardcoded value just to assert that same value. Mocks are for external boundaries only; you must test the internal application logic that processes the mocked response.
+*   **Tauri IPC Boundary Verification:** When mocking frontend IPC commands via `window.__TAURI_INTERNALS__` (or `@tauri-apps/api/mocks`), you MUST physically read and cross-reference the corresponding Rust `#[tauri::command]` in `src-tauri/`. Ensure the mocked frontend payload structurally matches the exact Rust data shape. Do not blindly assume JSON shapes.
+*   **Hostile Data Injection:** Do not solely write "Happy Path" tests. For every component or function, you must inject hostile, null, or malformed data to guarantee graceful failure rather than thread panics.
+*   **Test Before Build (TDD):** Tests must be written and verified passing against the `v1` codebase to establish a baseline *before* the `v2` equivalent is built.
+*   **Playwright E2E (POM & Coverage):** E2E runs against Vite on port `1420`. Always abstract stable semantic selectors (`getByRole`) into a Page Object Model. You must validate Main Canvas routing, Node Configuration edge cases, Terminal Runner PTY sequences, and Hardware Telemetry token streaming states.
 
 # 5. Backend & Proxy Architecture (Tauri/Rust)
 *   **Stateless Routing:** The core proxy logic handled via Rust must remain lightweight and fast. Handle streaming responses efficiently without buffering massive payloads in memory.
