@@ -62,6 +62,15 @@ jobs:
         if: matrix.platform == 'ubuntu-latest'
         run: xvfb-run npx wdio run smoke-tests/wdio.conf.js
 
+      - name: Configure Windows WebView2 Policy for CI
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          New-Item -Path "HKLM:\Software\Policies\Microsoft\Edge\WebView2" -Force | Out-Null
+          Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Edge\WebView2" -Name "AdditionalBrowserArguments" -Value "--remote-debugging-port=0 --no-sandbox --disable-gpu --disable-dev-shm-usage --remote-allow-origins=*"
+
       - name: Run release smoke test (Windows)
         if: matrix.platform == 'windows-latest'
+        env:
+          WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--remote-debugging-port=0 --no-sandbox --disable-gpu --disable-dev-shm-usage --remote-allow-origins=*'
         run: npx wdio run smoke-tests/wdio.conf.js

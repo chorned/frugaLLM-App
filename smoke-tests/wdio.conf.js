@@ -27,9 +27,31 @@ export const config = {
       'wdio:enforceWebDriverClassic': true,
       'tauri:options': {
         application: binaryPath,
+        args: [
+          '--remote-debugging-port=0',
+          '--no-sandbox',
+          '--disable-gpu',
+          '--disable-dev-shm-usage',
+          '--remote-allow-origins=*',
+        ],
       },
+      ...(isWin
+        ? {
+            'ms:edgeOptions': {
+              args: [
+                '--remote-debugging-port=0',
+                '--no-sandbox',
+                '--disable-gpu',
+                '--disable-dev-shm-usage',
+                '--remote-allow-origins=*',
+              ],
+            },
+          }
+        : {}),
     },
   ],
+  connectionRetryTimeout: 120000,
+  connectionRetryCount: 3,
   logLevel: 'info',
   framework: 'mocha',
   mochaOpts: {
