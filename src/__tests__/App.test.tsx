@@ -184,4 +184,86 @@ describe('App Component Integration', () => {
       { timeout: 10000 }
     );
   }, 15000);
+
+  it('renders port conflict banner and Hub error badge when server status is PortConflict', async () => {
+    // Arrange: Mock server status returning PortConflict on 5050
+    localStorage.setItem('onboardingState', 'completed');
+    (invoke as any).mockImplementation((cmd: string) => {
+      if (cmd === 'is_wipe_mode') return Promise.resolve(false);
+      if (cmd === 'get_frugallm_config') {
+        return Promise.resolve({
+          port: 5050,
+          bind_all_interfaces: false,
+          api_password: '',
+          input_tokens_session: 0,
+          output_tokens_session: 0,
+          input_tokens_lifetime: 0,
+          output_tokens_lifetime: 0,
+          opencode_workspace: '~/OpenCode',
+          hermes_workspace: '~/Hermes',
+          start_minimized: false,
+          manual_model_overrides: [],
+          tool_enforcing_gateway: false,
+        });
+      }
+      if (cmd === 'get_frugallm_server_status') {
+        return Promise.resolve({
+          status: 'PortConflict',
+          data: {
+            port: 5050,
+            ip: '127.0.0.1',
+            message: 'Close the service currently using port [5050] and restart the app, or choose a different port.',
+          },
+        });
+      }
+      if (cmd === 'get_routing_chain') return Promise.resolve([]);
+      if (cmd === 'check_ollama_status') return Promise.resolve(true);
+      if (cmd === 'check_hermes_status') return Promise.resolve(true);
+      if (cmd === 'check_opencode_status') return Promise.resolve(true);
+      if (cmd === 'check_tool_gateway_status') return Promise.resolve(false);
+      if (cmd === 'detect_vram') return Promise.resolve(16384);
+      if (cmd === 'get_model_tag_for_vram') return Promise.resolve('gemma4:12b');
+      if (cmd === 'get_credential') return Promise.resolve(null);
+      if (cmd === 'detect_hardware_profile') {
+        return Promise.resolve({
+          is_unified: false,
+          dedicated_vram: 16 * 1024 * 1024 * 1024,
+          system_ram: 32 * 1024 * 1024 * 1024,
+          execution_ceiling: 16 * 1024 * 1024 * 1024,
+          os_architecture: 'macos-x86_64',
+        });
+      }
+      return Promise.resolve();
+    });
+
+    render(<App />);
+
+    // Assert: Banner appears with port conflict details
+    await waitFor(
+      () => {
+        expect(screen.getByTestId('port-conflict-banner')).toBeInTheDocument();
+        expect(screen.getByText('PORT CONFLICT DETECTED')).toBeInTheDocument();
+        expect(
+          screen.getByText(/Close the service currently using port \[5050\] and restart the app\./i)
+        ).toBeInTheDocument();
+        expect(screen.getByTestId('frugallm-port-conflict-badge')).toBeInTheDocument();
+      },
+      { timeout: 10000 }
+    );
+
+    // Act: Click "Configure Port" on the banner
+    const configureBtn = screen.getByTestId('port-conflict-configure');
+    fireEvent.click(configureBtn);
+
+    // Assert: Hub settings panel opens with editable port field and conflict hint
+    await waitFor(
+      () => {
+        const portInput = screen.getByTestId('input-frugallm-port');
+        expect(portInput).toBeInTheDocument();
+        expect((portInput as HTMLInputElement).value).toBe('5050');
+        expect(screen.getByTestId('port-conflict-hint')).toBeInTheDocument();
+      },
+      { timeout: 10000 }
+    );
+  }, 15000);
 });
