@@ -1626,7 +1626,6 @@ function AppContent() {
       addLog("Checking server status...");
       try {
         const status = await invoke<any>('get_frugallm_server_status');
-        setServerStatus(status);
         if (status?.status === 'PortConflict') {
           setPortConflict({
             port: status.data?.port || 61721,
@@ -1662,7 +1661,6 @@ function AppContent() {
     });
     const unlistenStatus = listen('frugallm_server_status', (event: any) => {
       const statusObj = event.payload;
-      setServerStatus(statusObj);
       if (statusObj?.status === 'PortConflict') {
         setPortConflict({
           port: statusObj.data?.port || 61721,
@@ -1700,7 +1698,6 @@ function AppContent() {
   // UI State
 
   const [portConflict, setPortConflict] = useState<{ port: number; message: string } | null>(null);
-  const [serverStatus, setServerStatus] = useState<any>(null);
   const [detectedVram, setDetectedVram] = useState<string>('8'); // Default placeholder
   const [latestTelemetry, setLatestTelemetry] = useState<any>(null);
   const [hardwareProfile, setHardwareProfile] = useState<HardwareProfile | null>(null);
@@ -1901,7 +1898,6 @@ function AppContent() {
         await invoke('set_frugallm_config', { newConfig: newConf });
         invoke('get_frugallm_config').then((conf: any) => setFrugalConfig(conf)).catch(console.error);
         invoke<any>('get_frugallm_server_status').then((st: any) => {
-          setServerStatus(st);
           if (st?.status === 'Running') {
             setPortConflict(null);
           }
