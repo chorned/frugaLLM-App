@@ -49,3 +49,19 @@ jobs:
           releaseBody: 'See the assets to download this version and install.'
           releaseDraft: true
           prerelease: false
+
+      - name: Install tauri-driver
+        if: matrix.platform != 'macos-13'
+        run: cargo install tauri-driver --locked
+
+      - name: Install Linux WebDriver dependencies
+        if: matrix.platform == 'ubuntu-latest'
+        run: sudo apt-get install -y webkit2gtk-driver
+
+      - name: Run release smoke test (Linux)
+        if: matrix.platform == 'ubuntu-latest'
+        run: xvfb-run npx wdio run smoke-tests/wdio.conf.js
+
+      - name: Run release smoke test (Windows)
+        if: matrix.platform == 'windows-latest'
+        run: npx wdio run smoke-tests/wdio.conf.js
