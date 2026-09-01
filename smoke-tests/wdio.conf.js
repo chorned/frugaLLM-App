@@ -59,6 +59,26 @@ export const config = {
     timeout: 60000,
   },
   beforeSession: async () => {
+    if (isWin) {
+      try {
+        const { download } = await import('edgedriver');
+        const driverPath = await download();
+        console.log('[Smoke Test] Downloaded msedgedriver to:', driverPath);
+        if (driverPath) {
+          const driverDir = path.dirname(driverPath);
+          process.env.PATH = `${driverDir}${path.delimiter}${process.env.PATH}`;
+          const cargoBin = path.resolve(os.homedir(), '.cargo/bin');
+          if (fs.existsSync(cargoBin)) {
+            try {
+              fs.copyFileSync(driverPath, path.resolve(cargoBin, 'msedgedriver.exe'));
+            } catch (_) {}
+          }
+        }
+      } catch (err) {
+        console.warn('[Smoke Test] edgedriver download notice:', err.message);
+      }
+    }
+
     const cargoBinDriver = path.resolve(os.homedir(), '.cargo/bin', isWin ? 'tauri-driver.exe' : 'tauri-driver');
     const driverCmd = fs.existsSync(cargoBinDriver) ? cargoBinDriver : 'tauri-driver';
 
@@ -70,7 +90,7 @@ export const config = {
         console.warn('[Smoke Test] tauri-driver spawn notice:', err.message);
       });
       // Allow tauri-driver to bind to port 4444
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await new Promise((resolve) => setTimeout(resolve, 2000));
     } catch (e) {
       console.warn('[Smoke Test] Could not spawn tauri-driver automatically in beforeSession:', e);
     }
