@@ -1,16 +1,11 @@
-# FrugaLLM v0.0.6
+# FrugaLLM v0.0.7 Release Notes
 
-This release delivers an enterprise-grade unit, integration, and backend testing infrastructure, strengthening reliability and deterministic test coverage across all proxy routing, memory calculation, ONNX gateway, and hardware telemetry modules.
+## 🚀 Features
+- **Server Port Conflict Detection & Notification Banner:** Added real-time port binding conflict detection on backend startup with an interactive UI alert banner and Hub status indicator prompting users to close conflicting background processes or customize the server port.
 
-## Features
-- **Comprehensive Automated Test Suite**: Integrated Vitest test runners and assertions across frontend state managers, custom hooks (`useCanvasLogic`, `useOnboarding`), and component widgets (`CloudRoutingPanel`, `HardwareTelemetryWidget`, `MemoryPipelineWidget`, `TerminalLoader`, `NodeWidgets`).
-- **Rust Backend Test Coverage**: Added dedicated unit test suites for model database indexing, telemetry polling, and server lifecycle restart handling.
-- **Deterministic Mocking**: Implemented isolated IPC mocking harness for Tauri event streams and runtime listeners.
+## 🛠️ Fixes
+- **CI Test Suite Compatibility:** Standardized CI workflows on Node.js 22 and aligned Cargo test manifest paths across continuous integration runners.
+- **PR Check Isolation:** Separated pre-merge PR validation gates from multi-platform release pipelines.
 
-## Fixes
-- **CI/CD Quality Gate**: Hardened GitHub Actions release workflow to enforce full Rust and Vitest test matrix completion prior to multi-platform Tauri compilation.
-- **Memory & Telemetry Guardrails**: Verified edge-case handling in memory allocation calculations, KV cache estimations, and hardware utilization fallbacks.
-
-## Under the Hood
-- **Test Rollout Documentation**: Added `TEST_SUMMARY.md` and `TEST_ROLLOUT_LEDGER.md` for continuous verification tracking.
-- **Release Matrix Hardening**: Streamlined packaging and build verification for macOS, Linux, and Windows desktop distributions.
+## 🔧 Under the Hood
+- **Automated Artifact Smoke Testing:** Added automated post-build binary verification in the release workflow using `tauri-driver` and WebdriverIO to physically boot compiled release artifacts and verify webview initialization on Linux (`xvfb` + WebKitGTK) and Windows.
