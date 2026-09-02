@@ -119,9 +119,9 @@ test.describe('Main Canvas Dashboard', () => {
     const htmlOverscroll = await page.evaluate(() => window.getComputedStyle(document.documentElement).overscrollBehavior);
     expect(htmlOverscroll).toBe('none');
 
-    // Verify html background color is explicitly set to white
+    // Verify html background color is explicitly set to subtle peach-tinted off-white
     const htmlBg = await page.evaluate(() => window.getComputedStyle(document.documentElement).backgroundColor);
-    expect(htmlBg).toBe('rgb(255, 255, 255)'); // #FFFFFF
+    expect(htmlBg).toBe('rgb(252, 248, 244)'); // #FCF8F4
   });
 
   test('should render header with FrugaLLM logo, footer with placeholder hyperlinks, without increasing viewport height or creating page scroll', async ({ page }) => {

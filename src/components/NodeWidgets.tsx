@@ -153,7 +153,7 @@ export const CopyableField = ({
       <div
         style={{
           display: 'flex',
-          backgroundColor: '#FFFFFF',
+          backgroundColor: 'var(--zen-surface)',
           border: '1px solid var(--zen-border)', 
           borderRadius: '12px',
           overflow: 'hidden',
@@ -239,7 +239,7 @@ export const InfoField = ({
       <div
         style={{
           display: 'flex',
-          backgroundColor: '#FFFFFF',
+          backgroundColor: 'var(--zen-surface)',
           border: '1px solid var(--zen-border)', 
           borderRadius: '12px',
           overflow: 'hidden',
@@ -481,7 +481,7 @@ export const HardwareNode = ({
       <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
         {/* Header */}
         <div 
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--zen-border)', padding: '10px 14px', backgroundColor: 'var(--zen-surface)' }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--zen-border)', padding: '10px 14px', backgroundColor: 'var(--zen-surface-header)' }}
         >
           <div id="local-hardware-heading" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <CpuIconSVG />
@@ -567,7 +567,7 @@ export const HardwareNode = ({
 
             {/* Average Throughput Metric Card */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F4F4F5', padding: '12px 16px', borderRadius: '14px', border: '1px solid var(--zen-border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--zen-surface-secondary)', padding: '12px 16px', borderRadius: '14px', border: '1px solid var(--zen-border)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--zen-text)' }}>
                     {en.routingGraph.hardwareTelemetryWidget.avgThroughput}
@@ -585,7 +585,7 @@ export const HardwareNode = ({
                       display: 'inline-flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: showBenchmarks ? '#171717' : 'var(--zen-text-secondary)',
+                      color: showBenchmarks ? 'var(--zen-text)' : 'var(--zen-text-secondary)',
                       opacity: showBenchmarks ? 1 : 0.75,
                       transition: 'all 0.15s ease',
                       padding: '2px',
@@ -612,7 +612,7 @@ export const HardwareNode = ({
               <div 
                 data-testid="benchmark-panel"
                 style={{
-                  backgroundColor: '#F4F4F5',
+                  backgroundColor: 'var(--zen-surface-secondary)',
                   border: '1px solid var(--zen-border)',
                   borderRadius: '14px',
                   padding: '14px',
@@ -633,47 +633,47 @@ export const HardwareNode = ({
                 </p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid var(--zen-border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--zen-surface)', borderRadius: '10px', border: '1px solid var(--zen-border)' }}>
                     <span style={{ fontWeight: 500, color: 'var(--zen-text)', fontSize: '0.75rem' }}>
                       {en.routingGraph.hardwareTelemetryWidget.benchmarkSonnet}
                     </span>
-                    <span style={{ fontWeight: 700, color: '#171717', fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums' }}>
+                    <span style={{ fontWeight: 700, color: 'var(--zen-text)', fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums' }}>
                       {en.routingGraph.hardwareTelemetryWidget.benchmarkSonnetSpeed}
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid var(--zen-border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--zen-surface)', borderRadius: '10px', border: '1px solid var(--zen-border)' }}>
                     <span style={{ fontWeight: 500, color: 'var(--zen-text)', fontSize: '0.75rem' }}>
                       {en.routingGraph.hardwareTelemetryWidget.benchmarkGeminiFlash}
                     </span>
-                    <span style={{ fontWeight: 700, color: '#171717', fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums' }}>
+                    <span style={{ fontWeight: 700, color: 'var(--zen-text)', fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums' }}>
                       {en.routingGraph.hardwareTelemetryWidget.benchmarkGeminiFlashSpeed}
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid var(--zen-border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--zen-surface)', borderRadius: '10px', border: '1px solid var(--zen-border)' }}>
                     <span style={{ fontWeight: 500, color: 'var(--zen-text)', fontSize: '0.75rem' }}>
                       {en.routingGraph.hardwareTelemetryWidget.benchmarkHaiku}
                     </span>
-                    <span style={{ fontWeight: 700, color: '#171717', fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums' }}>
+                    <span style={{ fontWeight: 700, color: 'var(--zen-text)', fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums' }}>
                       {en.routingGraph.hardwareTelemetryWidget.benchmarkHaikuSpeed}
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid var(--zen-border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--zen-surface)', borderRadius: '10px', border: '1px solid var(--zen-border)' }}>
                     <span style={{ fontWeight: 500, color: 'var(--zen-text)', fontSize: '0.75rem' }}>
                       {en.routingGraph.hardwareTelemetryWidget.benchmarkLocalGpu}
                     </span>
-                    <span style={{ fontWeight: 700, color: '#171717', fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums' }}>
+                    <span style={{ fontWeight: 700, color: 'var(--zen-text)', fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums' }}>
                       {en.routingGraph.hardwareTelemetryWidget.benchmarkLocalGpuSpeed}
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid var(--zen-border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--zen-surface)', borderRadius: '10px', border: '1px solid var(--zen-border)' }}>
                     <span style={{ fontWeight: 500, color: 'var(--zen-text)', fontSize: '0.75rem' }}>
                       {en.routingGraph.hardwareTelemetryWidget.benchmarkLocalCpu}
                     </span>
-                    <span style={{ fontWeight: 700, color: '#171717', fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums' }}>
+                    <span style={{ fontWeight: 700, color: 'var(--zen-text)', fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums' }}>
                       {en.routingGraph.hardwareTelemetryWidget.benchmarkLocalCpuSpeed}
                     </span>
                   </div>
@@ -687,11 +687,11 @@ export const HardwareNode = ({
                 <span data-testid="telemetry-memory-label">{isCpuMode ? en.routingGraph.hardwareTelemetryWidget.ramAllocation : en.routingGraph.hardwareTelemetryWidget.vramAllocation}</span>
                 <span data-testid="telemetry-memory-value">{memUsed} / {memTotal} GB</span>
               </div>
-              <div style={{ width: '100%', height: '8px', backgroundColor: '#F4F4F5', borderRadius: '9999px', overflow: 'hidden' }}>
+              <div style={{ width: '100%', height: '8px', backgroundColor: 'var(--zen-pill-bg)', borderRadius: '9999px', overflow: 'hidden' }}>
                 <div 
                   style={{ 
                     height: '100%', 
-                    backgroundColor: '#171717', 
+                    backgroundColor: 'var(--zen-accent)', 
                     borderRadius: '9999px',
                     transition: 'width 0.3s ease-out', 
                     width: `${memPercent}%` 
@@ -706,11 +706,11 @@ export const HardwareNode = ({
                 <span data-testid="telemetry-load-label">{isCpuMode ? en.routingGraph.hardwareTelemetryWidget.cpuLoad : en.routingGraph.hardwareTelemetryWidget.gpuLoad}</span>
                 <span data-testid="telemetry-load-value">{loadPercent.toFixed(1)}%</span>
               </div>
-              <div style={{ width: '100%', height: '8px', backgroundColor: '#F4F4F5', borderRadius: '9999px', overflow: 'hidden' }}>
+              <div style={{ width: '100%', height: '8px', backgroundColor: 'var(--zen-pill-bg)', borderRadius: '9999px', overflow: 'hidden' }}>
                 <div 
                   style={{ 
                     height: '100%', 
-                    backgroundColor: '#171717', 
+                    backgroundColor: 'var(--zen-accent)', 
                     borderRadius: '9999px',
                     transition: 'width 0.3s ease-out', 
                     width: `${Math.min(100, Math.max(0, loadPercent))}%` 

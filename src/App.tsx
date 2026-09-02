@@ -2410,7 +2410,7 @@ function AppContent() {
 
   return !isAppLoaded ? <TerminalLoader logs={initLogs} /> : (
     <div 
-      style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100vh', fontFamily: 'inherit', backgroundColor: 'var(--zen-canvas)', overflow: 'hidden', overscrollBehavior: 'none' }}
+      style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100vh', fontFamily: 'inherit', backgroundColor: 'var(--zen-canvas)', backgroundImage: 'var(--zen-canvas-texture)', overflow: 'hidden', overscrollBehavior: 'none' }}
     >
       <style>
         {`
@@ -2450,7 +2450,7 @@ function AppContent() {
           alignItems: 'center', 
           justifyContent: 'space-between', 
           padding: '10px 20px', 
-          backgroundColor: '#FFFFFF', 
+          backgroundColor: 'var(--zen-surface)', 
           borderBottom: '1px solid var(--zen-border)',
           flexShrink: 0,
           zIndex: 10
@@ -2569,9 +2569,9 @@ function AppContent() {
               
               let stateColors = {
                 border: isCore && portConflict ? '#ef4444' : 'var(--zen-border)',
-                headerBg: isCore && portConflict ? '#fef2f2' : '#FFFFFF', 
+                headerBg: isCore && portConflict ? '#fef2f2' : 'var(--zen-surface-header)', 
                 headerText: isCore && portConflict ? '#991b1b' : 'var(--zen-text)',
-                bodyBg: '#FFFFFF',
+                bodyBg: 'var(--zen-surface)',
                 dot: isCore && portConflict ? '#ef4444' : '#10B981',
                 statusText: 'var(--zen-text-secondary)',
                 boxShadow: isCore && portConflict ? '0 0 16px rgba(239, 68, 68, 0.2), var(--zen-shadow-diffused)' : 'var(--zen-shadow-diffused)',
@@ -2596,10 +2596,10 @@ function AppContent() {
                     style={{ 
                       position: 'absolute', left: node.x, top: node.y, width: NODE_WIDTH, 
                       zIndex: isSelected ? 5 : 1,
-                      backgroundColor: '#FFFFFF',
+                      backgroundColor: 'var(--zen-surface)',
                       border: '1px solid var(--zen-border)',
                       borderRadius: '16px',
-                      boxShadow: isSelected ? `0 0 0 3px rgba(0, 0, 0, 0.08), var(--zen-shadow-diffused)` : 'var(--zen-shadow-diffused)',
+                      boxShadow: isSelected ? `0 0 0 3px rgba(65, 42, 24, 0.08), var(--zen-shadow-diffused)` : 'var(--zen-shadow-diffused)',
                       cursor: 'pointer',
                       fontFamily: 'inherit',
                       userSelect: 'none',
