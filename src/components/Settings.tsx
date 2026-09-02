@@ -112,10 +112,9 @@ export const Settings: React.FC<SettingsProps> = ({
         display: 'flex',
         flexDirection: 'column',
         gap: '8px',
-        padding: '10px 12px',
-        backgroundColor: '#FFFFFF',
-        border: '1px solid var(--zen-border)',
-        borderRadius: '12px',
+        padding: '0',
+        backgroundColor: 'transparent',
+        border: 'none',
         fontFamily: 'inherit',
       }}
     >
@@ -127,7 +126,7 @@ export const Settings: React.FC<SettingsProps> = ({
             alignItems: 'center',
             gap: '8px',
             cursor: 'pointer',
-            fontSize: '0.78rem',
+            fontSize: '0.8rem',
             fontWeight: 500,
             color: 'var(--zen-text)',
           }}
@@ -140,6 +139,7 @@ export const Settings: React.FC<SettingsProps> = ({
             checked={localStartOnLogin}
             disabled={isSyncing}
             onChange={(e) => handleToggleAutostart(e.target.checked)}
+            style={{ borderRadius: '4px', cursor: 'pointer' }}
           />
           <span>{strings.startOnLogin.label}</span>
         </label>
@@ -153,7 +153,7 @@ export const Settings: React.FC<SettingsProps> = ({
             alignItems: 'center',
             gap: '8px',
             cursor: 'pointer',
-            fontSize: '0.78rem',
+            fontSize: '0.8rem',
             fontWeight: 500,
             color: 'var(--zen-text)',
           }}
@@ -166,6 +166,7 @@ export const Settings: React.FC<SettingsProps> = ({
             checked={localStartMinimized}
             disabled={isSyncing}
             onChange={(e) => handleToggleStartMinimized(e.target.checked)}
+            style={{ borderRadius: '4px', cursor: 'pointer' }}
           />
           <span>{strings.startMinimized.label}</span>
         </label>

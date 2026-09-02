@@ -325,10 +325,10 @@ describe('App Component Integration', () => {
     const portInput = screen.getByTestId('input-frugallm-port');
     fireEvent.change(portInput, { target: { name: 'port', value: '62000' } });
 
-    // Button should now be enabled and have dark grey styling matching node header
+    // Button should now be enabled and have accent styling
     await waitFor(() => {
       expect(saveButton).not.toBeDisabled();
-      expect(saveButton).toHaveStyle({ backgroundColor: 'var(--zen-text)' });
+      expect(saveButton).toHaveStyle({ backgroundColor: 'var(--zen-accent)' });
     });
 
     // Click SAVE CHANGES
@@ -659,18 +659,57 @@ describe('App Component Integration', () => {
     const gearIconContainer = frugalNode?.querySelector('svg circle')?.closest('div');
     expect(gearIconContainer).toHaveStyle({ color: 'var(--zen-text)' });
 
-    // Assert FrugaLLM geometric center matches viewport midpoint
-    const leftPx = parseFloat(frugalNode.style.left);
-    const topPx = parseFloat(frugalNode.style.top);
-    const nodeCenterX = leftPx + (220 / 2); // NODE_WIDTH is 220
-    const nodeCenterCanvasY = topPx + (130 / 2); // FrugaLLM height is 130
-    const headerEl = screen.getByTestId('app-header');
-    const headerH = headerEl.offsetHeight || 41;
-    const nodeCenterViewportY = headerH + nodeCenterCanvasY;
+    // Assert 3-Row Flexbox Router Architecture
+    const mainContainer = screen.getByTestId('router-main-container');
+    expect(mainContainer).toHaveStyle({
+      position: 'relative',
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'space-between'
+    });
 
-    // Viewport width and height in jsdom window default to 1024x768
-    expect(nodeCenterX).toBe(window.innerWidth / 2);
-    expect(nodeCenterViewportY).toBe(window.innerHeight / 2);
+    // Assert Dynamic SVG Routing Layer
+    const svgLayer = screen.getByTestId('router-svg-layer');
+    expect(svgLayer).toBeInTheDocument();
+    expect(svgLayer).toHaveStyle({
+      position: 'absolute',
+      pointerEvents: 'none'
+    });
+
+    // Assert Top Row (3 nodes: ollama, google, openrouter)
+    const topRow = screen.getByTestId('router-top-row');
+    expect(topRow).toHaveStyle({
+      display: 'flex',
+      width: '100%',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start'
+    });
+    expect(topRow.querySelector('[data-node-id="node-ollama"]')).toBeInTheDocument();
+    expect(topRow.querySelector('[data-node-id="node-google"]')).toBeInTheDocument();
+    expect(topRow.querySelector('[data-node-id="node-openrouter"]')).toBeInTheDocument();
+
+    // Assert Middle Row (1 central router node: frugallm)
+    const middleRow = screen.getByTestId('router-middle-row');
+    expect(middleRow).toHaveStyle({
+      display: 'flex',
+      width: '100%',
+      justifyContent: 'center',
+      alignItems: 'center'
+    });
+    expect(middleRow.querySelector('[data-node-id="node-frugallm"]')).toBeInTheDocument();
+
+    // Assert Bottom Row (2 nodes: opencode, hermes with horizontal padding)
+    const bottomRow = screen.getByTestId('router-bottom-row');
+    expect(bottomRow).toHaveStyle({
+      display: 'flex',
+      width: '100%',
+      justifyContent: 'space-around',
+      alignItems: 'flex-end',
+      paddingLeft: '11%',
+      paddingRight: '11%'
+    });
+    expect(bottomRow.querySelector('[data-node-id="node-opencode"]')).toBeInTheDocument();
+    expect(bottomRow.querySelector('[data-node-id="node-hermes"]')).toBeInTheDocument();
   }, 15000);
 });
 

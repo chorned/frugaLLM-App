@@ -102,7 +102,7 @@ test.describe('Node Configuration Panel', () => {
     await canvas.goto();
 
     // Click OpenRouter
-    await canvas.clickNode('Openrouter');
+    await canvas.clickNode('OpenRouter');
     await expect(configPanel.updateButton).toBeVisible();
     await expect(configPanel.updateButton).toBeDisabled();
 

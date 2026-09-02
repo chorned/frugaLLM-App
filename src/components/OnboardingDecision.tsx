@@ -8,7 +8,7 @@ interface OnboardingDecisionProps {
 export const OnboardingDecision: React.FC<OnboardingDecisionProps> = ({ onSelect }) => {
   return (
     <div className="fixed inset-0 z-[9999] bg-black/20 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="bg-zen-surface border border-zen-border rounded-3xl p-8 max-w-lg w-full shadow-2xl shadow-glass transform transition-all">
+      <div className="bg-zen-surface border-none rounded-3xl p-8 max-w-lg w-full shadow-2xl shadow-glass transform transition-all">
         <h2 className="text-2xl font-bold text-zen-text mb-3 tracking-tight">
           {en.onboarding?.welcomeTitle ?? 'Welcome to FrugalLLM'}
         </h2>
@@ -20,7 +20,7 @@ export const OnboardingDecision: React.FC<OnboardingDecisionProps> = ({ onSelect
         <div className="flex flex-col gap-3">
           <button
             onClick={() => onSelect('learning')}
-            className="group relative flex items-center justify-between p-4 bg-zen-surface hover:bg-zen-surface-hover border border-zen-border hover:border-zen-text rounded-2xl transition-all duration-200"
+            className="group relative flex items-center justify-between p-4 bg-zen-surface-hover hover:bg-zen-surface-secondary border-none rounded-2xl transition-all duration-200"
           >
             <div className="flex flex-col text-left">
               <span className="text-base font-semibold text-zen-text transition-colors">
@@ -37,7 +37,7 @@ export const OnboardingDecision: React.FC<OnboardingDecisionProps> = ({ onSelect
 
           <button
             onClick={() => onSelect('completed')}
-            className="group relative flex items-center justify-between p-4 bg-zen-surface hover:bg-zen-surface-hover border border-zen-border hover:border-zen-text rounded-2xl transition-all duration-200"
+            className="group relative flex items-center justify-between p-4 bg-zen-surface-hover hover:bg-zen-surface-secondary border-none rounded-2xl transition-all duration-200"
           >
             <div className="flex flex-col text-left">
               <span className="text-base font-semibold text-zen-text transition-colors">

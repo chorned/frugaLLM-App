@@ -2,9 +2,31 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/png" href="/frugallm-icon.png" />
+    <link rel="apple-touch-icon" href="/frugallm-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri + React + Typescript</title>
+    <title>FrugaLLM</title>
+    <script>
+      (function() {
+        try {
+          var saved = localStorage.getItem('frugallm-theme');
+          var theme = 'dark';
+          if (saved === 'dark' || saved === 'light') {
+            theme = saved;
+          } else if (window.matchMedia) {
+            if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+              theme = 'dark';
+            } else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+              theme = 'light';
+            }
+          }
+          var root = document.documentElement;
+          root.classList.add(theme);
+          root.classList.add(theme === 'dark' ? 'theme-ebony' : 'theme-linen');
+          root.setAttribute('data-theme', theme);
+        } catch (e) {}
+      })();
+    </script>
   </head>
 
   <body>

@@ -27,7 +27,7 @@ export const PortConflictBanner: React.FC<PortConflictBannerProps> = ({
         maxWidth: '900px',
         width: 'calc(100% - 32px)',
         backgroundColor: '#FEF2F2',
-        border: '1px solid #FECACA',
+        border: 'none',
         borderRadius: '16px',
         boxShadow: '0 4px 20px rgba(239, 68, 68, 0.08)',
         padding: '12px 18px',
@@ -138,9 +138,9 @@ export const PortConflictBanner: React.FC<PortConflictBannerProps> = ({
             onClick={onDismiss}
             style={{
               padding: '8px 14px',
-              backgroundColor: 'transparent',
+              backgroundColor: '#FEE2E2',
               color: '#991B1B',
-              border: '1px solid #FECACA',
+              border: 'none',
               borderRadius: '9999px',
               fontWeight: 600,
               fontSize: '0.78rem',
@@ -148,10 +148,10 @@ export const PortConflictBanner: React.FC<PortConflictBannerProps> = ({
               transition: 'all 0.15s ease',
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#FEE2E2';
+              e.currentTarget.style.backgroundColor = '#FECACA';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.backgroundColor = '#FEE2E2';
             }}
           >
             {t.dismiss}

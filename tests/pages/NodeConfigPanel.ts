@@ -56,7 +56,7 @@ export class NodeConfigPanel {
 
     this.updateButton = page.getByRole('button', { name: /SAVE CHANGES/i });
     this.helpButton = page.getByRole('button', { name: /HELP/ });
-    this.closeButton = page.getByRole('button', { name: '✕' }).first(); // the config panel close button
+    this.closeButton = page.locator('[data-testid="node-config-close-btn"]').or(page.getByRole('button', { name: '✕' })).first();
   }
 
   async getTooltipText(labelContainer: Locator) {

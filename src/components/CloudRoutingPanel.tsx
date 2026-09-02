@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import en from '../locales/en.json';
+import { getProviderIcon } from './icons/ProviderIcons';
 
 export interface CloudModel {
   model: string;
@@ -155,12 +156,12 @@ export const CloudRoutingPanel = ({ overrides: propOverrides, onOverridesChange 
             padding: '4px 10px', 
             borderRadius: '9999px',
             backgroundColor: 'var(--zen-surface-hover)', 
-            border: '1px solid var(--zen-border)',
+            border: 'none',
             color: 'var(--zen-text)',
             cursor: loading ? 'wait' : 'pointer',
             transition: 'all 0.15s ease'
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--zen-border)'; }}
+          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--zen-surface-secondary)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--zen-surface-hover)'; }}
         >
           {loading ? (t?.refreshing || 'REFRESHING...') : (t?.refresh || 'REFRESH')}
@@ -194,13 +195,13 @@ export const CloudRoutingPanel = ({ overrides: propOverrides, onOverridesChange 
                   display: 'flex', 
                   alignItems: 'center', 
                   padding: '8px 12px', 
-                  backgroundColor: isActive ? '#F4F4F5' : '#FFFFFF', 
-                  border: `1px solid ${isActive ? '#171717' : 'var(--zen-border)'}`,
+                  backgroundColor: isActive ? 'var(--zen-surface-hover)' : 'var(--zen-surface)', 
+                  border: 'none',
                   borderRadius: '12px', 
                   gap: '10px',
                   position: 'relative',
                   boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
-                  transition: 'border-color 0.15s ease, background-color 0.15s ease'
+                  transition: 'background-color 0.15s ease'
                 }}>
               
               {/* RANK CONTROLS */}
@@ -255,9 +256,12 @@ export const CloudRoutingPanel = ({ overrides: propOverrides, onOverridesChange 
                   {item.model}
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '3px' }}>
-                  <span style={{ fontSize: '0.68rem', color: 'var(--zen-text-secondary)', textTransform: 'uppercase', fontWeight: 500 }}>
-                    {item.provider}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    {getProviderIcon(item.provider, { size: 12 })}
+                    <span style={{ fontSize: '0.68rem', color: 'var(--zen-text-secondary)', textTransform: 'uppercase', fontWeight: 500 }}>
+                      {item.provider}
+                    </span>
+                  </div>
                   {item.iq !== undefined && (
                     <span style={{ fontSize: '0.65rem', color: '#171717', backgroundColor: '#E4E4E7', padding: '2px 8px', borderRadius: '9999px', fontWeight: 600, letterSpacing: '0.02em' }}>
                       {t?.scorePrefix || '⚡ SCORE: '}{(item.iq && item.iq > 0) ? item.iq : 'N/A'}
@@ -283,16 +287,16 @@ export const CloudRoutingPanel = ({ overrides: propOverrides, onOverridesChange 
                       fontSize: '0.68rem', 
                       fontWeight: 500, 
                       color: 'var(--zen-text)', 
-                      backgroundColor: 'transparent', 
+                      backgroundColor: 'var(--zen-surface-hover)', 
                       padding: '4px 10px', 
                       borderRadius: '9999px',
                       cursor: 'pointer',
-                      border: '1px solid var(--zen-border)',
+                      border: 'none',
                       letterSpacing: '0.02em',
                       transition: 'all 0.15s ease'
                     }}
-                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--zen-surface-hover)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--zen-surface-secondary)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--zen-surface-hover)'; }}
                   >
                     <X size={12} color="var(--zen-text)" />
                     {t?.resetButton || "Reset"}

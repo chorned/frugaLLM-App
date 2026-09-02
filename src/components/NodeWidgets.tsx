@@ -5,27 +5,13 @@ import { listen } from '@tauri-apps/api/event';
 import en from '../locales/en.json';
 import { MemoryPipelineWidget } from './MemoryPipelineWidget';
 import { useMemory } from '../context/MemoryContext';
+import { OllamaIcon } from './icons/ProviderIcons';
 
 const InfoIconSVG = (props: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="-50 -50 590 590" fill="currentColor" {...props}>
     <path d="M245.148,0C109.967,0,0.009,109.98,0.009,245.162c0,135.182,109.958,245.156,245.139,245.156 c135.186,0,245.162-109.978,245.162-245.156C490.31,109.98,380.333,0,245.148,0z M245.148,438.415 c-106.555,0-193.234-86.698-193.234-193.253c0-106.555,86.68-193.258,193.234-193.258c106.559,0,193.258,86.703,193.258,193.258 C438.406,351.717,351.706,438.415,245.148,438.415z"/>
     <path d="M270.036,221.352h-49.771c-8.351,0-15.131,6.78-15.131,15.118v147.566c0,8.352,6.78,15.119,15.131,15.119h49.771 c8.351,0,15.131-6.77,15.131-15.119V236.471C285.167,228.133,278.387,221.352,270.036,221.352z"/>
     <path d="M245.148,91.168c-24.48,0-44.336,19.855-44.336,44.336c0,24.484,19.855,44.34,44.336,44.34 c24.485,0,44.342-19.855,44.342-44.34C289.489,111.023,269.634,91.168,245.148,91.168z"/>
-  </svg>
-);
-
-const CpuIconSVG = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-    <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
-    <rect x="9" y="9" width="6" height="6"></rect>
-    <line x1="9" y1="1" x2="9" y2="4"></line>
-    <line x1="15" y1="1" x2="15" y2="4"></line>
-    <line x1="9" y1="20" x2="9" y2="23"></line>
-    <line x1="15" y1="20" x2="15" y2="23"></line>
-    <line x1="20" y1="9" x2="23" y2="9"></line>
-    <line x1="20" y1="14" x2="23" y2="14"></line>
-    <line x1="1" y1="9" x2="4" y2="9"></line>
-    <line x1="1" y1="14" x2="4" y2="14"></line>
   </svg>
 );
 
@@ -153,8 +139,8 @@ export const CopyableField = ({
       <div
         style={{
           display: 'flex',
-          backgroundColor: 'var(--zen-surface)',
-          border: '1px solid var(--zen-border)', 
+          backgroundColor: 'var(--zen-surface-hover)',
+          border: '1px solid var(--zen-border-input)', 
           borderRadius: '12px',
           overflow: 'hidden',
           padding: '2px 4px 2px 8px',
@@ -184,7 +170,7 @@ export const CopyableField = ({
             handleCopy();
           }}
           style={{
-            backgroundColor: copied ? '#10B981' : 'var(--zen-surface-hover)',
+            backgroundColor: copied ? '#10B981' : 'var(--zen-surface)',
             color: copied ? '#FFFFFF' : 'var(--zen-text)',
             padding: '4px 10px',
             fontSize: '0.65rem',
@@ -198,12 +184,12 @@ export const CopyableField = ({
           }}
           onMouseEnter={(e) => {
             if (!copied) {
-              e.currentTarget.style.backgroundColor = 'var(--zen-border)';
+              e.currentTarget.style.backgroundColor = 'var(--zen-surface-secondary)';
             }
           }}
           onMouseLeave={(e) => {
             if (!copied) {
-              e.currentTarget.style.backgroundColor = 'var(--zen-surface-hover)';
+              e.currentTarget.style.backgroundColor = 'var(--zen-surface)';
             }
           }}
         >
@@ -239,8 +225,8 @@ export const InfoField = ({
       <div
         style={{
           display: 'flex',
-          backgroundColor: 'var(--zen-surface)',
-          border: '1px solid var(--zen-border)', 
+          backgroundColor: 'var(--zen-surface-hover)',
+          border: '1px solid var(--zen-border-input)', 
           borderRadius: '12px',
           overflow: 'hidden',
           padding: '8px 12px',
@@ -336,11 +322,15 @@ export const SettingsToggle = ({
 export const HardwareNode = ({ 
   isGenerating = false,
   label = en.routingGraph.nodes.ollamaLocal.label || 'Ollama',
-  subheader = (en.routingGraph.nodes.ollamaLocal as any).subheader || 'Open source'
+  subheader = (en.routingGraph.nodes.ollamaLocal as any).subheader || 'Open source',
+  icon,
+  isSelected = false
 }: { 
   isGenerating?: boolean;
   label?: string;
   subheader?: string;
+  icon?: React.ReactNode;
+  isSelected?: boolean;
 }) => {
   const memory = useMemory();
   const memoryRef = useRef(memory);
@@ -478,13 +468,13 @@ export const HardwareNode = ({
 
   return (
     <>
-      <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', boxSizing: 'border-box' }}>
         {/* Header */}
         <div 
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--zen-border)', padding: '10px 14px', backgroundColor: 'var(--zen-surface-header)' }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: 'none', padding: '10px 14px', backgroundColor: isSelected ? 'var(--zen-surface-header-active)' : 'var(--zen-surface-header)' }}
         >
           <div id="local-hardware-heading" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <CpuIconSVG />
+            {icon ?? <OllamaIcon size={18} />}
             <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
               <span style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--zen-text)', letterSpacing: '0.02em' }}>
                 {label}
@@ -511,12 +501,10 @@ export const HardwareNode = ({
               style={{
                 cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: 'var(--zen-text)', transition: 'all 0.15s ease',
+                color: 'var(--zen-text)',
                 padding: '4px', borderRadius: '9999px',
                 opacity: 0.8
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.backgroundColor = 'var(--zen-surface-hover)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.8'; e.currentTarget.style.backgroundColor = 'transparent'; }}
             >
               <InfoIconSVG width="14" height="14" style={{ display: 'block' }} />
             </div>
@@ -554,11 +542,11 @@ export const HardwareNode = ({
         >
           <div 
             data-testid="hardware-telemetry-panel"
-            style={{ width: '440px', backgroundColor: '#FFFFFF', border: '1px solid var(--zen-border)', borderRadius: '20px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: '0 20px 40px rgba(0, 0, 0, 0.08)', maxHeight: '90vh', overflowY: 'auto' }} 
+            style={{ width: '440px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '20px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: 'var(--zen-shadow-modal)', maxHeight: '90vh', overflowY: 'auto' }} 
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--zen-border)', paddingBottom: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: 'none', paddingBottom: '12px' }}>
               <span style={{ fontWeight: 700, color: 'var(--zen-text)', fontSize: '1rem', letterSpacing: '-0.01em' }}>
                 {en.routingGraph.hardwareTelemetryWidget.title}
               </span>
@@ -567,7 +555,7 @@ export const HardwareNode = ({
 
             {/* Average Throughput Metric Card */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--zen-surface-secondary)', padding: '12px 16px', borderRadius: '14px', border: '1px solid var(--zen-border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--zen-surface-secondary)', padding: '12px 16px', borderRadius: '14px', border: 'none' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--zen-text)' }}>
                     {en.routingGraph.hardwareTelemetryWidget.avgThroughput}
@@ -613,7 +601,7 @@ export const HardwareNode = ({
                 data-testid="benchmark-panel"
                 style={{
                   backgroundColor: 'var(--zen-surface-secondary)',
-                  border: '1px solid var(--zen-border)',
+                  border: 'none',
                   borderRadius: '14px',
                   padding: '14px',
                   display: 'flex',
@@ -633,7 +621,7 @@ export const HardwareNode = ({
                 </p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--zen-surface)', borderRadius: '10px', border: '1px solid var(--zen-border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--zen-surface)', borderRadius: '10px', border: 'none' }}>
                     <span style={{ fontWeight: 500, color: 'var(--zen-text)', fontSize: '0.75rem' }}>
                       {en.routingGraph.hardwareTelemetryWidget.benchmarkSonnet}
                     </span>
@@ -642,7 +630,7 @@ export const HardwareNode = ({
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--zen-surface)', borderRadius: '10px', border: '1px solid var(--zen-border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--zen-surface)', borderRadius: '10px', border: 'none' }}>
                     <span style={{ fontWeight: 500, color: 'var(--zen-text)', fontSize: '0.75rem' }}>
                       {en.routingGraph.hardwareTelemetryWidget.benchmarkGeminiFlash}
                     </span>
@@ -651,7 +639,7 @@ export const HardwareNode = ({
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--zen-surface)', borderRadius: '10px', border: '1px solid var(--zen-border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--zen-surface)', borderRadius: '10px', border: 'none' }}>
                     <span style={{ fontWeight: 500, color: 'var(--zen-text)', fontSize: '0.75rem' }}>
                       {en.routingGraph.hardwareTelemetryWidget.benchmarkHaiku}
                     </span>
@@ -660,7 +648,7 @@ export const HardwareNode = ({
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--zen-surface)', borderRadius: '10px', border: '1px solid var(--zen-border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--zen-surface)', borderRadius: '10px', border: 'none' }}>
                     <span style={{ fontWeight: 500, color: 'var(--zen-text)', fontSize: '0.75rem' }}>
                       {en.routingGraph.hardwareTelemetryWidget.benchmarkLocalGpu}
                     </span>
@@ -669,7 +657,7 @@ export const HardwareNode = ({
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--zen-surface)', borderRadius: '10px', border: '1px solid var(--zen-border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--zen-surface)', borderRadius: '10px', border: 'none' }}>
                     <span style={{ fontWeight: 500, color: 'var(--zen-text)', fontSize: '0.75rem' }}>
                       {en.routingGraph.hardwareTelemetryWidget.benchmarkLocalCpu}
                     </span>
@@ -734,13 +722,15 @@ interface CloudConnectNodeProps {
   isActive?: boolean;
   label?: string;
   targetHost?: string;
+  icon?: React.ReactNode;
 }
-export const CloudConnectNode = ({ isActive = false, label = 'External Cloud', targetHost = 'None' }: CloudConnectNodeProps) => {
+export const CloudConnectNode = ({ isActive = false, label = 'External Cloud', targetHost = 'None', icon }: CloudConnectNodeProps) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--zen-border)', padding: '10px 14px', backgroundColor: 'var(--zen-surface)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: 'none', padding: '10px 14px', backgroundColor: 'var(--zen-surface)' }}>
         <div style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--zen-text)', display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {icon}
           {label.toUpperCase()}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -751,12 +741,9 @@ export const CloudConnectNode = ({ isActive = false, label = 'External Cloud', t
               alignItems: 'center',
               justifyContent: 'center',
               color: 'var(--zen-text-secondary)',
-              transition: 'all 0.15s ease',
               padding: '4px',
               borderRadius: '9999px'
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--zen-text)'; e.currentTarget.style.backgroundColor = 'var(--zen-surface-hover)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--zen-text-secondary)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
             <InfoIconSVG width="14" height="14" style={{ display: 'block' }} />
           </div>

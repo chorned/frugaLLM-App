@@ -133,4 +133,40 @@ describe('useCanvasLogic Hook', () => {
     // Assert: Click was suppressed due to drag threshold
     expect(onCanvasClick).not.toHaveBeenCalled();
   });
+
+  it('updates containerSize when window resize event is triggered', () => {
+    // Arrange
+    const ref = { current: null };
+    const { result } = renderHook(() => useCanvasLogic(ref));
+
+    // Act: change window dimensions and dispatch resize
+    window.innerWidth = 1440;
+    window.innerHeight = 900;
+    act(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+
+    // Assert: updated container dimensions
+    expect(result.current.containerSize).toEqual({ width: 1440, height: 900 });
+
+    // Reset
+    window.innerWidth = 1024;
+    window.innerHeight = 768;
+  });
+
+  it('attaches ResizeObserver when canvasRef element mounts after initial render', () => {
+    // Arrange: initially null ref (simulating TerminalLoader screen)
+    const ref: { current: HTMLDivElement | null } = { current: null };
+    const { rerender } = renderHook(() => useCanvasLogic(ref));
+
+    expect(observeSpy).not.toHaveBeenCalled();
+
+    // Act: element mounts later
+    const lateElement = document.createElement('div');
+    ref.current = lateElement;
+    rerender();
+
+    // Assert: ResizeObserver attaches to the newly mounted element
+    expect(observeSpy).toHaveBeenCalledWith(lateElement);
+  });
 });

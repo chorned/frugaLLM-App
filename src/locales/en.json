@@ -7,7 +7,7 @@
         "description": "Your private, local brain! Ollama runs lightweight open-source models right on your machine, keeping your data entirely private and free from cloud costs."
       },
       "openRouter": {
-        "label": "Openrouter",
+        "label": "OpenRouter",
         "subheader": "Stripe (cloud)",
         "description": ""
       },
@@ -315,7 +315,9 @@
   },
   "header": {
     "brandName": "FrugaLLM",
-    "tagline": "Local-First AI Proxy & Router"
+    "toggleTheme": "Toggle theme",
+    "themeLight": "Switch to light theme",
+    "themeDark": "Switch to dark theme"
   },
   "footer": {
     "documentation": "Documentation",

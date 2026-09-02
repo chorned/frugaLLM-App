@@ -10,22 +10,73 @@ export function useCanvasLogic(
   const [isDragging, setIsDragging] = useState(false);
   const lastPos = useRef({ x: 0, y: 0 });
   const dragDistance = useRef(0);
-  const [containerSize, setContainerSize] = useState({ width: 1024, height: 768 });
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>(() => {
+    if (typeof window !== 'undefined' && window.innerWidth > 0 && window.innerHeight > 0) {
+      return { width: window.innerWidth, height: window.innerHeight };
+    }
+    return { width: 1024, height: 768 };
+  });
 
-  // Resize observer to auto-scale canvas elements
+  const [canvasElement, setCanvasElement] = useState<HTMLDivElement | null>(canvasRef.current);
+
+  // Sync canvasElement whenever canvasRef.current attaches or updates
   useEffect(() => {
-    if (!canvasRef.current) return;
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
+    if (canvasRef.current !== canvasElement) {
+      setCanvasElement(canvasRef.current);
+    }
+  });
+
+  // Resize observer and window resize listener to dynamically update container dimensions
+  useEffect(() => {
+    const target = canvasElement || canvasRef.current;
+
+    const updateDimensions = () => {
+      if (target) {
+        const rect = target.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          setContainerSize({
+            width: rect.width,
+            height: rect.height
+          });
+          return;
+        }
+      }
+      if (typeof window !== 'undefined' && window.innerWidth > 0 && window.innerHeight > 0) {
         setContainerSize({
-          width: entry.contentRect.width,
-          height: entry.contentRect.height
+          width: window.innerWidth,
+          height: window.innerHeight
         });
       }
-    });
-    ro.observe(canvasRef.current);
-    return () => ro.disconnect();
-  }, [canvasRef]);
+    };
+
+    updateDimensions();
+
+    const handleWindowResize = () => {
+      updateDimensions();
+    };
+
+    window.addEventListener('resize', handleWindowResize);
+
+    let ro: ResizeObserver | null = null;
+    if (target && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+            setContainerSize({
+              width: entry.contentRect.width,
+              height: entry.contentRect.height
+            });
+          }
+        }
+      });
+      ro.observe(target);
+    }
+
+    return () => {
+      window.removeEventListener('resize', handleWindowResize);
+      ro?.disconnect();
+    };
+  }, [canvasElement, canvasRef]);
 
   const handleCanvasMouseDown = (e: any) => {
     // Disabled dragging / panning
