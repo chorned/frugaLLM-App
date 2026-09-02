@@ -1,7 +1,7 @@
+use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use lazy_static::lazy_static;
 
 lazy_static! {
     pub static ref MODEL_REGISTRY: ModelIntelligenceRegistry = ModelIntelligenceRegistry::new();
@@ -21,7 +21,8 @@ impl ModelIntelligenceRegistry {
     #[allow(dead_code)]
     pub fn new() -> Self {
         let json_str = include_str!(concat!(env!("OUT_DIR"), "/model_db.json"));
-        let mut db: HashMap<String, ModelScore> = serde_json::from_str(json_str).unwrap_or_default();
+        let mut db: HashMap<String, ModelScore> =
+            serde_json::from_str(json_str).unwrap_or_default();
 
         // Seed default foundational intelligence benchmarks to guarantee baseline scores
         let seed_models = [
@@ -55,7 +56,7 @@ impl ModelIntelligenceRegistry {
 
     pub fn normalize_model_id(raw_id: &str) -> String {
         let mut id = raw_id.to_lowercase();
-        
+
         // Handle Google AI Studio prefix (models/...)
         if let Some(stripped) = id.strip_prefix("models/") {
             id = format!("google/{}", stripped);
@@ -65,7 +66,7 @@ impl ModelIntelligenceRegistry {
         if let Some(base) = id.split(':').next() {
             id = base.to_string();
         }
-        
+
         id
     }
 
@@ -73,7 +74,7 @@ impl ModelIntelligenceRegistry {
         let lookup_id = model_id.trim_end_matches(":free");
         let normalized = Self::normalize_model_id(lookup_id);
         let guard = self.scores.read().unwrap();
-        
+
         // 1. Exact match on normalized ID
         if let Some(s) = guard.get(&normalized) {
             return s.score;
@@ -96,7 +97,9 @@ impl ModelIntelligenceRegistry {
         for (k, v) in guard.iter() {
             let k_norm = Self::normalize_model_id(k);
             if k_norm.starts_with(&normalized) {
-                if k_norm.len() == normalized.len() || k_norm.as_bytes().get(normalized.len()) == Some(&b'-') {
+                if k_norm.len() == normalized.len()
+                    || k_norm.as_bytes().get(normalized.len()) == Some(&b'-')
+                {
                     return v.score;
                 }
             }
@@ -106,12 +109,14 @@ impl ModelIntelligenceRegistry {
         for (k, v) in guard.iter() {
             let k_norm = Self::normalize_model_id(k);
             if normalized.starts_with(&k_norm) {
-                if normalized.len() == k_norm.len() || normalized.as_bytes().get(k_norm.len()) == Some(&b'-') {
+                if normalized.len() == k_norm.len()
+                    || normalized.as_bytes().get(k_norm.len()) == Some(&b'-')
+                {
                     return v.score;
                 }
             }
         }
-        
+
         // Return 0.0 for unbenchmarked models so they fall below proven models
         0.0
     }
@@ -124,7 +129,9 @@ impl ModelIntelligenceRegistry {
         models.sort_by(|a, b| {
             let score_a = self.get_score(id_extractor(a));
             let score_b = self.get_score(id_extractor(b));
-            score_b.partial_cmp(&score_a).unwrap_or(std::cmp::Ordering::Equal)
+            score_b
+                .partial_cmp(&score_a)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
     }
 
@@ -168,7 +175,9 @@ mod tests {
             "google/gemma-4-31b-it"
         );
         assert_eq!(
-            ModelIntelligenceRegistry::normalize_model_id("meta-llama/llama-3.3-70b-instruct:nitro"),
+            ModelIntelligenceRegistry::normalize_model_id(
+                "meta-llama/llama-3.3-70b-instruct:nitro"
+            ),
             "meta-llama/llama-3.3-70b-instruct"
         );
     }
@@ -180,10 +189,22 @@ mod tests {
         };
 
         let mut test_scores = HashMap::new();
-        test_scores.insert("anthropic/claude-3.5-sonnet".to_string(), ModelScore { score: 92.5 });
-        test_scores.insert("google/gemma-4-26b-a4b-it".to_string(), ModelScore { score: 78.4 });
-        test_scores.insert("google/gemma-4-31b-it".to_string(), ModelScore { score: 81.2 });
-        test_scores.insert("minimax/minimax-m3-20260531".to_string(), ModelScore { score: 85.0 });
+        test_scores.insert(
+            "anthropic/claude-3.5-sonnet".to_string(),
+            ModelScore { score: 92.5 },
+        );
+        test_scores.insert(
+            "google/gemma-4-26b-a4b-it".to_string(),
+            ModelScore { score: 78.4 },
+        );
+        test_scores.insert(
+            "google/gemma-4-31b-it".to_string(),
+            ModelScore { score: 81.2 },
+        );
+        test_scores.insert(
+            "minimax/minimax-m3-20260531".to_string(),
+            ModelScore { score: 85.0 },
+        );
         registry.update_scores(test_scores);
 
         // Exact match with suffix stripped
@@ -213,7 +234,10 @@ mod tests {
         let mut models = vec!["model-low", "model-high", "model-mid", "model-unknown"];
         registry.sort_models_by_intelligence(&mut models, |m| m);
 
-        assert_eq!(models, vec!["model-high", "model-mid", "model-low", "model-unknown"]);
+        assert_eq!(
+            models,
+            vec!["model-high", "model-mid", "model-low", "model-unknown"]
+        );
     }
 
     #[test]
@@ -245,8 +269,14 @@ mod tests {
             scores: Arc::new(RwLock::new(HashMap::new())),
         };
         let mut base_scores = HashMap::new();
-        base_scores.insert("google/gemma-4-31b-it".to_string(), ModelScore { score: 63.2 });
-        base_scores.insert("google/gemma-4-26b-a4b-it".to_string(), ModelScore { score: 56.2 });
+        base_scores.insert(
+            "google/gemma-4-31b-it".to_string(),
+            ModelScore { score: 63.2 },
+        );
+        base_scores.insert(
+            "google/gemma-4-26b-a4b-it".to_string(),
+            ModelScore { score: 56.2 },
+        );
         registry.update_scores(base_scores);
 
         let models = openrouter_json["data"].as_array().unwrap();
@@ -265,10 +295,18 @@ mod tests {
         assert_eq!(mapped_results[1].0, "google/gemma-4-26b-a4b-it:free");
 
         // 2. Assert that attached scores are strictly > 0.0, mapped directly from the base models
-        assert!(mapped_results[0].1 > 0.0, "Score for {} was 0.0, expected > 0.0", mapped_results[0].0);
+        assert!(
+            mapped_results[0].1 > 0.0,
+            "Score for {} was 0.0, expected > 0.0",
+            mapped_results[0].0
+        );
         assert_eq!(mapped_results[0].1, 63.2);
 
-        assert!(mapped_results[1].1 > 0.0, "Score for {} was 0.0, expected > 0.0", mapped_results[1].0);
+        assert!(
+            mapped_results[1].1 > 0.0,
+            "Score for {} was 0.0, expected > 0.0",
+            mapped_results[1].0
+        );
         assert_eq!(mapped_results[1].1, 56.2);
     }
 }
