@@ -3,6 +3,7 @@ import { ChevronUp, ChevronDown, ArrowUpToLine, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
+import en from '../locales/en.json';
 
 export interface CloudModel {
   model: string;
@@ -16,14 +17,16 @@ export const CloudRoutingPanel = () => {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const t = en.routingGraph?.cloudRoutingPanel;
+
   const refreshChain = async () => {
     setLoading(true);
     setErrors({});
     try {
       const configRes: any = await invoke('get_frugallm_config');
-      setOverrides(configRes.manual_model_overrides || []);
+      setOverrides(configRes?.manual_model_overrides || []);
       const res: any = await invoke('refresh_routing_chain');
-      const filteredRes = res.filter((m: CloudModel) => !m.model.includes('computer-use'));
+      const filteredRes = (res || []).filter((m: CloudModel) => !m?.model?.includes('computer-use'));
       setChain(filteredRes);
     } catch (err) {
       console.error('Failed to refresh routing chain:', err);
@@ -45,10 +48,10 @@ export const CloudRoutingPanel = () => {
       
       try {
         const res: any = await invoke('get_frugallm_config');
-        setOverrides(res.manual_model_overrides || []);
+        setOverrides(res?.manual_model_overrides || []);
         const cRes: any = await invoke('get_routing_chain');
-        if (cRes && cRes.length > 0) {
-          const filteredCRes = cRes.filter((m: CloudModel) => !m.model.includes('computer-use'));
+        if (Array.isArray(cRes) && cRes.length > 0) {
+          const filteredCRes = cRes.filter((m: CloudModel) => !m?.model?.includes('computer-use'));
           setChain(filteredCRes);
         }
         refreshChain();
@@ -119,7 +122,7 @@ export const CloudRoutingPanel = () => {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
         <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)' }}>
-          GLOBAL ROUTING POOL
+          {t?.title || 'GLOBAL ROUTING POOL'}
         </div>
         <button 
           onClick={refreshChain} 
@@ -135,14 +138,14 @@ export const CloudRoutingPanel = () => {
             cursor: loading ? 'wait' : 'pointer'
           }}
         >
-          {loading ? 'REFRESHING...' : 'REFRESH'}
+          {loading ? (t?.refreshing || 'REFRESHING...') : (t?.refresh || 'REFRESH')}
         </button>
       </div>
       
       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
         {chain.length === 0 && !loading && (
           <div style={{ fontSize: '0.75rem', color: '#6b7280', textAlign: 'center', padding: '8px' }}>
-            No models found. Please configure a provider.
+            {t?.noModels || 'No models found. Please configure a provider.'}
           </div>
         )}
         <AnimatePresence>
@@ -175,7 +178,7 @@ export const CloudRoutingPanel = () => {
                 <button 
                   onClick={() => handleMove(index, 0)}
                   disabled={index === 0}
-                  title="Rank Top"
+                  title={t?.rankTop || "Rank Top"}
                   style={{ background: 'transparent', border: 'none', cursor: index === 0 ? 'default' : 'pointer', opacity: index === 0 ? 0.2 : 0.7, padding: '2px', display: 'flex' }}
                   onMouseEnter={(e) => { if(index !== 0) e.currentTarget.style.opacity = '1'; }}
                   onMouseLeave={(e) => { if(index !== 0) e.currentTarget.style.opacity = '0.7'; }}
@@ -186,7 +189,7 @@ export const CloudRoutingPanel = () => {
                   <button 
                     onClick={() => handleMove(index, index - 1)}
                     disabled={index === 0}
-                    title="Rank Up"
+                    title={t?.rankUp || "Rank Up"}
                     style={{ background: 'transparent', border: 'none', cursor: index === 0 ? 'default' : 'pointer', opacity: index === 0 ? 0.2 : 0.7, padding: '2px', display: 'flex' }}
                     onMouseEnter={(e) => { if(index !== 0) e.currentTarget.style.opacity = '1'; }}
                     onMouseLeave={(e) => { if(index !== 0) e.currentTarget.style.opacity = '0.7'; }}
@@ -196,7 +199,7 @@ export const CloudRoutingPanel = () => {
                   <button 
                     onClick={() => handleMove(index, index + 1)}
                     disabled={index === chain.length - 1}
-                    title="Rank Down"
+                    title={t?.rankDown || "Rank Down"}
                     style={{ background: 'transparent', border: 'none', cursor: index === chain.length - 1 ? 'default' : 'pointer', opacity: index === chain.length - 1 ? 0.2 : 0.7, padding: '2px', display: 'flex' }}
                     onMouseEnter={(e) => { if(index !== chain.length - 1) e.currentTarget.style.opacity = '1'; }}
                     onMouseLeave={(e) => { if(index !== chain.length - 1) e.currentTarget.style.opacity = '0.7'; }}
@@ -228,12 +231,12 @@ export const CloudRoutingPanel = () => {
                   </span>
                   {item.iq !== undefined && (
                     <span style={{ fontSize: '0.65rem', color: '#fff', backgroundColor: 'var(--zen-accent)', padding: '2px 6px', borderRadius: '12px', fontWeight: 700, letterSpacing: '0.05em', boxShadow: '0 0 8px rgba(139, 92, 246, 0.4)' }}>
-                      ⚡ SCORE: {item.iq === 0 ? "N/A" : item.iq}
+                      {t?.scorePrefix || '⚡ SCORE: '}{item.iq === 0 ? "N/A" : item.iq}
                     </span>
                   )}
                   {errors[item.model] && (
                     <span style={{ fontSize: '0.65rem', color: '#fff', backgroundColor: '#ef4444', padding: '2px 6px', borderRadius: '12px', fontWeight: 700, letterSpacing: '0.05em', boxShadow: '0 0 8px rgba(239, 68, 68, 0.4)' }}>
-                      SKIPPED: {errors[item.model].includes("429") ? "429 (QUOTA)" : "ERROR"}
+                      {errors[item.model].includes("429") ? (t?.skippedQuota || "SKIPPED: 429 (QUOTA)") : (t?.skippedError || "SKIPPED: ERROR")}
                     </span>
                   )}
                 </div>
@@ -243,7 +246,7 @@ export const CloudRoutingPanel = () => {
                 {isPinned && (
                   <button 
                     onClick={(e) => unpinModel(e, item.model)}
-                    title="Cancel Rank (Drop to Dynamic)"
+                    title={t?.resetRankTitle || "Reset Rank (Drop to Dynamic)"}
                     style={{ 
                       display: 'flex',
                       alignItems: 'center',
@@ -264,12 +267,12 @@ export const CloudRoutingPanel = () => {
                     onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.opacity = '0.8'; }}
                   >
                     <X size={12} color="var(--zen-text)" />
-                    CANCEL RANK
+                    {t?.resetButton || "Reset"}
                   </button>
                 )}
                 {isActive && !isPinned && (
                   <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--zen-accent)', pointerEvents: 'none' }}>
-                    ACTIVE
+                    {t?.active || "ACTIVE"}
                   </span>
                 )}
               </div>

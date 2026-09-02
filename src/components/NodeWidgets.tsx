@@ -332,7 +332,7 @@ export const SettingsToggle = ({
 export const HardwareNode = ({ 
   isGenerating = false,
   label = en.routingGraph.nodes.ollamaLocal.label || 'Ollama',
-  subheader = (en.routingGraph.nodes.ollamaLocal as any).subheader || 'Open source (local)'
+  subheader = (en.routingGraph.nodes.ollamaLocal as any).subheader || 'Open source'
 }: { 
   isGenerating?: boolean;
   label?: string;
@@ -537,7 +537,6 @@ export const HardwareNode = ({
               {memUsed} / {memTotal} GB
             </span>
           </div>
-          <MemoryPipelineWidget compact segments={telemetry?.segments} hardwareProfile={effectiveProfile} />
         </div>
       </div>
 

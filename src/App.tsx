@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { TerminalLoader } from './components/TerminalLoader';
 import { useCanvasLogic } from './hooks/useCanvasLogic';
 import { enable as enableAutostart, disable as disableAutostart, isEnabled as isAutostartEnabled } from '@tauri-apps/plugin-autostart';
+import { Store } from '@tauri-apps/plugin-store';
+import { Settings } from './components/Settings';
 import { invoke } from '@tauri-apps/api/core';
 import confetti from 'canvas-confetti';
 import { listen } from '@tauri-apps/api/event';
@@ -22,6 +24,7 @@ import { useOnboarding } from './hooks/useOnboarding';
 import { OnboardingDecision } from './components/OnboardingDecision';
 import { OnboardingOverlay } from './components/OnboardingOverlay';
 import { PortConflictBanner } from './components/PortConflictBanner';
+import { ExitConfirmationModal } from './components/ExitConfirmationModal';
 import en from './locales/en.json';
 import { Eye, EyeOff, Copy, Check } from 'lucide-react';
 import { loadOnnxClassifier, clearOnnxCache } from './services/onnxGateway';
@@ -82,7 +85,7 @@ const initialNodes: AppNode[] = [
     x: 50, y: 50,
     data: { 
       label: 'Ollama',
-      subheader: 'Open source (local)', 
+      subheader: 'Open source', 
       description: 'Your private, local brain! Ollama runs lightweight open-source models right on your machine, keeping your data entirely private and free from cloud costs.',
       ip: '127.0.0.1', 
       port: '11434',
@@ -94,7 +97,7 @@ const initialNodes: AppNode[] = [
     x: 750, y: 50,
     data: {
       label: 'Openrouter',
-      subheader: 'Stripe',
+      subheader: 'Stripe (cloud)',
       description: '',
       ip: 'openrouter.ai',
       status: 'needs_activation'
@@ -105,7 +108,7 @@ const initialNodes: AppNode[] = [
     x: 400, y: 50,
     data: {
       label: 'AI Studio',
-      subheader: 'Google',
+      subheader: 'Google (cloud)',
       description: '',
       ip: 'generativelanguage.googleapis.com',
       status: 'needs_activation'
@@ -271,7 +274,7 @@ const Tooltip = ({ text }: { text: string }) => {
   );
 };
 
-const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeInstalled, isOllamaInstalled, isToolGatewayInstalled, detectedVram, setDetectedVram, hasActiveBackend, handleInitializeHermes, handleOpenHermes, handleUninstallHermes, handleInitializeOpenCode, handleOpenOpenCode, handleUninstallOpenCode, handleInitializeOllama, handleOpenOllama, handleUninstallOllama, handleInstallToolGateway, handleUninstallToolGateway, handleDisconnectOpenRouter, handleDisconnectGoogle, frugalConfig, handleOpenHermesDesktop, handleOpenHermesWeb, handleOpenOpenCodeWeb, activeProcesses, handleKillProcess, setFrugalConfig, latestTelemetry, hardwareProfile, portConflict }: any) => {
+const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeInstalled, isOllamaInstalled, isToolGatewayInstalled, detectedVram, setDetectedVram, hasActiveBackend, handleInitializeHermes, handleOpenHermes, handleUninstallHermes, handleInitializeOpenCode, handleOpenOpenCode, handleUninstallOpenCode, handleInitializeOllama, handleOpenOllama, handleUninstallOllama, handleInstallToolGateway, handleUninstallToolGateway, handleDisconnectOpenRouter, handleDisconnectGoogle, frugalConfig, handleOpenHermesGateway, handleOpenHermesDesktop, handleOpenHermesWeb, handleOpenOpenCodeWeb, activeProcesses, handleKillProcess, setFrugalConfig, latestTelemetry, hardwareProfile, portConflict }: any) => {
   const memory = useMemory();
   const [confirmUninstall, setConfirmUninstall] = useState<string | null>(null);
   const [showToolGatewayPrompt, setShowToolGatewayPrompt] = useState<'install' | 'uninstall' | null>(null);
@@ -279,6 +282,8 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
   const [showPassword, setShowPassword] = useState(false);
   const [passwordCopied, setPasswordCopied] = useState(false);
   const [enablePassword, setEnablePassword] = useState(false);
+  const [initialData, setInitialData] = useState<any>(null);
+  const [initialEnablePassword, setInitialEnablePassword] = useState<boolean>(false);
 
   useEffect(() => {
     const vramNum = Number(detectedVram) || 0;
@@ -315,18 +320,29 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
     if (node.id === 'node-frugallm') {
       const hasPass = Boolean(frugalConfig?.api_password);
       setEnablePassword(hasPass);
+      setInitialEnablePassword(hasPass);
       setShowPassword(false);
       setPasswordCopied(false);
-      setFormData(prev => ({
-        ...prev,
+      const initFrugal = {
         port: frugalConfig?.port?.toString() || '0',
         bind_all_interfaces: frugalConfig?.bind_all_interfaces || false,
         api_password: frugalConfig?.api_password || '',
-        start_minimized: frugalConfig?.start_minimized || false
+        start_minimized: frugalConfig?.start_minimized || false,
+        start_on_login: false,
+      };
+      setFormData(prev => ({
+        ...prev,
+        ...initFrugal
       }));
-      isAutostartEnabled().then(enabled => setFormData(prev => ({ ...prev, start_on_login: enabled })));
+      setInitialData(initFrugal);
+      isAutostartEnabled()
+        .then(enabled => {
+          setFormData(prev => ({ ...prev, start_on_login: enabled }));
+          setInitialData((prevInit: any) => ({ ...(prevInit || initFrugal), start_on_login: enabled }));
+        })
+        .catch(() => {});
     } else {
-      setFormData({ 
+      const initOther = { 
         ip: node.data.ip || '', 
         port: node.data.port || '', 
         status: node.data.status || 'active',
@@ -343,17 +359,79 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
         opencode_workspace: frugalConfig?.opencode_workspace || '~/Opencode',
         start_on_login: false,
         start_minimized: frugalConfig?.start_minimized || false
-      });
+      };
+      setFormData(initOther);
+      setInitialData(initOther);
     }
   }, [node, frugalConfig]);
 
+  const hasChanges = (() => {
+    if (!initialData) return false;
+
+    if (node.id === 'node-frugallm') {
+      const portChanged = String(formData.port || '') !== String(initialData.port || '');
+      const bindChanged = Boolean(formData.bind_all_interfaces) !== Boolean(initialData.bind_all_interfaces);
+      const enablePassChanged = enablePassword !== initialEnablePassword;
+      const passChanged = enablePassword ? (formData.api_password || '') !== (initialData.api_password || '') : false;
+      const autostartChanged = Boolean(formData.start_on_login) !== Boolean(initialData.start_on_login);
+      const minimizedChanged = Boolean(formData.start_minimized) !== Boolean(initialData.start_minimized);
+      return portChanged || bindChanged || enablePassChanged || passChanged || autostartChanged || minimizedChanged;
+    }
+
+    if (node.id === 'node-openrouter') {
+      return Boolean(formData.apiKey && formData.apiKey.trim().length > 0);
+    }
+
+    if (node.id === 'node-google') {
+      return Boolean(formData.googleApiKey && formData.googleApiKey.trim().length > 0);
+    }
+
+    if (node.id === 'node-hermes') {
+      if (!isHermesInstalled) return false;
+      return (formData.hermes_workspace || '') !== (initialData.hermes_workspace || '');
+    }
+
+    if (node.id === 'node-opencode') {
+      if (!isOpenCodeInstalled) return false;
+      return (formData.opencode_workspace || '') !== (initialData.opencode_workspace || '');
+    }
+
+    if (node.data?.isAgent) {
+      return (
+        (formData.schemaPath || '') !== (initialData.schemaPath || '') ||
+        (formData.cwd || '') !== (initialData.cwd || '') ||
+        (formData.bin || '') !== (initialData.bin || '') ||
+        (formData.extraArgs || '') !== (initialData.extraArgs || '') ||
+        (formData.prompt || '') !== (initialData.prompt || '')
+      );
+    }
+
+    // Generic / other nodes (e.g. node-ollama)
+    return (
+      (formData.ip || '') !== (initialData.ip || '') ||
+      String(formData.port || '') !== String(initialData.port || '')
+    );
+  })();
+
   const handleChange = (e: any) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
   const handleSave = async () => {
+    if (!hasChanges) return;
     if (node.id === 'node-frugallm') {
-      if (formData.start_on_login) {
-        await enableAutostart();
-      } else {
-        await disableAutostart();
+      try {
+        if (formData.start_on_login) {
+          await enableAutostart();
+        } else {
+          await disableAutostart();
+        }
+      } catch (err) {
+        console.warn('Failed to update autostart setting:', err);
+      }
+      try {
+        const store = await Store.load('store.json');
+        await store.set('start_minimized', Boolean(formData.start_minimized));
+        await store.save();
+      } catch (err) {
+        console.warn('Failed to save start_minimized to store:', err);
       }
     }
     const dataToSave = {
@@ -361,6 +439,8 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
       api_password: enablePassword ? formData.api_password : ''
     };
     onSave(node.id, dataToSave);
+    setInitialData({ ...formData });
+    setInitialEnablePassword(enablePassword);
   };
   
   const handlePanelClick = (e: any) => e.stopPropagation();
@@ -606,6 +686,16 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
                     )}
                   </div>
 
+                  <div style={{ marginTop: '6px' }}>
+                    <Settings
+                      startOnLogin={formData.start_on_login}
+                      onStartOnLoginChange={(enabled) => setFormData(prev => ({ ...prev, start_on_login: enabled }))}
+                      startMinimized={formData.start_minimized}
+                      onStartMinimizedChange={(minimized) => setFormData(prev => ({ ...prev, start_minimized: minimized }))}
+                      showWarning={true}
+                    />
+                  </div>
+
                   <div style={{ marginTop: '4px' }}>
                     <CloudRoutingPanel />
                   </div>
@@ -614,14 +704,14 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
               {node.id === 'node-openrouter' && (
                 <div>
                   <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>API KEY <Tooltip text="Your OpenRouter API Key. This will be securely saved into your operating system's native Keychain!" /></label>
-                  <input type="password" name="apiKey" value={formData.apiKey || ''} onChange={handleChange} placeholder={node.data.status === 'active' ? "•••••••••••••••• (Key Configured)" : "sk-or-v1-..."}
+                  <input type="password" name="apiKey" value={formData.apiKey || ''} onChange={handleChange} placeholder={node.data.status === 'active' ? en.routingGraph.nodeConfigPanel.inputs.openRouterApiKey.configuredPlaceholder : en.routingGraph.nodeConfigPanel.inputs.openRouterApiKey.placeholder}
                     style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', boxShadow: 'none' }} />
                 </div>
               )}
               {node.id === 'node-google' && (
                 <div>
                   <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>API KEY <Tooltip text="Your Google AI Studio API Key. This will be securely saved into your operating system's native Keychain!" /></label>
-                  <input type="password" name="googleApiKey" value={formData.googleApiKey || ''} onChange={handleChange} placeholder={node.data.status === 'active' ? "•••••••••••••••• (Key Configured)" : "AIzaSy..."}
+                  <input type="password" name="googleApiKey" value={formData.googleApiKey || ''} onChange={handleChange} placeholder={node.data.status === 'active' ? en.routingGraph.nodeConfigPanel.inputs.googleApiKey.configuredPlaceholder : en.routingGraph.nodeConfigPanel.inputs.googleApiKey.placeholder}
                     style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', boxShadow: 'none' }} />
                 </div>
               )}
@@ -630,7 +720,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
           
         </div>
         
-        {node.data.description ? (
+        {node.data.description && node.id !== 'node-ollama' ? (
           <p style={{ fontSize: '0.75rem', color: '#4b5563', marginTop: '12px', marginBottom: '0', lineHeight: 1.35, fontFamily: 'sans-serif', borderTop: '1px dashed #d1d5db', paddingTop: '10px' }}>
             {node.data.description}
           </p>
@@ -638,13 +728,12 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
 
       {node.id === 'node-hermes' && isHermesInstalled === false && (
         <div style={{ marginTop: '10px', padding: '12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px' }}>
-          <h4 style={{ margin: '0 0 6px 0', color: 'var(--zen-text)', fontSize: '0.8rem' }}>HERMES AGENT MISSING</h4>
           {!hasActiveBackend ? (
             <p style={{ fontSize: '0.75rem', color: 'var(--zen-text)', margin: 0, fontWeight: 600 }}>Please connect an intelligence source to FrugaLLM first.</p>
           ) : (
             <button 
               onClick={(e) => { e.stopPropagation(); handleInitializeHermes(); }}
-              style={{ width: '100%', padding: '9px 12px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', border: '2px solid #9a3412', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+              style={{ width: '100%', padding: '9px 12px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
               INSTALL HERMES
             </button>
           )}
@@ -658,8 +747,8 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 700 }}>ARE YOU SURE?</span>
               <div style={{ display: 'flex', gap: '6px' }}>
-                <button onClick={(e) => { e.stopPropagation(); handleUninstallHermes(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#ef4444', color: '#FFFFFF', border: '2px solid #991b1b', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
-                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#e5e7eb', color: '#374151', border: '2px solid #9ca3af', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
+                <button onClick={(e) => { e.stopPropagation(); handleUninstallHermes(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
+                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#e5e7eb', color: '#374151', border: '1px solid var(--zen-border)', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
               </div>
             </div>
           ) : (
@@ -667,18 +756,18 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
               <div>
                 <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>WORKSPACE FOLDER</label>
                 <input type="text" name="hermes_workspace" value={formData.hermes_workspace || ''} onChange={handleChange}
-                  style={{ width: '100%', padding: '7px 10px', border: '2px solid #166534', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem' }} />
+                  style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem' }} />
               </div>
               <button 
                 onClick={(e) => { e.stopPropagation(); handleOpenHermes(); }}
-                style={{ width: '100%', padding: '9px 12px', backgroundColor: '#16a34a', color: '#FFFFFF', border: '2px solid #166534', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+                style={{ width: '100%', padding: '9px 12px', backgroundColor: '#16a34a', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
                 LAUNCH HERMES
               </button>
               <div style={{ display: 'flex', gap: '6px' }}>
                 <button 
-                  onClick={(e) => { e.stopPropagation(); handleOpenHermesDesktop(); }}
+                  onClick={(e) => { e.stopPropagation(); (handleOpenHermesDesktop || handleOpenHermesGateway)(); }}
                   style={{ flex: 1, padding: '6px 8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
-                  LAUNCH DESKTOP
+                  LAUNCH APP
                 </button>
                 <button 
                   onClick={(e) => { e.stopPropagation(); handleOpenHermesWeb(); }}
@@ -686,15 +775,30 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
                   LAUNCH WEBUI
                 </button>
               </div>
-              {['run-hermes', 'run-hermes-desktop', 'run-hermes-web'].map(mode => activeProcesses && activeProcesses[mode] && (
-                <div key={mode} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px', marginBottom: '4px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--zen-text)', fontWeight: 700, fontSize: '0.75rem' }}>
-                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#16a34a', boxShadow: '0 0 4px #16a34a' }} />
-                    {mode.replace('run-', '').toUpperCase()} ACTIVE
+              {(() => {
+                const hermesModes: { key: string; label: string; mode: string }[] = [];
+                if (activeProcesses['run-hermes-gateway'] || activeProcesses['hermes-gateway']) {
+                  hermesModes.push({ key: 'hermes-gateway', label: 'HERMES GATEWAY ACTIVE', mode: 'run-hermes-gateway' });
+                }
+                if (activeProcesses['run-hermes-desktop'] || activeProcesses['run-hermes-app']) {
+                  hermesModes.push({ key: 'hermes-desktop', label: 'HERMES APP ACTIVE', mode: 'run-hermes-desktop' });
+                }
+                if (activeProcesses['run-hermes-web'] || activeProcesses['hermes-dashboard'] || activeProcesses['hermes-web']) {
+                  hermesModes.push({ key: 'hermes-web', label: 'HERMES WEBUI ACTIVE', mode: 'run-hermes-web' });
+                }
+                if (activeProcesses['run-hermes']) {
+                  hermesModes.push({ key: 'hermes-cli', label: 'HERMES CLI ACTIVE', mode: 'run-hermes' });
+                }
+                return hermesModes.map(item => (
+                  <div key={item.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px', marginBottom: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--zen-text)', fontWeight: 700, fontSize: '0.75rem' }}>
+                      <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#16a34a', boxShadow: '0 0 4px #16a34a' }} />
+                      {item.label}
+                    </div>
+                    <button onClick={(e) => { e.stopPropagation(); handleKillProcess(item.mode); }} style={{ backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '4px', padding: '3px 6px', fontSize: '0.65rem', fontWeight: 'bold', cursor: 'pointer' }}>CLOSE</button>
                   </div>
-                  <button onClick={(e) => { e.stopPropagation(); handleKillProcess(mode); }} style={{ backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '4px', padding: '3px 6px', fontSize: '0.65rem', fontWeight: 'bold', cursor: 'pointer' }}>KILL</button>
-                </div>
-              ))}
+                ));
+              })()}
               <button 
                 onClick={(e) => { e.stopPropagation(); invoke('edit_hermes_soul').catch(console.error); }}
                 style={{ width: '100%', padding: '6px 8px', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '6px', color: '#374151', border: '1px solid #d1d5db', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
@@ -712,13 +816,12 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
 
       {node.id === 'node-opencode' && isOpenCodeInstalled === false && (
         <div style={{ marginTop: '10px', padding: '12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px' }}>
-          <h4 style={{ margin: '0 0 6px 0', color: 'var(--zen-text)', fontSize: '0.8rem' }}>OPENCODE AGENT MISSING</h4>
           {!hasActiveBackend ? (
             <p style={{ fontSize: '0.75rem', color: 'var(--zen-text)', margin: 0, fontWeight: 600 }}>Please connect an intelligence source to FrugaLLM first.</p>
           ) : (
             <button 
               onClick={(e) => { e.stopPropagation(); handleInitializeOpenCode(); }}
-              style={{ width: '100%', padding: '9px 12px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', border: '2px solid #9a3412', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+              style={{ width: '100%', padding: '9px 12px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
               INSTALL OPENCODE
             </button>
           )}
@@ -732,8 +835,8 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 700 }}>ARE YOU SURE?</span>
               <div style={{ display: 'flex', gap: '6px' }}>
-                <button onClick={(e) => { e.stopPropagation(); handleUninstallOpenCode(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#ef4444', color: '#FFFFFF', border: '2px solid #991b1b', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
-                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#e5e7eb', color: '#374151', border: '2px solid #9ca3af', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
+                <button onClick={(e) => { e.stopPropagation(); handleUninstallOpenCode(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
+                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#e5e7eb', color: '#374151', border: '1px solid var(--zen-border)', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
               </div>
             </div>
           ) : (
@@ -741,11 +844,11 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
               <div>
                 <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>WORKSPACE FOLDER</label>
                 <input type="text" name="opencode_workspace" value={formData.opencode_workspace || ''} onChange={handleChange}
-                  style={{ width: '100%', padding: '7px 10px', border: '2px solid #166534', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem' }} />
+                  style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem' }} />
               </div>
               <button 
                 onClick={(e) => { e.stopPropagation(); handleOpenOpenCode(); }}
-                style={{ width: '100%', padding: '9px 12px', backgroundColor: '#16a34a', color: '#FFFFFF', border: '2px solid #166534', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+                style={{ width: '100%', padding: '9px 12px', backgroundColor: '#16a34a', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
                 LAUNCH OPENCODE
               </button>
               <button 
@@ -759,7 +862,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
                     <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#16a34a', boxShadow: '0 0 4px #16a34a' }} />
                     {mode.replace('run-', '').toUpperCase()} ACTIVE
                   </div>
-                  <button onClick={(e) => { e.stopPropagation(); handleKillProcess(mode); }} style={{ backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '4px', padding: '3px 6px', fontSize: '0.65rem', fontWeight: 'bold', cursor: 'pointer' }}>KILL</button>
+                  <button onClick={(e) => { e.stopPropagation(); handleKillProcess(mode); }} style={{ backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '4px', padding: '3px 6px', fontSize: '0.65rem', fontWeight: 'bold', cursor: 'pointer' }}>CLOSE</button>
                 </div>
               ))}
               <button 
@@ -773,11 +876,9 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
       )}
 
       {node.id === 'node-ollama' && isOllamaInstalled === false && (
-        <div style={{ marginTop: '10px', padding: '12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px' }}>
-          <h4 style={{ margin: '0 0 6px 0', color: 'var(--zen-text)', fontSize: '0.8rem' }}>OLLAMA MISSING</h4>
-          
-          <div style={{ marginBottom: '8px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>VRAM DETECTED (GB) <Tooltip text="We tried to auto-detect your Video RAM, but you can correct this if it's wrong." /></label>
+        <div style={{ marginTop: '12px', padding: '12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px' }}>
+          <div style={{ marginBottom: '10px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '4px' }}>VRAM DETECTED (GB) <Tooltip text="We tried to auto-detect your Video RAM, but you can correct this if it's wrong." /></label>
             <input 
               type="text" 
               value={detectedVram} 
@@ -787,24 +888,23 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
                 if (num > 0) memory.setDetectedVramGb(num);
               }}
               data-testid="vram-detected-input"
-              style={{ width: '100%', padding: '7px 10px', border: '2px solid #9a3412', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', boxShadow: '2px 2px 0px #9a3412' }} 
+              style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem' }} 
             />
           </div>
 
           <div style={{ marginBottom: '12px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>RECOMMENDED MODEL <Tooltip text="Based on your VRAM, we'll pull this model for you!" /></label>
+            <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '4px' }}>RECOMMENDED MODEL <Tooltip text="Based on your VRAM, we'll pull this model for you!" /></label>
             <select 
               value={memory.activeModelName} 
               onChange={(e) => memory.setActiveModelName(e.target.value)}
               data-testid="recommended-model-input"
-              style={{ width: '100%', padding: '7px 10px', border: '2px solid #9a3412', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239a3412' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center', paddingRight: '30px' }} 
+              style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7F99' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center', paddingRight: '30px' }} 
             >
               {AVAILABLE_MODELS.map((model) => {
                 const totalGb = (model.weightsGb + model.kvCacheGb + GRAPH_OVERHEAD_GB).toFixed(1);
-                const isRecommended = model.tag === memory.defaultRecommendedModel;
                 return (
                   <option key={model.tag} value={model.tag}>
-                    {isRecommended ? '⭐ ' : ''}{model.tag} ({totalGb} GB)
+                    • {model.tag} ({totalGb} GB)
                   </option>
                 );
               })}
@@ -821,7 +921,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
 
           <button 
             onClick={(e) => { e.stopPropagation(); handleInitializeOllama(); }}
-            style={{ width: '100%', padding: '9px 12px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', border: '2px solid #9a3412', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+            style={{ width: '100%', padding: '9px 12px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'background-color 0.15s' }}>
             INSTALL OLLAMA
           </button>
         </div>
@@ -843,15 +943,15 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 700 }}>ARE YOU SURE?</span>
               <div style={{ display: 'flex', gap: '6px' }}>
-                <button onClick={(e) => { e.stopPropagation(); handleUninstallOllama(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#ef4444', color: '#FFFFFF', border: '2px solid #991b1b', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
-                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#e5e7eb', color: '#374151', border: '2px solid #9ca3af', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
+                <button onClick={(e) => { e.stopPropagation(); handleUninstallOllama(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
+                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#e5e7eb', color: '#374151', border: '1px solid var(--zen-border)', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
               </div>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <button 
                 onClick={(e) => { e.stopPropagation(); handleOpenOllama(); }}
-                style={{ width: '100%', padding: '9px 12px', backgroundColor: '#16a34a', color: '#FFFFFF', border: '2px solid #166534', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+                style={{ width: '100%', padding: '9px 12px', backgroundColor: '#16a34a', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
                 CHAT WITH OLLAMA
               </button>
               <button 
@@ -1035,13 +1135,37 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
       </div>
       
       <div style={{ padding: '10px 16px', borderTop: '1px solid var(--zen-border)', backgroundColor: '#ffffff', display: 'flex', gap: '8px' }}>
-        <button onClick={handleSave} style={{ 
-          flex: 1, padding: '9px 14px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', 
-          border: '1px solid var(--zen-border)', borderRadius: '6px', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', fontFamily: 'inherit', 
-          boxShadow: 'none', transition: 'all 0.1s'
-        }}
-        onMouseDown={e => { e.currentTarget.style.transform = 'translate(1px, 1px)'; e.currentTarget.style.opacity = '0.9'; }}
-        onMouseUp={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.opacity = '1'; }}
+        <button 
+          onClick={handleSave} 
+          disabled={!hasChanges}
+          data-testid="save-node-config-button"
+          style={{ 
+            flex: 1, 
+            padding: '9px 14px', 
+            backgroundColor: hasChanges ? 'var(--zen-accent)' : '#9ca3af', 
+            color: '#FFFFFF', 
+            border: '1px solid var(--zen-border)', 
+            borderRadius: '6px', 
+            fontWeight: 700, 
+            fontSize: '0.85rem', 
+            cursor: hasChanges ? 'pointer' : 'not-allowed', 
+            opacity: hasChanges ? 1 : 0.6,
+            fontFamily: 'inherit', 
+            boxShadow: 'none', 
+            transition: 'all 0.1s'
+          }}
+          onMouseDown={e => { 
+            if (hasChanges) {
+              e.currentTarget.style.transform = 'translate(1px, 1px)'; 
+              e.currentTarget.style.opacity = '0.9'; 
+            }
+          }}
+          onMouseUp={e => { 
+            if (hasChanges) {
+              e.currentTarget.style.transform = 'none'; 
+              e.currentTarget.style.opacity = '1'; 
+            }
+          }}
         >
           SAVE CHANGES
         </button>
@@ -1050,7 +1174,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
   );
 };
 
-const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, frugalConfig, setFrugalConfig, setIsHermesInstalled, setIsOpenCodeInstalled, setIsOllamaInstalled, setIsToolGatewayInstalled }: { mode: 'install-hermes' | 'run-hermes' | 'run-hermes-web' | 'run-hermes-desktop' | 'install-opencode' | 'run-opencode' | 'run-opencode-web' | 'install-ollama' | 'run-ollama' | 'install-tool-gateway' | 'uninstall-tool-gateway', sessionId: string, onExit: () => void, onProcessStart?: () => void, onProcessExit?: () => void, frugalConfig?: any, setFrugalConfig?: any, setIsHermesInstalled: (installed: boolean) => void, setIsOpenCodeInstalled: (installed: boolean) => void, setIsOllamaInstalled: (installed: boolean) => void, setIsToolGatewayInstalled?: (installed: boolean) => void }) => {
+const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, frugalConfig, setFrugalConfig, setIsHermesInstalled, setIsOpenCodeInstalled, setIsOllamaInstalled, setIsToolGatewayInstalled }: { mode: 'install-hermes' | 'run-hermes' | 'run-hermes-web' | 'run-hermes-gateway' | 'run-hermes-desktop' | 'install-opencode' | 'run-opencode' | 'run-opencode-web' | 'install-ollama' | 'run-ollama' | 'install-tool-gateway' | 'uninstall-tool-gateway', sessionId: string, onExit: () => void, onProcessStart?: () => void, onProcessExit?: () => void, frugalConfig?: any, setFrugalConfig?: any, setIsHermesInstalled: (installed: boolean) => void, setIsOpenCodeInstalled: (installed: boolean) => void, setIsOllamaInstalled: (installed: boolean) => void, setIsToolGatewayInstalled?: (installed: boolean) => void }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const [isProvisioningModel, setIsProvisioningModel] = useState(false);
   const [downloadPercent, setDownloadPercent] = useState<number>(0);
@@ -1371,9 +1495,11 @@ const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, 
         } else if (mode === 'run-ollama') {
           await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && export PATH="/usr/local/bin:/opt/homebrew/bin:/Applications/Ollama.app/Contents/Resources:$PATH" && ${frugalEnv} && ollama run frugallm-active`] });
         } else if (mode === 'run-hermes-web') {
-          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && export PATH="$HOME/.hermes/bin:$PATH" && ${frugalEnv} && hermes dashboard`] });
+          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && export PATH="$HOME/.hermes/bin:$PATH" && ${frugalEnv} && hermes dashboard --host 127.0.0.1`] });
         } else if (mode === 'run-hermes-desktop') {
           await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && export PATH="$HOME/.hermes/bin:$PATH" && ${frugalEnv} && hermes desktop`] });
+        } else if (mode === 'run-hermes-gateway') {
+          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && export PATH="$HOME/.hermes/bin:$PATH" && ${frugalEnv} && hermes gateway --host 127.0.0.1`] });
         } else {
           await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && export PATH="$HOME/.hermes/bin:$PATH" && ${frugalEnv} && hermes`] });
         }
@@ -1402,8 +1528,9 @@ const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, 
   let title = 'Terminal Runner';
   if (mode === 'install-hermes') title = 'Hermes Agent Installation';
   if (mode === 'run-hermes') title = 'Hermes Terminal';
-  if (mode === 'run-hermes-web') title = 'Hermes Web Dashboard';
-  if (mode === 'run-hermes-desktop') title = 'Hermes Desktop UI';
+  if (mode === 'run-hermes-web') title = 'Hermes WebUI';
+  if (mode === 'run-hermes-desktop') title = 'Hermes App';
+  if (mode === 'run-hermes-gateway') title = 'Hermes Gateway';
   if (mode === 'install-opencode') title = 'OpenCode Installation';
   if (mode === 'run-opencode') title = 'OpenCode Terminal';
   if (mode === 'run-opencode-web') title = 'OpenCode Web UI';
@@ -1419,20 +1546,30 @@ const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, 
         </h2>
         {showConfirmClose ? (
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <span style={{ color: '#ef4444', fontWeight: 600, fontSize: '0.85rem' }}>This will terminate the running process. Are you sure?</span>
+            <span style={{ color: '#ef4444', fontWeight: 600, fontSize: '0.85rem' }}>This will close the running process. Are you sure?</span>
             <button onClick={() => {
               invoke('kill_pty', { sessionId }).catch(console.error);
               onExit();
-            }} style={{ padding: '6px 12px', backgroundColor: '#ef4444', color: '#ffffff', border: 'none', fontWeight: 600, cursor: 'pointer', borderRadius: '8px' }}>Yes</button>
+            }} style={{ padding: '6px 12px', backgroundColor: '#ef4444', color: '#ffffff', border: 'none', fontWeight: 600, cursor: 'pointer', borderRadius: '8px' }}>Close Process</button>
             <button onClick={() => setShowConfirmClose(false)} style={{ padding: '6px 12px', backgroundColor: 'transparent', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', fontWeight: 600, cursor: 'pointer', borderRadius: '8px' }}>Cancel</button>
           </div>
         ) : (
-          <button 
-            onClick={() => setShowConfirmClose(true)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          >
-            ✕
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button 
+              onClick={() => onExit()}
+              title="Hide terminal and keep process running in background"
+              style={{ background: 'none', border: '1px solid var(--zen-border)', borderRadius: '4px', padding: '3px 8px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600, color: 'var(--zen-text)', display: 'flex', alignItems: 'center', gap: '4px' }}
+            >
+              <span>_</span> HIDE
+            </button>
+            <button 
+              onClick={() => setShowConfirmClose(true)}
+              title="Close process"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              ✕
+            </button>
+          </div>
         )}
       </div>
 
@@ -1496,20 +1633,16 @@ function AppContent() {
   const {
     pan,
     zoom,
-    isDragging,
     containerSize,
     handleCanvasMouseDown,
-    handleCanvasMouseMove,
-    handleCanvasMouseUp,
     handleCanvasClick,
-    handleWheel,
   } = useCanvasLogic(canvasRef, (_e, nodeId) => {
     setSelectedNodeId(nodeId);
   }, () => {
     setSelectedNodeId(null);
   });
   const [guidesOpen, setGuidesOpen] = useState(false);
-  const [terminalMode, setTerminalMode] = useState<'install-hermes' | 'run-hermes' | 'run-hermes-web' | 'run-hermes-desktop' | 'install-opencode' | 'run-opencode' | 'run-opencode-web' | 'install-ollama' | 'run-ollama' | 'install-tool-gateway' | 'uninstall-tool-gateway' | null>(null);
+  const [terminalMode, setTerminalMode] = useState<'install-hermes' | 'run-hermes' | 'run-hermes-web' | 'run-hermes-gateway' | 'run-hermes-desktop' | 'install-opencode' | 'run-opencode' | 'run-opencode-web' | 'install-ollama' | 'run-ollama' | 'install-tool-gateway' | 'uninstall-tool-gateway' | null>(null);
   const [isHermesInstalled, setIsHermesInstalled] = useState<boolean | null>(null);
   const [isOpenCodeInstalled, setIsOpenCodeInstalled] = useState<boolean | null>(null);
   const [hermesVersion, setHermesVersion] = useState<string>('N/A');
@@ -1521,6 +1654,8 @@ function AppContent() {
   const [initLogs, setInitLogs] = useState<string[]>([]);
   const [frugalConfig, setFrugalConfig] = useState<any>(null);
   const [activeProcesses, setActiveProcesses] = useState<Record<string, boolean>>({});
+  const [showExitModal, setShowExitModal] = useState(false);
+  const [exitServices, setExitServices] = useState<string[]>([]);
 
   useEffect(() => {
     let isMounted = true;
@@ -1548,6 +1683,11 @@ function AppContent() {
         setIsHermesInstalled(hermesStatus as boolean);
         if (hermesStatus) {
           invoke<string>('get_hermes_version').then(v => setHermesVersion(v)).catch(() => setHermesVersion('N/A'));
+          setActiveProcesses(prev => ({
+            ...prev,
+            'hermes-gateway': true,
+            'run-hermes-gateway': true,
+          }));
         }
         addLog(hermesStatus ? "OK: Hermes installed." : "INFO: Hermes not installed.");
       } catch(e) {}
@@ -1818,7 +1958,35 @@ function AppContent() {
       unlistenProxy = unlisten;
     }).catch(console.error);
 
-    
+    let unlistenExit: (() => void) | null = null;
+    listen('request_exit_confirmation', async () => {
+      try {
+        const svcs = await invoke<string[]>('get_active_services');
+        setExitServices(svcs && svcs.length > 0 ? svcs : ['Hermes Service']);
+      } catch {
+        setExitServices(['Hermes Service']);
+      }
+      setShowExitModal(true);
+    }).then(unlisten => {
+      unlistenExit = unlisten;
+    }).catch(console.error);
+
+    let unlistenServiceExit: (() => void) | null = null;
+    listen<{ service: string }>('service_exit', (event) => {
+      const svc = event.payload?.service;
+      if (svc) {
+        setActiveProcesses(prev => ({
+          ...prev,
+          [svc]: false,
+          [`run-${svc}`]: false,
+          [svc.replace('hermes-', 'run-hermes-')]: false,
+          ...(svc === 'hermes-gateway' || svc === 'gateway' ? { 'run-hermes-gateway': false, 'run-hermes-desktop': false, 'hermes-gateway': false } : {}),
+          ...(svc === 'hermes-dashboard' || svc === 'dashboard' ? { 'run-hermes-web': false, 'hermes-dashboard': false } : {}),
+        }));
+      }
+    }).then(unlisten => {
+      unlistenServiceExit = unlisten;
+    }).catch(console.error);
 
     return () => {
       if (unlistenTelemetry) {
@@ -1826,6 +1994,12 @@ function AppContent() {
       }
       if (unlistenProxy) {
         unlistenProxy();
+      }
+      if (unlistenExit) {
+        unlistenExit();
+      }
+      if (unlistenServiceExit) {
+        unlistenServiceExit();
       }
       if (proxyTimeout.current) {
         clearTimeout(proxyTimeout.current);
@@ -1835,8 +2009,47 @@ function AppContent() {
 
   const handleInitializeHermes = () => setTerminalMode('install-hermes');
   const handleOpenHermes = () => setTerminalMode('run-hermes');
+  const handleOpenHermesGateway = () => setTerminalMode('run-hermes-gateway');
   const handleOpenHermesDesktop = () => setTerminalMode('run-hermes-desktop');
   const handleOpenHermesWeb = () => setTerminalMode('run-hermes-web');
+  const handleKillProcess = (mode: string) => {
+    invoke('kill_pty', { sessionId: mode }).catch(console.error);
+    invoke('stop_hermes_service', { service: mode }).catch(console.error);
+    if (mode === 'run-hermes-desktop') {
+      invoke('kill_pty', { sessionId: 'run-hermes-desktop' }).catch(console.error);
+      setActiveProcesses(prev => ({ ...prev, 'run-hermes-desktop': false }));
+    }
+    if (mode === 'run-hermes-gateway' || mode === 'hermes-gateway') {
+      invoke('kill_pty', { sessionId: 'run-hermes-gateway' }).catch(console.error);
+      invoke('stop_hermes_service', { service: 'gateway' }).catch(console.error);
+      setActiveProcesses(prev => ({ ...prev, 'run-hermes-gateway': false, 'hermes-gateway': false }));
+    }
+    if (mode === 'run-hermes-web' || mode === 'hermes-dashboard') {
+      invoke('kill_pty', { sessionId: 'run-hermes-web' }).catch(console.error);
+      invoke('stop_hermes_service', { service: 'dashboard' }).catch(console.error);
+      setActiveProcesses(prev => ({ ...prev, 'run-hermes-web': false, 'hermes-dashboard': false }));
+    }
+    setActiveProcesses(prev => ({
+      ...prev,
+      [mode]: false,
+      [mode.replace('run-', '')]: false,
+      [`hermes-${mode.replace('run-hermes-', '')}`]: false,
+      ...(mode === 'run-hermes-gateway' || mode === 'run-hermes-desktop' || mode === 'hermes-gateway' ? {
+        'run-hermes-gateway': false,
+        'run-hermes-desktop': false,
+        'hermes-gateway': false,
+        'hermes-desktop': false,
+      } : {}),
+      ...(mode === 'run-hermes-web' || mode === 'hermes-dashboard' ? {
+        'run-hermes-web': false,
+        'hermes-web': false,
+        'hermes-dashboard': false,
+      } : {})
+    }));
+    if (terminalMode === mode || (mode === 'run-hermes-gateway' && terminalMode === 'run-hermes-desktop')) {
+      setTerminalMode(null);
+    }
+  };
   const handleInitializeOpenCode = () => setTerminalMode('install-opencode');
   const handleOpenOpenCode = () => setTerminalMode('run-opencode');
   const handleOpenOpenCodeWeb = () => setTerminalMode('run-opencode-web');
@@ -1894,6 +2107,7 @@ function AppContent() {
           output_tokens_lifetime: frugalConfig?.output_tokens_lifetime || 0,
           hermes_workspace: frugalConfig?.hermes_workspace || null,
           opencode_workspace: frugalConfig?.opencode_workspace || null,
+          start_minimized: Boolean(finalConfig.start_minimized),
         };
         await invoke('set_frugallm_config', { newConfig: newConf });
         invoke('get_frugallm_config').then((conf: any) => setFrugalConfig(conf)).catch(console.error);
@@ -1929,6 +2143,12 @@ function AppContent() {
         };
         await invoke('set_frugallm_config', { newConfig: newConf });
         invoke('get_frugallm_config').then((conf: any) => setFrugalConfig(conf)).catch(console.error);
+        confetti({
+          particleCount: 150,
+          spread: 70,
+          origin: { y: 0.6 },
+          colors: ['#ea580c', '#ffffff', '#111827']
+        });
       } catch (e: any) {
         console.error("Failed to update config: " + e);
       }
@@ -2019,6 +2239,15 @@ function AppContent() {
         finalConfig.status = 'error';
       }
     }
+
+    if (nodeId !== 'node-frugallm' && nodeId !== 'node-google' && nodeId !== 'node-openrouter' && nodeId !== 'node-ollama' && nodeId !== 'node-hermes' && nodeId !== 'node-opencode') {
+      confetti({
+        particleCount: 150,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#ea580c', '#ffffff', '#111827']
+      });
+    }
     
     setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, ...finalConfig } } : n));
   };
@@ -2076,7 +2305,7 @@ function AppContent() {
 
   return !isAppLoaded ? <TerminalLoader logs={initLogs} /> : (
     <div 
-      style={{ display: 'flex', width: '100%', height: '100vh', fontFamily: 'inherit', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '8px', overflow: 'hidden' }}
+      style={{ display: 'flex', width: '100%', height: '100vh', fontFamily: 'inherit', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '8px', overflow: 'hidden', overscrollBehavior: 'none' }}
     >
       <style>
         {`
@@ -2107,7 +2336,7 @@ function AppContent() {
       </style>
 
       {/* Canvas Area */}
-      {(['install-hermes', 'run-hermes', 'run-hermes-web', 'run-hermes-desktop', 'install-opencode', 'run-opencode', 'run-opencode-web', 'install-ollama', 'run-ollama', 'install-tool-gateway', 'uninstall-tool-gateway'] as const).map((mode) => {
+      {(['install-hermes', 'run-hermes', 'run-hermes-web', 'run-hermes-gateway', 'run-hermes-desktop', 'install-opencode', 'run-opencode', 'run-opencode-web', 'install-ollama', 'run-ollama', 'install-tool-gateway', 'uninstall-tool-gateway'] as const).map((mode) => {
         const isActive = activeProcesses[mode] || terminalMode === mode;
         if (!isActive) return null;
         return (
@@ -2137,16 +2366,13 @@ function AppContent() {
 
         <div 
           ref={canvasRef}
-          onMouseDown={handleCanvasMouseDown}
-          onMouseMove={handleCanvasMouseMove}
-          onMouseUp={handleCanvasMouseUp}
-          onMouseLeave={handleCanvasMouseUp}
+          data-testid="main-canvas"
           onClick={handleCanvasClick}
-          onWheel={handleWheel}
           style={{ 
             flexGrow: 1, position: 'relative', 
-            cursor: isDragging ? 'grabbing' : 'grab',
-            display: terminalMode ? 'none' : 'block'
+            cursor: 'default',
+            display: terminalMode ? 'none' : 'block',
+            overscrollBehavior: 'none'
           }}
         >
         {portConflict && !terminalMode && (
@@ -2393,7 +2619,7 @@ function AppContent() {
                         const isHermes = node.id === 'node-hermes';
                         const isInstalled = isHermes ? isHermesInstalled : isOpenCodeInstalled;
                         const isRunning = isHermes 
-                          ? !!(activeProcesses['run-hermes'] || activeProcesses['run-hermes-desktop'] || activeProcesses['run-hermes-web'] || node.data.status === 'active')
+                          ? !!(activeProcesses['run-hermes'] || activeProcesses['run-hermes-gateway'] || activeProcesses['run-hermes-desktop'] || activeProcesses['run-hermes-web'] || activeProcesses['hermes-gateway'] || activeProcesses['hermes-dashboard'] || node.data.status === 'active')
                           : !!(activeProcesses['run-opencode'] || activeProcesses['run-opencode-web'] || node.data.status === 'active');
                         
                         const statusText = !isInstalled ? 'N/A' : (isRunning ? 'Active' : 'Standby');
@@ -2434,7 +2660,7 @@ function AppContent() {
       {/* Settings Modal */}
       {selectedNode && !terminalMode && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setSelectedNodeId(null)}>
-          <NodeConfigPanel node={selectedNode} onClose={() => setSelectedNodeId(null)} onSave={handleSaveNodeConfig} onOpenGuide={setActiveGuide} isHermesInstalled={isHermesInstalled} isOpenCodeInstalled={isOpenCodeInstalled} isOllamaInstalled={isOllamaInstalled} isToolGatewayInstalled={isToolGatewayInstalled} detectedVram={detectedVram} setDetectedVram={setDetectedVram} hasActiveBackend={hasActiveBackend} handleInitializeHermes={handleInitializeHermes} handleOpenHermes={handleOpenHermes} handleUninstallHermes={handleUninstallHermes} handleInitializeOpenCode={handleInitializeOpenCode} handleOpenOpenCode={handleOpenOpenCode} handleUninstallOpenCode={handleUninstallOpenCode} handleInitializeOllama={handleInitializeOllama} handleOpenOllama={handleOpenOllama} handleUninstallOllama={handleUninstallOllama} handleInstallToolGateway={handleInstallToolGateway} handleUninstallToolGateway={handleUninstallToolGateway} handleDisconnectOpenRouter={handleDisconnectOpenRouter} handleDisconnectGoogle={handleDisconnectGoogle} frugalConfig={frugalConfig} setFrugalConfig={setFrugalConfig} handleOpenHermesDesktop={handleOpenHermesDesktop} handleOpenHermesWeb={handleOpenHermesWeb} handleOpenOpenCodeWeb={handleOpenOpenCodeWeb} activeProcesses={activeProcesses} handleKillProcess={(mode: string) => invoke('kill_pty', { sessionId: mode }).catch(console.error)} latestTelemetry={latestTelemetry} hardwareProfile={hardwareProfile} portConflict={portConflict} />
+          <NodeConfigPanel node={selectedNode} onClose={() => setSelectedNodeId(null)} onSave={handleSaveNodeConfig} onOpenGuide={setActiveGuide} isHermesInstalled={isHermesInstalled} isOpenCodeInstalled={isOpenCodeInstalled} isOllamaInstalled={isOllamaInstalled} isToolGatewayInstalled={isToolGatewayInstalled} detectedVram={detectedVram} setDetectedVram={setDetectedVram} hasActiveBackend={hasActiveBackend} handleInitializeHermes={handleInitializeHermes} handleOpenHermes={handleOpenHermes} handleUninstallHermes={handleUninstallHermes} handleInitializeOpenCode={handleInitializeOpenCode} handleOpenOpenCode={handleOpenOpenCode} handleUninstallOpenCode={handleUninstallOpenCode} handleInitializeOllama={handleInitializeOllama} handleOpenOllama={handleOpenOllama} handleUninstallOllama={handleUninstallOllama} handleInstallToolGateway={handleInstallToolGateway} handleUninstallToolGateway={handleUninstallToolGateway} handleDisconnectOpenRouter={handleDisconnectOpenRouter} handleDisconnectGoogle={handleDisconnectGoogle} frugalConfig={frugalConfig} setFrugalConfig={setFrugalConfig} handleOpenHermesGateway={handleOpenHermesGateway} handleOpenHermesDesktop={handleOpenHermesDesktop} handleOpenHermesWeb={handleOpenHermesWeb} handleOpenOpenCodeWeb={handleOpenOpenCodeWeb} activeProcesses={activeProcesses} handleKillProcess={handleKillProcess} latestTelemetry={latestTelemetry} hardwareProfile={hardwareProfile} portConflict={portConflict} />
         </div>
       )}
 
@@ -2521,6 +2747,16 @@ function AppContent() {
           </div>
         </div>
       )}
+
+      {/* Exit Confirmation Modal */}
+      <ExitConfirmationModal
+        isOpen={showExitModal}
+        onCancel={() => setShowExitModal(false)}
+        onConfirm={() => {
+          invoke('confirm_exit_app').catch(console.error);
+        }}
+        activeServices={exitServices}
+      />
 
       {onboardingState === 'fresh' && (
         <OnboardingDecision onSelect={handleDecision} />

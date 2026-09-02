@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 
 // Mock canvas-confetti
 vi.mock('canvas-confetti', () => ({
@@ -11,9 +11,11 @@ vi.mock('@xterm/xterm', () => {
   class Terminal {
     open = vi.fn();
     write = vi.fn();
+    writeln = vi.fn();
     dispose = vi.fn();
     loadAddon = vi.fn();
-    onData = vi.fn();
+    onData = vi.fn().mockReturnValue({ dispose: vi.fn() });
+    onResize = vi.fn();
   }
   return { Terminal };
 });
@@ -25,19 +27,45 @@ vi.mock('@xterm/addon-fit', () => {
   return { FitAddon };
 });
 
+if (typeof global.ResizeObserver === 'undefined') {
+  global.ResizeObserver = class ResizeObserver {
+    observe = vi.fn();
+    unobserve = vi.fn();
+    disconnect = vi.fn();
+  } as any;
+}
+
 // Mock Tauri plugins & APIs
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
 }));
 
+const eventListeners: Record<string, Function[]> = {};
+
 vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn().mockResolvedValue(vi.fn()),
+  listen: vi.fn().mockImplementation((event: string, callback: Function) => {
+    if (!eventListeners[event]) eventListeners[event] = [];
+    eventListeners[event].push(callback);
+    return Promise.resolve(() => {
+      eventListeners[event] = eventListeners[event].filter(cb => cb !== callback);
+    });
+  }),
 }));
 
 vi.mock('@tauri-apps/plugin-autostart', () => ({
   isEnabled: vi.fn().mockResolvedValue(false),
   enable: vi.fn().mockResolvedValue(undefined),
   disable: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('@tauri-apps/plugin-store', () => ({
+  Store: {
+    load: vi.fn().mockResolvedValue({
+      get: vi.fn().mockResolvedValue(false),
+      set: vi.fn().mockResolvedValue(undefined),
+      save: vi.fn().mockResolvedValue(undefined),
+    }),
+  },
 }));
 
 vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
@@ -56,12 +84,15 @@ vi.mock('@tauri-apps/plugin-http', () => ({
 }));
 
 import { invoke } from '@tauri-apps/api/core';
+import { openUrl } from '@tauri-apps/plugin-opener';
+import confetti from 'canvas-confetti';
 import App from '../App';
 
 describe('App Component Integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    Object.keys(eventListeners).forEach(k => delete eventListeners[k]);
 
     (invoke as any).mockImplementation((cmd: string) => {
       if (cmd === 'is_wipe_mode') return Promise.resolve(false);
@@ -266,4 +297,254 @@ describe('App Component Integration', () => {
       { timeout: 10000 }
     );
   }, 15000);
+
+  it('disables SAVE CHANGES button until changes are made, then enables it and shoots confetti on save', async () => {
+    localStorage.setItem('onboardingState', 'completed');
+    const { container } = render(<App />);
+
+    await waitFor(
+      () => {
+        expect(screen.getByText('FrugaLLM')).toBeInTheDocument();
+      },
+      { timeout: 10000 }
+    );
+
+    // Open FrugaLLM config
+    const frugalNode = container.querySelector('[data-node-id="node-frugallm"]');
+    expect(frugalNode).not.toBeNull();
+    fireEvent.click(frugalNode!);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('save-node-config-button')).toBeInTheDocument();
+    });
+
+    const saveButton = screen.getByTestId('save-node-config-button');
+    // Initially disabled because no changes exist
+    expect(saveButton).toBeDisabled();
+
+    // Modify port
+    const portInput = screen.getByTestId('input-frugallm-port');
+    fireEvent.change(portInput, { target: { name: 'port', value: '62000' } });
+
+    // Button should now be enabled
+    await waitFor(() => {
+      expect(saveButton).not.toBeDisabled();
+    });
+
+    // Click SAVE CHANGES
+    fireEvent.click(saveButton);
+
+    // Verify invoke was called and confetti was triggered
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('set_frugallm_config', expect.anything());
+      expect(confetti).toHaveBeenCalled();
+    });
+  }, 15000);
+
+  it('does not render missing agent text when agents are not installed', async () => {
+    localStorage.setItem('onboardingState', 'completed');
+    (invoke as any).mockImplementation((cmd: string) => {
+      if (cmd === 'is_wipe_mode') return Promise.resolve(false);
+      if (cmd === 'get_frugallm_config') {
+        return Promise.resolve({
+          port: 61721,
+          bind_all_interfaces: false,
+          api_password: '',
+          input_tokens_session: 0,
+          output_tokens_session: 0,
+          input_tokens_lifetime: 0,
+          output_tokens_lifetime: 0,
+          opencode_workspace: '~/OpenCode',
+          hermes_workspace: '~/Hermes',
+          start_minimized: false,
+        });
+      }
+      if (cmd === 'check_hermes_status') return Promise.resolve(false);
+      if (cmd === 'check_opencode_status') return Promise.resolve(false);
+      if (cmd === 'check_ollama_status') return Promise.resolve(true);
+      if (cmd === 'detect_vram') return Promise.resolve(16384);
+      if (cmd === 'get_model_tag_for_vram') return Promise.resolve('gemma4:12b');
+      if (cmd === 'get_credential') return Promise.resolve(null);
+      if (cmd === 'detect_hardware_profile') {
+        return Promise.resolve({
+          is_unified: false,
+          dedicated_vram: 16 * 1024 * 1024 * 1024,
+          system_ram: 32 * 1024 * 1024 * 1024,
+          execution_ceiling: 16 * 1024 * 1024 * 1024,
+          os_architecture: 'macos-x86_64',
+        });
+      }
+      return Promise.resolve();
+    });
+
+    const { container } = render(<App />);
+
+    await waitFor(
+      () => {
+        expect(screen.getByText('Hermes')).toBeInTheDocument();
+      },
+      { timeout: 10000 }
+    );
+
+    // Open Hermes node
+    const hermesNode = container.querySelector('[data-node-id="node-hermes"]');
+    expect(hermesNode).not.toBeNull();
+    fireEvent.click(hermesNode!);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'INSTALL HERMES' })).toBeInTheDocument();
+    });
+
+    // Ensure HERMES AGENT MISSING is not rendered
+    expect(screen.queryByText(/HERMES AGENT MISSING/i)).not.toBeInTheDocument();
+
+    // Close and open OpenCode node
+    const closeBtn = screen.getByRole('button', { name: '✕' });
+    fireEvent.click(closeBtn);
+
+    const opencodeNode = container.querySelector('[data-node-id="node-opencode"]');
+    expect(opencodeNode).not.toBeNull();
+    fireEvent.click(opencodeNode!);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'INSTALL OPENCODE' })).toBeInTheDocument();
+    });
+
+    // Ensure OPENCODE AGENT MISSING is not rendered
+    expect(screen.queryByText(/OPENCODE AGENT MISSING/i)).not.toBeInTheDocument();
+  }, 15000);
+
+  it('triggers exit confirmation modal when request_exit_confirmation event is received', async () => {
+    const baseInvoke = (invoke as any).getMockImplementation();
+    (invoke as any).mockImplementation((cmd: string, args: any) => {
+      if (cmd === 'get_active_services') return Promise.resolve(['Hermes Dashboard', 'Hermes Gateway']);
+      if (cmd === 'confirm_exit_app') return Promise.resolve();
+      return baseInvoke(cmd, args);
+    });
+
+    render(<App />);
+
+    await waitFor(
+      () => {
+        expect(screen.getByText('FrugaLLM')).toBeInTheDocument();
+      },
+      { timeout: 10000 }
+    );
+
+    // Simulate Tauri backend emitting request_exit_confirmation
+    expect(eventListeners['request_exit_confirmation']).toBeDefined();
+    await act(async () => {
+      for (const cb of eventListeners['request_exit_confirmation'] || []) {
+        cb();
+      }
+    });
+
+    // Assert: Modal is visible with warning and active services
+    await waitFor(() => {
+      expect(screen.getByTestId('exit-confirmation-modal')).toBeInTheDocument();
+      expect(screen.getByText('ACTIVE SERVICES RUNNING')).toBeInTheDocument();
+      expect(screen.getByText('Hermes Dashboard')).toBeInTheDocument();
+    });
+
+    // Cancel exit
+    fireEvent.click(screen.getByTestId('exit-cancel-button'));
+    expect(screen.queryByTestId('exit-confirmation-modal')).not.toBeInTheDocument();
+
+    // Trigger again and confirm exit
+    await act(async () => {
+      for (const cb of eventListeners['request_exit_confirmation'] || []) {
+        cb();
+      }
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('exit-confirmation-modal')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('exit-confirm-button'));
+    expect(invoke).toHaveBeenCalledWith('confirm_exit_app');
+  }, 15000);
+
+  it('autostarts Hermes Gateway when installed, launches Hermes Desktop via LAUNCH APP and WebUI, and allows Close', async () => {
+    const baseInvoke = (invoke as any).getMockImplementation();
+    (invoke as any).mockImplementation((cmd: string, args: any) => {
+      if (cmd === 'check_hermes_status') return Promise.resolve(true);
+      if (cmd === 'check_hermes_ready') return Promise.resolve(true);
+      if (cmd === 'get_active_services') return Promise.resolve(['hermes-gateway']);
+      if (cmd === 'spawn_pty') return Promise.resolve();
+      if (cmd === 'kill_pty') return Promise.resolve();
+      if (cmd === 'stop_hermes_service') return Promise.resolve();
+      return baseInvoke(cmd, args);
+    });
+
+    const { container } = render(<App />);
+
+    await waitFor(
+      () => {
+        expect(screen.getByText('Hermes')).toBeInTheDocument();
+      },
+      { timeout: 10000 }
+    );
+
+    // Open Hermes Node Config Panel
+    const hermesNode = container.querySelector('[data-node-id="node-hermes"]');
+    expect(hermesNode).not.toBeNull();
+    fireEvent.click(hermesNode!);
+
+    await waitFor(() => {
+      expect(screen.getByText('LAUNCH WEBUI')).toBeInTheDocument();
+      expect(screen.getByText('LAUNCH APP')).toBeInTheDocument();
+      // Hermes Gateway should be active on startup when Hermes is installed
+      expect(screen.getByText('HERMES GATEWAY ACTIVE')).toBeInTheDocument();
+    });
+
+    // 1. Click Launch App -> Opens Terminal View with Hermes App build/startup logs
+    const launchAppBtn = screen.getByText('LAUNCH APP');
+    await act(async () => {
+      fireEvent.click(launchAppBtn);
+    });
+
+    // Assert: Terminal View opened with Hermes App title and PTY spawned with hermes desktop
+    await waitFor(() => {
+      expect(screen.getByText('Hermes App')).toBeInTheDocument();
+    });
+    expect(invoke).toHaveBeenCalledWith(
+      'spawn_pty',
+      expect.objectContaining({
+        sessionId: 'run-hermes-desktop',
+      })
+    );
+
+    // 2. Click HIDE button to keep running in background and return to canvas
+    const hideBtns = screen.getAllByText(/HIDE/i);
+    await act(async () => {
+      fireEvent.click(hideBtns[0]);
+    });
+
+    // Assert: Terminal View is hidden (modal dismissed)
+    await waitFor(() => {
+      const overlay = container.querySelector('div[style*="z-index: 50"], div[style*="zIndex: 50"]');
+      if (overlay) {
+        expect(overlay).toHaveStyle({ display: 'none' });
+      }
+    });
+
+    // Reopen Hermes Config Panel to verify BOTH processes are active concurrently with CLOSE buttons
+    fireEvent.click(hermesNode!);
+    await waitFor(() => {
+      expect(screen.getByText('HERMES GATEWAY ACTIVE')).toBeInTheDocument();
+      expect(screen.getByText('HERMES APP ACTIVE')).toBeInTheDocument();
+    });
+
+    const closeButtons = screen.getAllByRole('button', { name: 'CLOSE' });
+    expect(closeButtons.length).toBe(2);
+
+    // Click CLOSE on Hermes Gateway process
+    await act(async () => {
+      fireEvent.click(closeButtons[0]);
+    });
+    expect(invoke).toHaveBeenCalledWith('kill_pty', { sessionId: 'run-hermes-gateway' });
+    expect(invoke).toHaveBeenCalledWith('stop_hermes_service', { service: 'run-hermes-gateway' });
+  }, 15000);
 });
+

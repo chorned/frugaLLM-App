@@ -12,6 +12,7 @@ export class TerminalRunner {
   readonly downloadSpeed: Locator;
   readonly downloadEta: Locator;
   readonly downloadSize: Locator;
+  readonly provisioningBar: Locator;
 
   constructor(page: Page) {
     this.page = page;

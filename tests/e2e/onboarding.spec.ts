@@ -6,7 +6,7 @@ test.describe('V2 Onboarding Flow', () => {
     // Mock Tauri IPC
     await page.addInitScript(() => {
       Object.defineProperty(window, '__TAURI_INTERNALS__', {
-        value: { transformCallback: () => 1234, plugins: { event: { unregisterListener: () => {} } }, transformCallback: () => 1234,
+        value: { transformCallback: () => 1234, plugins: { event: { unregisterListener: () => {} } },
           invoke: (cmd: string, args: any) => {
             if (cmd === 'is_wipe_mode') return Promise.resolve(false);
             if (cmd === 'get_model_tag_for_vram') return Promise.resolve('gemma4:e2b');

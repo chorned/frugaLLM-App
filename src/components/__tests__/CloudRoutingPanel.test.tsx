@@ -118,7 +118,7 @@ describe('CloudRoutingPanel Component', () => {
     });
   });
 
-  it('unpins model override when CANCEL RANK is clicked', async () => {
+  it('unpins model override when Reset is clicked', async () => {
     // Arrange: config starts with an override
     (invoke as any).mockImplementation((cmd: string) => {
       if (cmd === 'get_frugallm_config') {
@@ -134,10 +134,10 @@ describe('CloudRoutingPanel Component', () => {
     });
 
     render(<CloudRoutingPanel />);
-    await waitFor(() => expect(screen.getByText('CANCEL RANK')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Reset')).toBeInTheDocument());
 
-    // Act: Click cancel rank
-    fireEvent.click(screen.getByText('CANCEL RANK'));
+    // Act: Click Reset button
+    fireEvent.click(screen.getByText('Reset'));
 
     // Assert
     await waitFor(() => {

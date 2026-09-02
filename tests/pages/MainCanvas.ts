@@ -8,7 +8,7 @@ export class MainCanvas {
 
   constructor(page: Page) {
     this.page = page;
-    this.canvas = page.locator('div[style*="cursor: grab"], div[style*="cursor: grabbing"]').first();
+    this.canvas = page.getByTestId('main-canvas');
     this.nodes = page.locator('[data-node-id]');
     this.edges = page.locator('svg line');
   }

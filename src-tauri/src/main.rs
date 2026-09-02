@@ -12,6 +12,7 @@ use std::env;
 #[cfg(not(debug_assertions))]
 use keyring::Entry;
 use tauri::{Manager, State, Emitter};
+use tauri_plugin_store::StoreExt;
 use std::sync::{Arc, Mutex};
 
 /// Holds the `ollama serve` child process for the lifetime of the application.
@@ -93,6 +94,123 @@ struct LaunchOptions {
     local_llm_ip: Option<String>,
 }
 
+#[derive(Clone)]
+pub struct ChildProcessManager {
+    processes: Arc<std::sync::Mutex<std::collections::HashMap<String, u32>>>,
+}
+
+impl ChildProcessManager {
+    pub fn new() -> Self {
+        Self {
+            processes: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+        }
+    }
+
+    pub fn register(&self, key: String, pid: u32) {
+        if let Ok(mut lock) = self.processes.lock() {
+            lock.insert(key, pid);
+        }
+    }
+
+    pub fn unregister(&self, key: &str) {
+        if let Ok(mut lock) = self.processes.lock() {
+            lock.remove(key);
+        }
+    }
+
+    pub fn kill_process(&self, key: &str) {
+        let pid_opt = if let Ok(mut lock) = self.processes.lock() {
+            lock.remove(key)
+        } else {
+            None
+        };
+
+        if let Some(pid) = pid_opt {
+            kill_pid_and_children(pid);
+        }
+    }
+
+    pub fn has_active_services(&self) -> bool {
+        if let Ok(lock) = self.processes.lock() {
+            !lock.is_empty()
+        } else {
+            false
+        }
+    }
+
+    pub fn active_service_names(&self) -> Vec<String> {
+        if let Ok(lock) = self.processes.lock() {
+            lock.keys().cloned().collect()
+        } else {
+            vec![]
+        }
+    }
+
+    pub fn kill_all(&self) {
+        let pids: Vec<u32> = if let Ok(mut lock) = self.processes.lock() {
+            let pids = lock.values().copied().collect();
+            lock.clear();
+            pids
+        } else {
+            vec![]
+        };
+
+        for pid in pids {
+            kill_pid_and_children(pid);
+        }
+
+        #[cfg(not(windows))]
+        {
+            let _ = std::process::Command::new("pkill").args(&["-9", "-f", "hermes dashboard"]).status();
+            let _ = std::process::Command::new("pkill").args(&["-9", "-f", "hermes gateway"]).status();
+            let _ = std::process::Command::new("pkill").args(&["-9", "-f", "hermes desktop"]).status();
+            let _ = std::process::Command::new("pkill").args(&["-9", "-f", "hermes serve"]).status();
+        }
+        #[cfg(windows)]
+        {
+            let _ = std::process::Command::new("taskkill").args(&["/IM", "hermes.exe", "/F", "/T"]).status();
+        }
+    }
+}
+
+impl Drop for ChildProcessManager {
+    fn drop(&mut self) {
+        self.kill_all();
+    }
+}
+
+fn kill_pid_and_children(pid: u32) {
+    if pid == 0 {
+        return;
+    }
+    #[cfg(windows)]
+    {
+        let _ = std::process::Command::new("taskkill")
+            .args(&["/F", "/T", "/PID", &pid.to_string()])
+            .status();
+    }
+    #[cfg(not(windows))]
+    {
+        // First send SIGTERM to children and parent
+        let _ = std::process::Command::new("pkill")
+            .args(&["-TERM", "-P", &pid.to_string()])
+            .status();
+        let _ = std::process::Command::new("kill")
+            .args(&["-TERM", &pid.to_string()])
+            .status();
+
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        // Follow with SIGKILL
+        let _ = std::process::Command::new("pkill")
+            .args(&["-9", "-P", &pid.to_string()])
+            .status();
+        let _ = std::process::Command::new("kill")
+            .args(&["-9", &pid.to_string()])
+            .status();
+    }
+}
+
 struct PtyState {
     writer: Arc<Mutex<std::collections::HashMap<String, Box<dyn std::io::Write + Send>>>>,
     master: Arc<Mutex<std::collections::HashMap<String, Box<dyn portable_pty::MasterPty + Send>>>>,
@@ -106,6 +224,7 @@ impl Default for PtyState {
         }
     }
 }
+
 
 #[tauri::command]
 fn get_launch_options() -> LaunchOptions {
@@ -639,6 +758,7 @@ async fn detect_vram() -> Result<u64, String> {
 fn spawn_pty(
     app: tauri::AppHandle,
     state: State<'_, PtyState>,
+    process_state: State<'_, Arc<ChildProcessManager>>,
     session_id: String,
     command: Option<String>,
     args: Option<Vec<String>>,
@@ -671,6 +791,10 @@ fn spawn_pty(
     let mut child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
     drop(pair.slave);
 
+    if let Some(pid) = child.process_id() {
+        process_state.register(session_id.clone(), pid);
+    }
+
     let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
     
@@ -684,8 +808,10 @@ fn spawn_pty(
 
     let app_clone = app.clone();
     let session_id_clone = session_id.clone();
+    let process_state_clone = process_state.inner().clone();
     std::thread::spawn(move || {
         if let Ok(status) = child.wait() {
+            process_state_clone.unregister(&session_id_clone);
             let exit_code = if status.success() { 0 } else { 1 };
             #[derive(serde::Serialize, Clone)]
             struct ExitPayload {
@@ -725,13 +851,18 @@ fn write_pty(state: State<'_, PtyState>, session_id: String, data: String) -> Re
 }
 
 #[tauri::command]
-fn kill_pty(state: State<'_, PtyState>, session_id: String) -> Result<(), String> {
+fn kill_pty(
+    state: State<'_, PtyState>,
+    process_state: State<'_, Arc<ChildProcessManager>>,
+    session_id: String
+) -> Result<(), String> {
     if let Ok(mut writers) = state.writer.lock() {
         writers.remove(&session_id);
     }
     if let Ok(mut masters) = state.master.lock() {
         masters.remove(&session_id);
     }
+    process_state.kill_process(&session_id);
     Ok(())
 }
 
@@ -749,6 +880,157 @@ fn resize_pty(state: State<'_, PtyState>, session_id: String, rows: u16, cols: u
     }
     Ok(())
 }
+
+async fn spawn_hermes_child(
+    app: &tauri::AppHandle,
+    process_state: &Arc<ChildProcessManager>,
+    port: u16,
+    api_pwd: Option<String>,
+    service: &str,
+) -> Result<u32, String> {
+    let home = app.path().home_dir().map_err(|e| e.to_string())?;
+    let hermes_bin = if home.join(".hermes").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" }).exists() {
+        home.join(".hermes").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" })
+    } else if home.join(".local").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" }).exists() {
+        home.join(".local").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" })
+    } else {
+        std::path::PathBuf::from(if cfg!(windows) { "hermes.exe" } else { "hermes" })
+    };
+
+    let subcmd = match service {
+        "gateway" | "hermes-gateway" | "desktop" | "hermes-desktop" => "gateway",
+        "dashboard" | "hermes-dashboard" | "web" | "hermes-web" => "dashboard",
+        other => other,
+    };
+
+    let mut cmd = tokio::process::Command::new(&hermes_bin);
+    cmd.arg(subcmd);
+    // Explicitly bind to 127.0.0.1 for local isolation and security
+    cmd.args(&["--host", "127.0.0.1"]);
+    cmd.env("OPENAI_API_BASE", format!("http://127.0.0.1:{}/v1", port));
+    cmd.env("OPENAI_API_KEY", api_pwd.unwrap_or_else(|| "frugallm".to_string()));
+
+    if let Ok(current_path) = std::env::var("PATH") {
+        let hermes_bin_dir = home.join(".hermes").join("bin");
+        let local_bin_dir = home.join(".local").join("bin");
+        let new_path = format!("{}:{}:{}", hermes_bin_dir.display(), local_bin_dir.display(), current_path);
+        cmd.env("PATH", new_path);
+    }
+
+    cmd.stdout(std::process::Stdio::null());
+    cmd.stderr(std::process::Stdio::null());
+
+    let mut child = cmd.spawn().map_err(|e| format!("Failed to spawn hermes {}: {}", subcmd, e))?;
+    let pid = child.id().ok_or_else(|| "Failed to get child PID".to_string())?;
+
+    let service_key = format!("hermes-{}", subcmd);
+    process_state.register(service_key.clone(), pid);
+
+    let process_state_clone = process_state.clone();
+    let app_clone = app.clone();
+    let service_key_clone = service_key.clone();
+    tokio::spawn(async move {
+        let _ = child.wait().await;
+        process_state_clone.unregister(&service_key_clone);
+        let _ = app_clone.emit("service_exit", serde_json::json!({ "service": service_key_clone }));
+    });
+
+    Ok(pid)
+}
+
+#[tauri::command(async)]
+async fn start_hermes_service(
+    app: tauri::AppHandle,
+    process_state: State<'_, Arc<ChildProcessManager>>,
+    frugal_state: State<'_, FrugalConfigState>,
+    service: String,
+) -> Result<u32, String> {
+    let (port, api_pwd) = {
+        let config = frugal_state.config.lock().await;
+        (config.port, config.api_password.clone())
+    };
+    spawn_hermes_child(&app, &process_state, port, api_pwd, &service).await
+}
+
+#[tauri::command]
+fn stop_hermes_service(
+    process_state: State<'_, Arc<ChildProcessManager>>,
+    service: String,
+) -> Result<(), String> {
+    let service_key = if service.starts_with("hermes-") {
+        service
+    } else if service.starts_with("run-hermes-") {
+        format!("hermes-{}", service.trim_start_matches("run-hermes-"))
+    } else {
+        format!("hermes-{}", service)
+    };
+    process_state.kill_process(&service_key);
+    if service_key == "hermes-gateway" || service_key == "hermes-desktop" {
+        process_state.kill_process("hermes-gateway");
+        process_state.kill_process("hermes-desktop");
+        process_state.kill_process("run-hermes-gateway");
+        process_state.kill_process("run-hermes-desktop");
+    } else if service_key == "hermes-dashboard" || service_key == "hermes-web" {
+        process_state.kill_process("hermes-dashboard");
+        process_state.kill_process("hermes-web");
+        process_state.kill_process("run-hermes-web");
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn has_active_services(
+    process_state: State<'_, Arc<ChildProcessManager>>,
+) -> bool {
+    process_state.has_active_services()
+}
+
+#[tauri::command]
+fn get_active_services(
+    process_state: State<'_, Arc<ChildProcessManager>>,
+) -> Vec<String> {
+    process_state.active_service_names()
+}
+
+#[tauri::command]
+fn confirm_exit_app(
+    app: tauri::AppHandle,
+    process_state: State<'_, Arc<ChildProcessManager>>,
+    frugal_state: State<'_, FrugalConfigState>,
+    exit_state: State<'_, Arc<std::sync::atomic::AtomicBool>>,
+) -> Result<(), String> {
+    exit_state.store(true, std::sync::atomic::Ordering::Release);
+    process_state.kill_all();
+    
+    if frugal_state.is_dirty.swap(false, std::sync::atomic::Ordering::AcqRel) {
+        let config_clone = if let Ok(guard) = frugal_state.config.try_lock() {
+            guard.clone()
+        } else {
+            tauri::async_runtime::block_on(async {
+                let guard = frugal_state.config.lock().await;
+                guard.clone()
+            })
+        };
+        if let Ok(path) = get_config_path(&app) {
+            if let Ok(json) = serde_json::to_string_pretty(&config_clone) {
+                let _ = std::fs::write(path, json);
+            }
+        }
+    }
+    
+    app.exit(0);
+    Ok(())
+}
+
+#[tauri::command]
+fn check_hermes_ready(app: tauri::AppHandle) -> bool {
+    if let Ok(home) = app.path().home_dir() {
+        is_hermes_installed(&home)
+    } else {
+        false
+    }
+}
+
 
 // -----------------------------------------------------------------------------
 // FrugalLLM Core API Server (Axum)
@@ -2126,6 +2408,10 @@ fn restart_app(app: tauri::AppHandle) {
     app.restart();
 }
 
+pub fn should_show_window(is_silent: bool, start_minimized: bool) -> bool {
+    !(is_silent && start_minimized)
+}
+
 fn main() {
     #[cfg(debug_assertions)]
     dotenvy::dotenv().ok();
@@ -2139,7 +2425,7 @@ fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            Some(vec!["--minimized"])
+            Some(vec!["--silent"])
         ))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_http::init())
@@ -2148,6 +2434,14 @@ fn main() {
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(PtyState::default())
         .manage(OllamaDaemonState { child: tokio::sync::Mutex::new(None) })
+        .manage({
+            let pm: Arc<ChildProcessManager> = Arc::new(ChildProcessManager::new());
+            pm
+        })
+        .manage({
+            let ae: Arc<std::sync::atomic::AtomicBool> = Arc::new(std::sync::atomic::AtomicBool::new(false));
+            ae
+        })
         .setup(|app| {
             let app_handle = app.handle().clone();
             
@@ -2165,7 +2459,12 @@ fn main() {
                     }
                 }
             }
-            let start_minimized = frugal_config.start_minimized;
+            let is_silent = env::args().any(|arg| arg == "--silent" || arg == "--minimized");
+            let start_minimized = if let Ok(store) = app.store("store.json") {
+                store.get("start_minimized").and_then(|v| v.as_bool()).unwrap_or(frugal_config.start_minimized)
+            } else {
+                frugal_config.start_minimized
+            };
             let config_arc = Arc::new(tokio::sync::Mutex::new(frugal_config));
             
             let server_abort_handle = Arc::new(tokio::sync::Mutex::new(None));
@@ -2226,6 +2525,15 @@ fn main() {
             telemetry::start_telemetry_loop(app.handle().clone());
             
             if env::args().any(|arg| arg == "--wipe") {
+                let process_manager = app.state::<Arc<ChildProcessManager>>();
+                process_manager.kill_all();
+                #[cfg(not(windows))]
+                {
+                    let _ = std::process::Command::new("pkill").args(&["-9", "-f", "hermes"]).status();
+                    let _ = std::process::Command::new("pkill").args(&["-9", "-f", "opencode"]).status();
+                    let _ = std::process::Command::new("pkill").args(&["-9", "-f", "ollama"]).status();
+                }
+
                 if let Ok(app_data_dir) = app.path().app_data_dir() {
                     let store_path = app_data_dir.join("store.json");
                     if store_path.exists() {
@@ -2308,12 +2616,75 @@ fn main() {
                 }
             }
 
-            if env::args().any(|arg| arg == "--minimized") || start_minimized {
-                use tauri::Manager;
-                if let Some(window) = app.get_webview_window("main") {
+            // Autostart Hermes Gateway if Hermes is installed and not wiping
+            if !env::args().any(|arg| arg == "--wipe") {
+                if let Ok(home) = app.path().home_dir() {
+                    if is_hermes_installed(&home) {
+                        let process_manager = app.state::<Arc<ChildProcessManager>>().inner().clone();
+                        let frugal_state = app.state::<FrugalConfigState>();
+                        let (port, api_pwd) = {
+                            let config = frugal_state.config.blocking_lock();
+                            (config.port, config.api_password.clone())
+                        };
+                        let app_handle = app.handle().clone();
+                        tauri::async_runtime::spawn(async move {
+                            let _ = spawn_hermes_child(&app_handle, &process_manager, port, api_pwd, "gateway").await;
+                        });
+                    }
+                }
+            }
+
+            if let Some(window) = app.get_webview_window("main") {
+                if should_show_window(is_silent, start_minimized) {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                } else {
                     let _ = window.hide();
                 }
             }
+
+            // System Tray Initialization
+            let show_item = tauri::menu::MenuItem::with_id(app, "show", "Show Window", true, None::<&str>)?;
+            let quit_item = tauri::menu::MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let tray_menu = tauri::menu::Menu::with_items(app, &[&show_item, &quit_item])?;
+
+            let mut tray_builder = tauri::tray::TrayIconBuilder::new()
+                .menu(&tray_menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                            let _ = window.unminimize();
+                        }
+                    }
+                    "quit" => {
+                        app.exit(0);
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let tauri::tray::TrayIconEvent::Click {
+                        button: tauri::tray::MouseButton::Left,
+                        button_state: tauri::tray::MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                            let _ = window.unminimize();
+                        }
+                    }
+                });
+
+            if let Some(icon) = app.default_window_icon() {
+                tray_builder = tray_builder.icon(icon.clone());
+            }
+            let _tray = tray_builder.build(app)?;
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -2350,48 +2721,90 @@ fn main() {
             refresh_routing_chain,
             check_tool_gateway_status,
             set_tool_gateway_installed,
-            get_model_tag_for_vram
+            get_model_tag_for_vram,
+            start_hermes_service,
+            stop_hermes_service,
+            has_active_services,
+            get_active_services,
+            confirm_exit_app,
+            check_hermes_ready
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
         
     app.run(|app_handle, event| {
         match event {
-            tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
-                let state = app_handle.state::<FrugalConfigState>();
-                if state.is_dirty.swap(false, std::sync::atomic::Ordering::AcqRel) {
-                    let config_clone = if let Ok(guard) = state.config.try_lock() {
-                        guard.clone()
-                    } else {
-                        tauri::async_runtime::block_on(async {
-                            let guard = state.config.lock().await;
+            tauri::RunEvent::ExitRequested { api, .. } => {
+                let process_manager = app_handle.state::<Arc<ChildProcessManager>>();
+                let allow_exit = app_handle.state::<Arc<std::sync::atomic::AtomicBool>>();
+                let is_allowed = allow_exit.load(std::sync::atomic::Ordering::Acquire);
+                let has_active = process_manager.has_active_services();
+                
+                if !is_allowed && has_active {
+                    api.prevent_exit();
+                    let _ = app_handle.emit("request_exit_confirmation", ());
+                    if let Some(window) = app_handle.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                        let _ = window.unminimize();
+                    }
+                } else {
+                    process_manager.kill_all();
+                    let state = app_handle.state::<FrugalConfigState>();
+                    if state.is_dirty.swap(false, std::sync::atomic::Ordering::AcqRel) {
+                        let config_clone = if let Ok(guard) = state.config.try_lock() {
                             guard.clone()
-                        })
-                    };
-                    if let Ok(path) = get_config_path(app_handle) {
-                        if let Ok(json) = serde_json::to_string_pretty(&config_clone) {
-                            let _ = std::fs::write(path, json);
+                        } else {
+                            tauri::async_runtime::block_on(async {
+                                let guard = state.config.lock().await;
+                                guard.clone()
+                            })
+                        };
+                        if let Ok(path) = get_config_path(app_handle) {
+                            if let Ok(json) = serde_json::to_string_pretty(&config_clone) {
+                                let _ = std::fs::write(path, json);
+                            }
                         }
                     }
                 }
             }
-            tauri::RunEvent::WindowEvent { event: tauri::WindowEvent::CloseRequested { .. }, .. } => {
-                let state = app_handle.state::<FrugalConfigState>();
-                if state.is_dirty.swap(false, std::sync::atomic::Ordering::AcqRel) {
-                    let config_clone = if let Ok(guard) = state.config.try_lock() {
-                        guard.clone()
-                    } else {
-                        tauri::async_runtime::block_on(async {
-                            let guard = state.config.lock().await;
+            tauri::RunEvent::WindowEvent { event: tauri::WindowEvent::CloseRequested { api, .. }, .. } => {
+                let process_manager = app_handle.state::<Arc<ChildProcessManager>>();
+                let allow_exit = app_handle.state::<Arc<std::sync::atomic::AtomicBool>>();
+                let is_allowed = allow_exit.load(std::sync::atomic::Ordering::Acquire);
+                let has_active = process_manager.has_active_services();
+                
+                if !is_allowed && has_active {
+                    api.prevent_close();
+                    let _ = app_handle.emit("request_exit_confirmation", ());
+                    if let Some(window) = app_handle.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                        let _ = window.unminimize();
+                    }
+                } else {
+                    process_manager.kill_all();
+                    let state = app_handle.state::<FrugalConfigState>();
+                    if state.is_dirty.swap(false, std::sync::atomic::Ordering::AcqRel) {
+                        let config_clone = if let Ok(guard) = state.config.try_lock() {
                             guard.clone()
-                        })
-                    };
-                    if let Ok(path) = get_config_path(app_handle) {
-                        if let Ok(json) = serde_json::to_string_pretty(&config_clone) {
-                            let _ = std::fs::write(path, json);
+                        } else {
+                            tauri::async_runtime::block_on(async {
+                                let guard = state.config.lock().await;
+                                guard.clone()
+                            })
+                        };
+                        if let Ok(path) = get_config_path(app_handle) {
+                            if let Ok(json) = serde_json::to_string_pretty(&config_clone) {
+                                let _ = std::fs::write(path, json);
+                            }
                         }
                     }
                 }
+            }
+            tauri::RunEvent::Exit => {
+                let process_manager = app_handle.state::<Arc<ChildProcessManager>>();
+                process_manager.kill_all();
             }
             _ => {}
         }
@@ -2616,4 +3029,49 @@ mod tests {
         assert!(conflict_json.contains("5050"));
         assert!(conflict_json.contains("Close the service currently using port [5050] and restart the app"));
     }
+
+    #[test]
+    fn test_should_show_window_logic() {
+        // 1. Manual launch by user (no --silent or --minimized flag) -> Always show window
+        assert!(should_show_window(false, false));
+        assert!(should_show_window(false, true));
+
+        // 2. OS launch on boot (--silent flag) with start_minimized = true -> Keep hidden
+        assert!(!should_show_window(true, true));
+
+        // 3. OS launch on boot (--silent flag) with start_minimized = false -> Show window
+        assert!(should_show_window(true, false));
+    }
+
+    #[test]
+    fn test_child_process_manager_lifecycle() {
+        let pm = ChildProcessManager::new();
+        assert!(!pm.has_active_services());
+        assert_eq!(pm.active_service_names().len(), 0);
+
+        pm.register("hermes-dashboard".to_string(), 99999);
+        assert!(pm.has_active_services());
+        assert_eq!(pm.active_service_names(), vec!["hermes-dashboard".to_string()]);
+
+        pm.unregister("hermes-dashboard");
+        assert!(!pm.has_active_services());
+        assert_eq!(pm.active_service_names().len(), 0);
+    }
+
+    #[test]
+    fn test_hermes_process_aliases() {
+        let pm = ChildProcessManager::new();
+        pm.register("hermes-gateway".to_string(), 12345);
+        pm.register("hermes-dashboard".to_string(), 12346);
+        assert!(pm.has_active_services());
+        assert_eq!(pm.active_service_names().len(), 2);
+
+        pm.unregister("hermes-gateway");
+        assert!(pm.has_active_services());
+        assert_eq!(pm.active_service_names(), vec!["hermes-dashboard".to_string()]);
+
+        pm.unregister("hermes-dashboard");
+        assert!(!pm.has_active_services());
+    }
 }
+

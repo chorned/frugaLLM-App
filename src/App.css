@@ -5,6 +5,12 @@
 .logo.react:hover {
   filter: drop-shadow(0 0 2em #61dafb);
 }
+html,
+body {
+  background-color: #111827;
+  overscroll-behavior: none;
+}
+
 :root {
   font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
   font-size: 16px;
@@ -12,13 +18,14 @@
   font-weight: 400;
 
   color: #0f0f0f;
-  background-color: #f6f6f6;
+  background-color: #111827;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
 }
 
 .container {

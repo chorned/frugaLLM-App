@@ -10,18 +10,19 @@ test.describe('Node Configuration Panel', () => {
     
     // Mock Tauri IPC
     await page.addInitScript(() => {
-      window.localStorage.setItem("onboardingState", "completed");
-      window["__TAURI_EVENT_PLUGIN_INTERNALS__"] = { unregisterListener: () => {} };
-      window['__MOCK_ONNX_DOWNLOAD__'] = true;
-      window['invokedCommands'] = [];
+      const win = window as Record<string, any>;
+      win.localStorage.setItem("onboardingState", "completed");
+      win["__TAURI_EVENT_PLUGIN_INTERNALS__"] = { unregisterListener: () => {} };
+      win['__MOCK_ONNX_DOWNLOAD__'] = true;
+      win['invokedCommands'] = [];
       Object.defineProperty(window, '__TAURI_INTERNALS__', {
         writable: true,
         configurable: true,
         value: { transformCallback: () => 1234, plugins: { event: { unregisterListener: () => {} } },
           invoke: (cmd: string, args: any) => {
-            window['invokedCommands'].push({ cmd, args });
-            if (window['customInvokeHandler']) {
-              const customRes = window['customInvokeHandler'](cmd, args);
+            win['invokedCommands'].push({ cmd, args });
+            if (win['customInvokeHandler']) {
+              const customRes = win['customInvokeHandler'](cmd, args);
               if (customRes !== undefined) return customRes;
             }
             if (cmd === 'plugin:event|listen') return Promise.resolve(1234);
@@ -72,12 +73,14 @@ test.describe('Node Configuration Panel', () => {
     // Click Ollama to open config
     await canvas.clickNode('Ollama');
     await expect(configPanel.updateButton).toBeVisible();
+    await expect(configPanel.updateButton).toBeDisabled();
 
     // The config for Ollama shows IP and Port
     await expect(configPanel.ip).toBeVisible();
     await expect(configPanel.port).toBeVisible();
     
     await configPanel.port.fill('11435');
+    await expect(configPanel.updateButton).toBeEnabled();
     await configPanel.updateButton.click();
 
     // Config panel should close via close button
@@ -101,16 +104,19 @@ test.describe('Node Configuration Panel', () => {
     // Click OpenRouter
     await canvas.clickNode('Openrouter');
     await expect(configPanel.updateButton).toBeVisible();
+    await expect(configPanel.updateButton).toBeDisabled();
 
-    // Verify API Key field is password masked
+    // Verify API Key field is password masked and has expected placeholder
     await expect(configPanel.apiKey).toHaveAttribute('type', 'password');
+    await expect(configPanel.apiKey).toHaveAttribute('placeholder', 'Insert key here');
 
     // Fill API key and save
     await configPanel.apiKey.fill('sk-or-v1-mock-key');
+    await expect(configPanel.updateButton).toBeEnabled();
     await configPanel.updateButton.click();
 
     // Verify Tauri IPC was called for set_credential
-    const cmds = await page.evaluate(() => window['invokedCommands']);
+    const cmds = await page.evaluate(() => (window as Record<string, any>)['invokedCommands']);
     console.log("ALL INVOKED COMMANDS:", cmds);
     const setCredCall = cmds.find((c: any) => c.cmd === 'set_credential' && c.args?.service === 'openrouter');
     expect(setCredCall).toBeDefined();
@@ -129,16 +135,19 @@ test.describe('Node Configuration Panel', () => {
     // Click Google AI Studio node
     await canvas.clickNode('AI Studio');
     await expect(configPanel.updateButton).toBeVisible();
+    await expect(configPanel.updateButton).toBeDisabled();
 
-    // Verify Google API Key field is password masked
+    // Verify Google API Key field is password masked and has expected placeholder
     await expect(configPanel.googleApiKey).toHaveAttribute('type', 'password');
+    await expect(configPanel.googleApiKey).toHaveAttribute('placeholder', 'Insert key here');
 
     // Fill Google API key and save
     await configPanel.googleApiKey.fill('AIzaSyMockGoogleKey123');
+    await expect(configPanel.updateButton).toBeEnabled();
     await configPanel.updateButton.click();
 
     // Verify Tauri IPC was called for set_credential for google service
-    const cmds = await page.evaluate(() => window['invokedCommands']);
+    const cmds = await page.evaluate(() => (window as Record<string, any>)['invokedCommands']);
     const setGoogleCall = cmds.find((c: any) => c.cmd === 'set_credential' && c.args?.service === 'google');
     expect(setGoogleCall).toBeDefined();
     expect(setGoogleCall.args.secret).toBe('AIzaSyMockGoogleKey123');
@@ -201,7 +210,7 @@ test.describe('Node Configuration Panel', () => {
     await opusItem.getByTitle('Rank Down').click();
     
     // Verify Tauri IPC was called for set_model_override
-    const cmds = await page.evaluate(() => window['invokedCommands']);
+    const cmds = await page.evaluate(() => (window as Record<string, any>)['invokedCommands']);
     const overrideCall = cmds.find((c: any) => c.cmd === 'set_model_override');
     expect(overrideCall).toBeDefined();
   });
@@ -227,8 +236,8 @@ test.describe('Node Configuration Panel', () => {
     await canvas.clickNode('Ollama');
     await expect(configPanel.updateButton).toBeVisible();
 
-    // Check that Ollama Missing is shown, and Tool Gateway is not shown
-    await expect(page.getByText('OLLAMA MISSING')).toBeVisible();
+    // Check that Install Ollama option is shown, and Tool Gateway is not shown
+    await expect(page.getByRole('button', { name: 'INSTALL OLLAMA' })).toBeVisible();
     await expect(configPanel.toolGatewayCheckbox).not.toBeVisible();
   });
 
@@ -260,7 +269,7 @@ test.describe('Node Configuration Panel', () => {
     
     // Verify set_tool_gateway_installed was called with installed: true
     await expect(async () => {
-      const cmds = await page.evaluate(() => window['invokedCommands']);
+      const cmds = await page.evaluate(() => (window as Record<string, any>)['invokedCommands']);
       const installCall = cmds.find((c: any) => c.cmd === 'set_tool_gateway_installed' && c.args?.installed === true);
       expect(installCall).toBeDefined();
     }).toPass({ timeout: 10000 });
@@ -269,7 +278,7 @@ test.describe('Node Configuration Panel', () => {
   test('should prompt and trigger uninstallation for Tool Enforcing Gateway when installed', async ({ page }) => {
     // Override mocks so tool gateway is installed and enabled
     await page.addInitScript(() => {
-      window['customInvokeHandler'] = (cmd: string) => {
+      (window as Record<string, any>)['customInvokeHandler'] = (cmd: string) => {
         if (cmd === 'check_tool_gateway_status') return Promise.resolve(true);
         if (cmd === 'get_frugallm_config') return Promise.resolve({ tool_enforcing_gateway: true });
         return undefined;
@@ -302,7 +311,7 @@ test.describe('Node Configuration Panel', () => {
 
     // Verify set_tool_gateway_installed was called with installed: false
     await expect(async () => {
-      const cmds = await page.evaluate(() => window['invokedCommands']);
+      const cmds = await page.evaluate(() => (window as Record<string, any>)['invokedCommands']);
       const uninstallCall = cmds.find((c: any) => c.cmd === 'set_tool_gateway_installed' && c.args?.installed === false);
       expect(uninstallCall).toBeDefined();
     }).toPass({ timeout: 5000 });
@@ -345,7 +354,7 @@ test.describe('Node Configuration Panel', () => {
     await configPanel.updateButton.click();
 
     // Verify set_frugallm_config was called with api_password
-    const cmds = await page.evaluate(() => window['invokedCommands']);
+    const cmds = await page.evaluate(() => (window as Record<string, any>)['invokedCommands']);
     const saveCall = cmds.find((c: any) => c.cmd === 'set_frugallm_config' && c.args?.newConfig?.api_password === 'mySecretP@ss123');
     expect(saveCall).toBeDefined();
   });
@@ -392,7 +401,7 @@ test.describe('Node Configuration Panel', () => {
     await configPanel.updateButton.click();
 
     // Verify set_frugallm_config was called with api_password: null
-    const cmds = await page.evaluate(() => window['invokedCommands']);
+    const cmds = await page.evaluate(() => (window as Record<string, any>)['invokedCommands']);
     const saveCall = cmds.find((c: any) => c.cmd === 'set_frugallm_config' && c.args?.newConfig?.api_password === null);
     expect(saveCall).toBeDefined();
   });
@@ -454,7 +463,7 @@ test.describe('Node Configuration Panel', () => {
     await configPanel.updateButton.click();
 
     // Verify set_frugallm_config was invoked with port 61722
-    const cmds = await page.evaluate(() => window['invokedCommands']);
+    const cmds = await page.evaluate(() => (window as Record<string, any>)['invokedCommands']);
     const saveCall = cmds.find((c: any) => c.cmd === 'set_frugallm_config' && c.args?.newConfig?.port === 61722);
     expect(saveCall).toBeDefined();
   });
