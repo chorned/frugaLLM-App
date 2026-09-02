@@ -545,5 +545,76 @@ describe('App Component Integration', () => {
     expect(invoke).toHaveBeenCalledWith('kill_pty', { sessionId: 'run-hermes-gateway' });
     expect(invoke).toHaveBeenCalledWith('stop_hermes_service', { service: 'run-hermes-gateway' });
   }, 15000);
+
+  it('handles TerminalView close confirmation, cancellation, and termination', async () => {
+    const baseInvoke = (invoke as any).getMockImplementation();
+    (invoke as any).mockImplementation((cmd: string, args: any) => {
+      if (cmd === 'check_hermes_status') return Promise.resolve(true);
+      if (cmd === 'check_hermes_ready') return Promise.resolve(true);
+      if (cmd === 'get_active_services') return Promise.resolve([]);
+      if (cmd === 'spawn_pty') return Promise.resolve();
+      if (cmd === 'kill_pty') return Promise.resolve();
+      return baseInvoke(cmd, args);
+    });
+
+    const { container } = render(<App />);
+
+    await waitFor(
+      () => {
+        expect(screen.getByText('Hermes')).toBeInTheDocument();
+      },
+      { timeout: 10000 }
+    );
+
+    // Open Hermes Node Config Panel
+    const hermesNode = container.querySelector('[data-node-id="node-hermes"]');
+    expect(hermesNode).not.toBeNull();
+    fireEvent.click(hermesNode!);
+
+    await waitFor(() => {
+      expect(screen.getByText('LAUNCH APP')).toBeInTheDocument();
+    });
+
+    // Launch Hermes App -> opens TerminalView
+    await act(async () => {
+      fireEvent.click(screen.getByText('LAUNCH APP'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Hermes App')).toBeInTheDocument();
+    });
+
+    // Click ✕ on the visible Hermes App terminal
+    const closeButtons = screen.getAllByRole('button', { name: '✕' });
+    const appCloseBtn = closeButtons[closeButtons.length - 1];
+    fireEvent.click(appCloseBtn);
+
+    // Assert: confirmation message and buttons are displayed
+    await waitFor(() => {
+      expect(screen.getByText('This will terminate the running process. Are you sure?')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Yes' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+    });
+
+    // Click Cancel -> confirmation disappears, close & hide buttons return
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => {
+      expect(screen.queryByText('This will terminate the running process. Are you sure?')).not.toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: '✕' }).length).toBeGreaterThanOrEqual(1);
+    });
+
+    // Click ✕ again and click Yes -> invokes kill_pty and closes terminal
+    const closeButtonsAfterCancel = screen.getAllByRole('button', { name: '✕' });
+    fireEvent.click(closeButtonsAfterCancel[closeButtonsAfterCancel.length - 1]);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Yes' })).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Yes' }));
+    });
+
+    expect(invoke).toHaveBeenCalledWith('kill_pty', { sessionId: 'run-hermes-desktop' });
+  }, 15000);
 });
 

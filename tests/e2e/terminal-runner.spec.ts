@@ -103,11 +103,25 @@ test.describe('Terminal Runner View', () => {
 
     await page.waitForTimeout(500);
     await page.screenshot({ path: './copy-audit/terminal.png', fullPage: true });
+    await page.screenshot({ path: '/Users/chorned/.no-mistakes/evidence/01M1FX7FKFWT0N0GVMWC04F0QM/terminal-active.png', fullPage: true });
 
     // Click close
     await terminal.closeButton.click();
 
-    // Confirm close should appear
+    // Confirm close should appear with updated copy
+    await expect(terminal.confirmCloseText).toBeVisible();
+    await expect(terminal.yesButton).toBeVisible();
+    await expect(terminal.cancelButton).toBeVisible();
+
+    await page.screenshot({ path: '/Users/chorned/.no-mistakes/evidence/01M1FX7FKFWT0N0GVMWC04F0QM/terminal-confirm-close.png', fullPage: true });
+
+    // Test cancel button
+    await terminal.cancelButton.click();
+    await expect(terminal.confirmCloseText).not.toBeVisible();
+    await expect(terminal.closeButton).toBeVisible();
+
+    // Click close again and confirm
+    await terminal.closeButton.click();
     await expect(terminal.confirmCloseText).toBeVisible();
     await terminal.yesButton.click();
 
@@ -155,5 +169,7 @@ test.describe('Terminal Runner View', () => {
     await expect(terminal.downloadSpeed).toContainText('23.8 MB/s');
     await expect(terminal.downloadEta).toContainText('3m 40s left');
     await expect(page.getByText('45%')).toBeVisible();
+
+    await page.screenshot({ path: '/Users/chorned/.no-mistakes/evidence/01M1FX7FKFWT0N0GVMWC04F0QM/terminal-model-provisioning.png', fullPage: true });
   });
 });
