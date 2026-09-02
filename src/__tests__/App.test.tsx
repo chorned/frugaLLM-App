@@ -84,7 +84,6 @@ vi.mock('@tauri-apps/plugin-http', () => ({
 }));
 
 import { invoke } from '@tauri-apps/api/core';
-import { openUrl } from '@tauri-apps/plugin-opener';
 import confetti from 'canvas-confetti';
 import App from '../App';
 

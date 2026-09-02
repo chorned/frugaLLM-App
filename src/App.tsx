@@ -692,7 +692,6 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
                       onStartOnLoginChange={(enabled) => setFormData(prev => ({ ...prev, start_on_login: enabled }))}
                       startMinimized={formData.start_minimized}
                       onStartMinimizedChange={(minimized) => setFormData(prev => ({ ...prev, start_minimized: minimized }))}
-                      showWarning={true}
                     />
                   </div>
 
