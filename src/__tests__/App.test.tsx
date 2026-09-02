@@ -139,7 +139,7 @@ describe('App Component Integration', () => {
     // Assert: App finishes loader and displays nodes
     await waitFor(
       () => {
-        expect(screen.getByText('FrugaLLM')).toBeInTheDocument();
+        expect(screen.getAllByText('FrugaLLM').length).toBeGreaterThanOrEqual(1);
         expect(screen.getByText('Ollama')).toBeInTheDocument();
         expect(screen.getByText('AI Studio')).toBeInTheDocument();
       },
@@ -195,7 +195,7 @@ describe('App Component Integration', () => {
 
     await waitFor(
       () => {
-        expect(screen.getByText('FrugaLLM')).toBeInTheDocument();
+        expect(screen.getAllByText('FrugaLLM').length).toBeGreaterThanOrEqual(1);
       },
       { timeout: 10000 }
     );
@@ -303,7 +303,7 @@ describe('App Component Integration', () => {
 
     await waitFor(
       () => {
-        expect(screen.getByText('FrugaLLM')).toBeInTheDocument();
+        expect(screen.getAllByText('FrugaLLM').length).toBeGreaterThanOrEqual(1);
       },
       { timeout: 10000 }
     );
@@ -325,9 +325,10 @@ describe('App Component Integration', () => {
     const portInput = screen.getByTestId('input-frugallm-port');
     fireEvent.change(portInput, { target: { name: 'port', value: '62000' } });
 
-    // Button should now be enabled
+    // Button should now be enabled and have dark grey styling matching node header
     await waitFor(() => {
       expect(saveButton).not.toBeDisabled();
+      expect(saveButton).toHaveStyle({ backgroundColor: 'var(--zen-text)' });
     });
 
     // Click SAVE CHANGES
@@ -425,7 +426,7 @@ describe('App Component Integration', () => {
 
     await waitFor(
       () => {
-        expect(screen.getByText('FrugaLLM')).toBeInTheDocument();
+        expect(screen.getAllByText('FrugaLLM').length).toBeGreaterThanOrEqual(1);
       },
       { timeout: 10000 }
     );
@@ -616,5 +617,61 @@ describe('App Component Integration', () => {
 
     expect(invoke).toHaveBeenCalledWith('kill_pty', { sessionId: 'run-hermes-desktop' });
   }, 15000);
+
+  it('renders header with left-aligned FrugaLLM logo, footer with placeholder hyperlinks, and dark grey node gear icons', async () => {
+    localStorage.setItem('onboardingState', 'completed');
+    const { container } = render(<App />);
+
+    await waitFor(
+      () => {
+        expect(screen.getByTestId('app-header')).toBeInTheDocument();
+        expect(screen.getByTestId('app-footer')).toBeInTheDocument();
+      },
+      { timeout: 10000 }
+    );
+
+    // Header assertions: left-aligned logo and brand text
+    const header = screen.getByTestId('app-header');
+    expect(header).toBeInTheDocument();
+    const logoImg = screen.getByAltText('FrugaLLM Logo');
+    expect(logoImg).toBeInTheDocument();
+    expect(logoImg).toHaveAttribute('src', '/frugallm-icon.png');
+
+    // Footer assertions: placeholder hyperlinks
+    const footer = screen.getByTestId('app-footer');
+    expect(footer).toBeInTheDocument();
+    expect(screen.getByTestId('footer-link-docs')).toHaveTextContent('Documentation');
+    expect(screen.getByTestId('footer-link-github')).toHaveTextContent('GitHub');
+    expect(screen.getByTestId('footer-link-guides')).toHaveTextContent('Quickstart Guides');
+    expect(screen.getByTestId('footer-link-privacy')).toHaveTextContent('Privacy & Telemetry');
+
+    // Footer Guides link interaction
+    fireEvent.click(screen.getByTestId('footer-link-guides'));
+    await waitFor(() => {
+      expect(screen.getByText(/FRUGALLM \/\/ QUICKSTART GUIDES/i)).toBeInTheDocument();
+    });
+    // Close guides modal
+    fireEvent.click(screen.getByRole('button', { name: '✕' }));
+
+    // Canvas node gear icon styling assertion: Dark grey matching headerText
+    const frugalNode = container.querySelector('[data-node-id="node-frugallm"]') as HTMLElement;
+    expect(frugalNode).not.toBeNull();
+    const gearIconContainer = frugalNode?.querySelector('svg circle')?.closest('div');
+    expect(gearIconContainer).toHaveStyle({ color: 'var(--zen-text)' });
+
+    // Assert FrugaLLM geometric center matches viewport midpoint
+    const leftPx = parseFloat(frugalNode.style.left);
+    const topPx = parseFloat(frugalNode.style.top);
+    const nodeCenterX = leftPx + (220 / 2); // NODE_WIDTH is 220
+    const nodeCenterCanvasY = topPx + (130 / 2); // FrugaLLM height is 130
+    const headerEl = screen.getByTestId('app-header');
+    const headerH = headerEl.offsetHeight || 41;
+    const nodeCenterViewportY = headerH + nodeCenterCanvasY;
+
+    // Viewport width and height in jsdom window default to 1024x768
+    expect(nodeCenterX).toBe(window.innerWidth / 2);
+    expect(nodeCenterViewportY).toBe(window.innerHeight / 2);
+  }, 15000);
 });
+
 

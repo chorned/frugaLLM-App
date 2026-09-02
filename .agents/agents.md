@@ -23,6 +23,7 @@ We are undergoing a massive UI redesign using the **Strangler Fig Pattern**.
 *   **Decoupled Logic:** Before building new `v2` UI components, abstract all business logic into custom hooks or standard context providers. Both `v1` and `v2` must consume the exact same underlying logic layer.
 *   **Resilient Primitives:** Build UI components to handle extreme edge cases natively (text overflow, empty states, loading skeletons, and network error boundaries).
 *   **Copy & Text (JSON CMS):** All user-facing strings must be extracted into a localized JSON dictionary pattern (`en.json`). No hardcoded display text in the React components.
+*   **Viewport Hub Centering Mandate:** The central FrugaLLM node must be mathematically positioned such that its geometric center (accounting for its true card height and width) coincides exactly with the viewport midpoint (50% of inner window width, 50% of inner window height). Peripheral nodes (providers and agents) must calculate their offsets symmetrically relative to FrugaLLM's true center point, ensuring balanced top/bottom and left/right canvas padding.
 
 # 4. QA & SDET Testing Mandate (Strict Quality Gate)
 End-to-End, Integration, and Unit testing are our safety nets. You must enforce high-value, mutation-proof coverage and are strictly forbidden from writing tests that optimize only for a passing exit code.

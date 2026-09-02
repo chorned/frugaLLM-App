@@ -328,7 +328,7 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete
           <div className="flex justify-end">
             <button
               onClick={onComplete}
-              className="px-5 py-2.5 bg-zen-surface-hover border border-zen-border hover:border-zen-text text-zen-text text-sm font-medium rounded-xl transition-all hover:shadow-sm active:scale-[0.98]"
+              className="px-6 py-2.5 bg-zen-text text-white hover:bg-neutral-800 text-sm font-medium rounded-full transition-all hover:shadow-sm active:scale-[0.98]"
             >
               {en.onboarding?.finishTour ?? 'Finish Tour'}
             </button>

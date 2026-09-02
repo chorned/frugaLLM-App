@@ -112,10 +112,10 @@ export const Settings: React.FC<SettingsProps> = ({
         display: 'flex',
         flexDirection: 'column',
         gap: '8px',
-        padding: '8px 10px',
-        backgroundColor: 'var(--zen-surface, #f9fafb)',
-        border: '1px solid var(--zen-border, #e5e7eb)',
-        borderRadius: '8px',
+        padding: '10px 12px',
+        backgroundColor: '#FFFFFF',
+        border: '1px solid var(--zen-border)',
+        borderRadius: '12px',
         fontFamily: 'inherit',
       }}
     >
@@ -127,9 +127,9 @@ export const Settings: React.FC<SettingsProps> = ({
             alignItems: 'center',
             gap: '8px',
             cursor: 'pointer',
-            fontSize: '0.8rem',
-            fontWeight: 600,
-            color: 'var(--zen-text, #111827)',
+            fontSize: '0.78rem',
+            fontWeight: 500,
+            color: 'var(--zen-text)',
           }}
         >
           <input
@@ -153,9 +153,9 @@ export const Settings: React.FC<SettingsProps> = ({
             alignItems: 'center',
             gap: '8px',
             cursor: 'pointer',
-            fontSize: '0.8rem',
-            fontWeight: 600,
-            color: 'var(--zen-text, #111827)',
+            fontSize: '0.78rem',
+            fontWeight: 500,
+            color: 'var(--zen-text)',
           }}
         >
           <input
@@ -177,9 +177,9 @@ export const Settings: React.FC<SettingsProps> = ({
           style={{
             fontSize: '0.72rem',
             color: '#dc2626',
-            backgroundColor: 'rgba(220, 38, 38, 0.08)',
-            padding: '6px 8px',
-            borderRadius: '4px',
+            backgroundColor: '#fee2e2',
+            padding: '6px 10px',
+            borderRadius: '8px',
             fontWeight: 500,
           }}
         >
@@ -191,3 +191,4 @@ export const Settings: React.FC<SettingsProps> = ({
 };
 
 export default Settings;
+

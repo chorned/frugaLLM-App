@@ -206,12 +206,27 @@ test.describe('Node Configuration Panel', () => {
     const opusItem = page.getByTestId('model-row-anthropic/claude-3-opus');
     await expect(opusItem.getByTitle('Rank Down')).toBeVisible();
 
+    // Before ranking, Save Changes button is disabled
+    const saveBtn = page.getByTestId('save-node-config-button');
+    await expect(saveBtn).toBeDisabled();
+
     // Click Rank Down on the first item
     await opusItem.getByTitle('Rank Down').click();
     
-    // Verify Tauri IPC was called for set_model_override
-    const cmds = await page.evaluate(() => (window as Record<string, any>)['invokedCommands']);
-    const overrideCall = cmds.find((c: any) => c.cmd === 'set_model_override');
+    // Save Changes button is now enabled
+    await expect(saveBtn).toBeEnabled();
+
+    // Verify set_model_override has NOT been called yet (temporary state)
+    let cmds = await page.evaluate(() => (window as Record<string, any>)['invokedCommands']);
+    let overrideCall = cmds.find((c: any) => c.cmd === 'set_model_override');
+    expect(overrideCall).toBeUndefined();
+
+    // Click Save Changes to persist
+    await saveBtn.click();
+
+    // Verify Tauri IPC was called for set_model_override after clicking save
+    cmds = await page.evaluate(() => (window as Record<string, any>)['invokedCommands']);
+    overrideCall = cmds.find((c: any) => c.cmd === 'set_model_override');
     expect(overrideCall).toBeDefined();
   });
 

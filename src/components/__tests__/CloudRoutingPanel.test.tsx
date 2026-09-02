@@ -64,6 +64,30 @@ describe('CloudRoutingPanel Component', () => {
     expect(screen.getByText('ACTIVE')).toBeInTheDocument();
   });
 
+  it('renders a score of 0 or missing score as "⚡ SCORE: N/A" and positive scores as actual values', async () => {
+    const freeModels: CloudModel[] = [
+      { model: 'google/gemma-4-26b-a4b-it:free', provider: 'openrouter', iq: 0 },
+      { model: 'google/gemma-4-31b-it:free', provider: 'openrouter', iq: 81.2 },
+    ];
+
+    (invoke as any).mockImplementation((cmd: string) => {
+      if (cmd === 'get_frugallm_config') return Promise.resolve({ manual_model_overrides: [] });
+      if (cmd === 'get_routing_chain' || cmd === 'refresh_routing_chain') return Promise.resolve(freeModels);
+      return Promise.resolve();
+    });
+
+    render(<CloudRoutingPanel />);
+
+    await waitFor(() => {
+      expect(screen.getByText('google/gemma-4-26b-a4b-it:free')).toBeInTheDocument();
+      expect(screen.getByText('google/gemma-4-31b-it:free')).toBeInTheDocument();
+    });
+
+    // Assert that score 0 is rendered as N/A, and positive score is rendered with value
+    expect(screen.getByText('⚡ SCORE: N/A')).toBeInTheDocument();
+    expect(screen.getByText('⚡ SCORE: 81.2')).toBeInTheDocument();
+  });
+
   it('renders empty placeholder when routing pool has no models', async () => {
     // Arrange
     (invoke as any).mockImplementation((cmd: string) => {
@@ -77,7 +101,7 @@ describe('CloudRoutingPanel Component', () => {
 
     // Assert
     await waitFor(() => {
-      expect(screen.getByText('No models found. Please configure a provider.')).toBeInTheDocument();
+      expect(screen.getByText('When you have connect one or more intelligence sources, all available models will be listed here.')).toBeInTheDocument();
     });
   });
 
@@ -143,5 +167,28 @@ describe('CloudRoutingPanel Component', () => {
     await waitFor(() => {
       expect(invoke).toHaveBeenCalledWith('set_model_override', { overrides: [] });
     });
+  });
+
+  it('in controlled mode (with onOverridesChange), calls callback and does not invoke set_model_override immediately', async () => {
+    const onOverridesChangeMock = vi.fn();
+    (invoke as any).mockClear();
+
+    render(
+      <CloudRoutingPanel 
+        overrides={[]} 
+        onOverridesChange={onOverridesChangeMock} 
+      />
+    );
+    await waitFor(() => expect(screen.getByText('google/gemini-2.5-flash')).toBeInTheDocument());
+
+    // Act: Click Rank Top on index 1
+    const rankTopButtons = screen.getAllByTitle('Rank Top');
+    fireEvent.click(rankTopButtons[1]);
+
+    // Assert: Callback was fired with new overrides
+    expect(onOverridesChangeMock).toHaveBeenCalledWith(['google/gemini-2.5-flash']);
+    
+    // Assert: set_model_override was NOT called immediately
+    expect(invoke).not.toHaveBeenCalledWith('set_model_override', expect.anything());
   });
 });

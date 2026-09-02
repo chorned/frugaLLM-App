@@ -119,8 +119,34 @@ test.describe('Main Canvas Dashboard', () => {
     const htmlOverscroll = await page.evaluate(() => window.getComputedStyle(document.documentElement).overscrollBehavior);
     expect(htmlOverscroll).toBe('none');
 
-    // Verify html background color is explicitly set to dark
+    // Verify html background color is explicitly set to white
     const htmlBg = await page.evaluate(() => window.getComputedStyle(document.documentElement).backgroundColor);
-    expect(htmlBg).toBe('rgb(17, 24, 39)'); // #111827
+    expect(htmlBg).toBe('rgb(255, 255, 255)'); // #FFFFFF
+  });
+
+  test('should render header with FrugaLLM logo, footer with placeholder hyperlinks, without increasing viewport height or creating page scroll', async ({ page }) => {
+    const canvas = new MainCanvas(page);
+    await canvas.goto();
+
+    // Verify header exists and contains logo
+    const header = page.getByTestId('app-header');
+    await expect(header).toBeVisible();
+    const logo = header.getByAltText('FrugaLLM Logo');
+    await expect(logo).toBeVisible();
+
+    // Verify footer exists and contains hyperlinks
+    const footer = page.getByTestId('app-footer');
+    await expect(footer).toBeVisible();
+    await expect(page.getByTestId('footer-link-docs')).toBeVisible();
+    await expect(page.getByTestId('footer-link-github')).toBeVisible();
+    await expect(page.getByTestId('footer-link-guides')).toBeVisible();
+    await expect(page.getByTestId('footer-link-privacy')).toBeVisible();
+
+    // Verify window scroll height does not exceed window inner height (no viewport height overflow)
+    const hasScrollbar = await page.evaluate(() => {
+      return document.documentElement.scrollHeight > window.innerHeight;
+    });
+    expect(hasScrollbar).toBe(false);
   });
 });
+

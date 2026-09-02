@@ -1756,10 +1756,13 @@ async fn fetch_live_routing_chain(app: &tauri::AppHandle) -> Vec<CloudModel> {
                                 
                                 if supports_tools {
                                     let _ctx = m.get("context_length").and_then(|c| c.as_u64()).unwrap_or(8192);
-                                    let priority = crate::model_db::MODEL_REGISTRY.get_score(id); println!("Score for {} is {}", id, priority);
+                                    let inference_id = id.to_string();
+                                    let lookup_id = id.trim_end_matches(":free");
+                                    let priority = crate::model_db::MODEL_REGISTRY.get_score(lookup_id);
+                                    println!("Score for {} (lookup: {}) is {}", inference_id, lookup_id, priority);
                                     ranked_chain.push(RankedModel {
                                         model: CloudModel {
-                                            model: id.to_string(),
+                                            model: inference_id,
                                             provider: "openrouter".to_string(),
                                             iq: priority,
                                         },

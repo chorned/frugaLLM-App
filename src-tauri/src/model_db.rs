@@ -21,7 +21,33 @@ impl ModelIntelligenceRegistry {
     #[allow(dead_code)]
     pub fn new() -> Self {
         let json_str = include_str!(concat!(env!("OUT_DIR"), "/model_db.json"));
-        let db: HashMap<String, ModelScore> = serde_json::from_str(json_str).unwrap_or_default();
+        let mut db: HashMap<String, ModelScore> = serde_json::from_str(json_str).unwrap_or_default();
+
+        // Seed default foundational intelligence benchmarks to guarantee baseline scores
+        let seed_models = [
+            ("google/gemma-4-31b-it", 63.2),
+            ("google/gemma-4-26b-a4b-it", 56.2),
+            ("google/gemma-4-12b-it", 48.5),
+            ("google/gemma-4-e4b-it", 42.0),
+            ("google/gemma-4-e2b-it", 36.5),
+            ("google/gemini-2.5-flash", 65.1),
+            ("google/gemini-2.5-pro", 75.5),
+            ("google/gemini-2.5-flash-lite", 50.8),
+            ("anthropic/claude-3.5-sonnet", 85.0),
+            ("anthropic/claude-3.5-haiku", 58.0),
+            ("meta-llama/llama-3.3-70b-instruct", 62.0),
+            ("z-ai/glm-5.2", 52.6),
+            ("minimax/minimax-m3", 45.4),
+            ("minimax/minimax-m2.7", 38.9),
+            ("thinkingmachines/inkling", 42.3),
+            ("thinkingmachines/inkling-small", 41.2),
+            ("nvidia/nemotron-3-ultra-550b-a55b", 38.3),
+        ];
+
+        for (model, score) in seed_models {
+            db.entry(model.to_string()).or_insert(ModelScore { score });
+        }
+
         Self {
             scores: Arc::new(RwLock::new(db)),
         }
@@ -44,18 +70,43 @@ impl ModelIntelligenceRegistry {
     }
 
     pub fn get_score(&self, model_id: &str) -> f32 {
-        let normalized = Self::normalize_model_id(model_id);
+        let lookup_id = model_id.trim_end_matches(":free");
+        let normalized = Self::normalize_model_id(lookup_id);
         let guard = self.scores.read().unwrap();
         
-        // Exact match
+        // 1. Exact match on normalized ID
         if let Some(s) = guard.get(&normalized) {
             return s.score;
         }
 
-        // Fuzzy match: If the query is "minimax/minimax-m3", it should match "minimax/minimax-m3-20260531"
+        // 2. Exact match on raw lookup ID
+        if let Some(s) = guard.get(lookup_id) {
+            return s.score;
+        }
+
+        // 3. Exact match against normalized registry keys
         for (k, v) in guard.iter() {
-            if k.starts_with(&normalized) {
-                if k.len() == normalized.len() || k.as_bytes().get(normalized.len()) == Some(&b'-') {
+            let k_norm = Self::normalize_model_id(k);
+            if k_norm == normalized {
+                return v.score;
+            }
+        }
+
+        // 4. Fuzzy match: If the query is "minimax/minimax-m3", it should match "minimax/minimax-m3-20260531"
+        for (k, v) in guard.iter() {
+            let k_norm = Self::normalize_model_id(k);
+            if k_norm.starts_with(&normalized) {
+                if k_norm.len() == normalized.len() || k_norm.as_bytes().get(normalized.len()) == Some(&b'-') {
+                    return v.score;
+                }
+            }
+        }
+
+        // 5. Reverse fuzzy match: If query has date suffix "google/gemma-4-31b-it-20260402", matches "google/gemma-4-31b-it"
+        for (k, v) in guard.iter() {
+            let k_norm = Self::normalize_model_id(k);
+            if normalized.starts_with(&k_norm) {
+                if normalized.len() == k_norm.len() || normalized.as_bytes().get(k_norm.len()) == Some(&b'-') {
                     return v.score;
                 }
             }
@@ -109,6 +160,14 @@ mod tests {
             "anthropic/claude-3.5-sonnet"
         );
         assert_eq!(
+            ModelIntelligenceRegistry::normalize_model_id("google/gemma-4-26b-a4b-it:free"),
+            "google/gemma-4-26b-a4b-it"
+        );
+        assert_eq!(
+            ModelIntelligenceRegistry::normalize_model_id("google/gemma-4-31b-it:free"),
+            "google/gemma-4-31b-it"
+        );
+        assert_eq!(
             ModelIntelligenceRegistry::normalize_model_id("meta-llama/llama-3.3-70b-instruct:nitro"),
             "meta-llama/llama-3.3-70b-instruct"
         );
@@ -122,11 +181,15 @@ mod tests {
 
         let mut test_scores = HashMap::new();
         test_scores.insert("anthropic/claude-3.5-sonnet".to_string(), ModelScore { score: 92.5 });
+        test_scores.insert("google/gemma-4-26b-a4b-it".to_string(), ModelScore { score: 78.4 });
+        test_scores.insert("google/gemma-4-31b-it".to_string(), ModelScore { score: 81.2 });
         test_scores.insert("minimax/minimax-m3-20260531".to_string(), ModelScore { score: 85.0 });
         registry.update_scores(test_scores);
 
         // Exact match with suffix stripped
         assert_eq!(registry.get_score("anthropic/claude-3.5-sonnet:free"), 92.5);
+        assert_eq!(registry.get_score("google/gemma-4-26b-a4b-it:free"), 78.4);
+        assert_eq!(registry.get_score("google/gemma-4-31b-it:free"), 81.2);
 
         // Fuzzy match on prefix with dash
         assert_eq!(registry.get_score("minimax/minimax-m3"), 85.0);
@@ -151,5 +214,61 @@ mod tests {
         registry.sort_models_by_intelligence(&mut models, |m| m);
 
         assert_eq!(models, vec!["model-high", "model-mid", "model-low", "model-unknown"]);
+    }
+
+    #[test]
+    fn test_dual_id_mapping_and_free_model_score_resolution() {
+        // Mock OpenRouter API response payload containing :free endpoints
+        let openrouter_json = serde_json::json!({
+            "data": [
+                {
+                    "id": "google/gemma-4-31b-it:free",
+                    "pricing": {
+                        "prompt": "0",
+                        "completion": "0"
+                    },
+                    "supported_parameters": ["tools", "tool_choice"]
+                },
+                {
+                    "id": "google/gemma-4-26b-a4b-it:free",
+                    "pricing": {
+                        "prompt": "0",
+                        "completion": "0"
+                    },
+                    "supported_parameters": ["tools"]
+                }
+            ]
+        });
+
+        // Initialize registry with base model scores
+        let registry = ModelIntelligenceRegistry {
+            scores: Arc::new(RwLock::new(HashMap::new())),
+        };
+        let mut base_scores = HashMap::new();
+        base_scores.insert("google/gemma-4-31b-it".to_string(), ModelScore { score: 63.2 });
+        base_scores.insert("google/gemma-4-26b-a4b-it".to_string(), ModelScore { score: 56.2 });
+        registry.update_scores(base_scores);
+
+        let models = openrouter_json["data"].as_array().unwrap();
+        let mut mapped_results = Vec::new();
+
+        for m in models {
+            let inference_id = m.get("id").unwrap().as_str().unwrap();
+            let lookup_id = inference_id.trim_end_matches(":free");
+            let score = registry.get_score(lookup_id);
+
+            mapped_results.push((inference_id.to_string(), score));
+        }
+
+        // 1. Assert inference IDs strictly preserve the original :free suffix for LLM routing
+        assert_eq!(mapped_results[0].0, "google/gemma-4-31b-it:free");
+        assert_eq!(mapped_results[1].0, "google/gemma-4-26b-a4b-it:free");
+
+        // 2. Assert that attached scores are strictly > 0.0, mapped directly from the base models
+        assert!(mapped_results[0].1 > 0.0, "Score for {} was 0.0, expected > 0.0", mapped_results[0].0);
+        assert_eq!(mapped_results[0].1, 63.2);
+
+        assert!(mapped_results[1].1 > 0.0, "Score for {} was 0.0, expected > 0.0", mapped_results[1].0);
+        assert_eq!(mapped_results[1].1, 56.2);
     }
 }
