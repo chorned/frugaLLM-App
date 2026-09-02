@@ -187,67 +187,94 @@ export const MemoryPipelineWidget: React.FC<MemoryPipelineWidgetProps> = ({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--zen-text)', display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <Layers style={{ width: '14px', height: '14px', color: 'var(--zen-accent)' }} />
-            Memory Pipeline (128k Q8)
+            {modelTag ? (
+              'Estimated memory use'
+            ) : (
+              <>
+                <Layers style={{ width: '14px', height: '14px', color: 'var(--zen-accent)' }} />
+                Memory Pipeline (128k Q8)
+              </>
+            )}
           </span>
+          {!modelTag && (
+            <span
+              data-testid="memory-phase-badge"
+              style={{
+                fontSize: '0.62rem',
+                fontWeight: 800,
+                padding: '2px 7px',
+                borderRadius: '999px',
+                letterSpacing: '0.4px',
+                backgroundColor: isLive ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                color: isLive ? 'var(--zen-success)' : 'var(--zen-accent)',
+                border: `1px solid ${isLive ? 'rgba(34, 197, 94, 0.3)' : 'rgba(59, 130, 246, 0.3)'}`,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              {isLive ? (
+                <>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--zen-success)', display: 'inline-block' }} />
+                  LIVE RUNTIME
+                </>
+              ) : (
+                <>
+                  <Sparkles style={{ width: '9px', height: '9px' }} />
+                  PRE-FLIGHT ESTIMATION
+                </>
+              )}
+            </span>
+          )}
+        </div>
+
+        {modelTag ? (
           <span
             data-testid="memory-phase-badge"
             style={{
               fontSize: '0.62rem',
               fontWeight: 800,
-              padding: '2px 7px',
-              borderRadius: '999px',
-              letterSpacing: '0.4px',
-              backgroundColor: isLive ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)',
-              color: isLive ? 'var(--zen-success)' : 'var(--zen-accent)',
-              border: `1px solid ${isLive ? 'rgba(34, 197, 94, 0.3)' : 'rgba(59, 130, 246, 0.3)'}`,
+              padding: '2px 8px',
+              borderRadius: '6px',
+              letterSpacing: '0.5px',
+              backgroundColor: 'rgba(59, 130, 246, 0.12)',
+              color: '#3b82f6',
+              border: '1px solid rgba(59, 130, 246, 0.25)',
               display: 'inline-flex',
+              alignItems: 'center'
+            }}
+          >
+            ESTIMATED
+          </span>
+        ) : (
+          <div
+            data-testid="architecture-badge"
+            style={{
+              fontSize: '0.62rem',
+              fontWeight: 700,
+              padding: '2px 7px',
+              borderRadius: '6px',
+              backgroundColor: '#1f2937',
+              color: '#cbd5e1',
+              border: '1px solid #374151',
+              display: 'flex',
               alignItems: 'center',
               gap: '4px'
             }}
           >
-            {isLive ? (
+            {isUnified ? (
               <>
-                <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--zen-success)', display: 'inline-block' }} />
-                LIVE RUNTIME
+                <HardDrive style={{ width: '10px', height: '10px', color: '#60a5fa' }} />
+                Apple Silicon (Unified Memory)
               </>
             ) : (
               <>
-                <Sparkles style={{ width: '9px', height: '9px' }} />
-                PRE-FLIGHT ESTIMATION
+                <Zap style={{ width: '10px', height: '10px', color: '#f59e0b' }} />
+                Discrete GPU (Dedicated VRAM)
               </>
             )}
-          </span>
-        </div>
-
-        {/* Architecture Pill */}
-        <div
-          data-testid="architecture-badge"
-          style={{
-            fontSize: '0.62rem',
-            fontWeight: 700,
-            padding: '2px 7px',
-            borderRadius: '6px',
-            backgroundColor: '#1f2937',
-            color: '#cbd5e1',
-            border: '1px solid #374151',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px'
-          }}
-        >
-          {isUnified ? (
-            <>
-              <HardDrive style={{ width: '10px', height: '10px', color: '#60a5fa' }} />
-              Apple Silicon (Unified Memory)
-            </>
-          ) : (
-            <>
-              <Zap style={{ width: '10px', height: '10px', color: '#f59e0b' }} />
-              Discrete GPU (Dedicated VRAM)
-            </>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Stacked Bar Container */}

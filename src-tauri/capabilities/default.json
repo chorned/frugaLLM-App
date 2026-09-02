@@ -8,6 +8,8 @@
     "opener:default",
     "http:default",
     "clipboard-manager:default",
+    "autostart:default",
+    "store:default",
     {
       "identifier": "http:default",
       "allow": [

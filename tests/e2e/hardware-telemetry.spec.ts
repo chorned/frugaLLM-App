@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { HardwareTelemetryPage } from '../pages/HardwareTelemetry';
-import { MainCanvasPage } from '../pages/MainCanvas';
+import { MainCanvas } from '../pages/MainCanvas';
 
 test.describe('Hardware Telemetry Widget', () => {
   test.beforeEach(async ({ page }) => {
@@ -8,30 +8,32 @@ test.describe('Hardware Telemetry Widget', () => {
     page.on('console', msg => console.log('PAGE LOG:', msg.text()));
     page.on('pageerror', err => console.log('PAGE ERROR:', err));
     await page.addInitScript(() => {
-      window.localStorage.setItem("onboardingState", "completed");
-      window["__TAURI_EVENT_PLUGIN_INTERNALS__"] = { unregisterListener: () => {} };
-      window['invokedCommands'] = [];
-      window['tauriEventCallbacks'] = {};
-      window['tauriListeners'] = {};
+      const win = window as Record<string, any>;
+      win.localStorage.setItem("onboardingState", "completed");
+      win["__TAURI_EVENT_PLUGIN_INTERNALS__"] = { unregisterListener: () => {} };
+      win['invokedCommands'] = [];
+      win['tauriEventCallbacks'] = {};
+      win['tauriListeners'] = {};
       let nextId = 1;
 
       Object.defineProperty(window, '__TAURI_INTERNALS__', {
-        value: { transformCallback: () => 1234, plugins: { event: { unregisterListener: () => {} } },
+        value: {
+          plugins: { event: { unregisterListener: () => {} } },
           transformCallback: (callback: any) => {
              const id = nextId++;
-             window['tauriEventCallbacks'][id] = callback;
+             win['tauriEventCallbacks'][id] = callback;
              return id;
           },
           invoke: (cmd: string, args: any) => {
-            window['invokedCommands'].push({ cmd, args });
+            win['invokedCommands'].push({ cmd, args });
             
             if (cmd === 'plugin:event|listen') {
                const eventName = args.event;
                const handlerId = args.handler;
-               if (!window['tauriListeners'][eventName]) {
-                   window['tauriListeners'][eventName] = [];
+               if (!win['tauriListeners'][eventName]) {
+                   win['tauriListeners'][eventName] = [];
                }
-               window['tauriListeners'][eventName].push(window['tauriEventCallbacks'][handlerId]);
+               win['tauriListeners'][eventName].push(win['tauriEventCallbacks'][handlerId]);
                return Promise.resolve(handlerId);
             }
             
@@ -48,8 +50,8 @@ test.describe('Hardware Telemetry Widget', () => {
         }
       });
 
-      (window as any).emitTauriEvent = (event: string, payload: any) => {
-         const listeners = window['tauriListeners'][event] || [];
+      win.emitTauriEvent = (event: string, payload: any) => {
+         const listeners = win['tauriListeners'][event] || [];
          for (const listener of listeners) {
              listener({ event, payload });
          }

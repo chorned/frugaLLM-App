@@ -11,14 +11,12 @@ export class HardwareTelemetryPage {
   
   readonly loadLabel: Locator;
   readonly loadValue: Locator;
-  readonly loadBar: Locator;
-  
   readonly memoryLabel: Locator;
   readonly memoryValue: Locator;
-  readonly memoryBar: Locator;
-  
   readonly throughputLabel: Locator;
   readonly throughputValue: Locator;
+  readonly benchmarkButton: Locator;
+  readonly benchmarkPanel: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -48,9 +46,6 @@ export class HardwareTelemetryPage {
     this.benchmarkButton = this.panel.getByTestId('benchmark-info-btn');
     this.benchmarkPanel = this.panel.getByTestId('benchmark-panel');
   }
-
-  readonly benchmarkButton: Locator;
-  readonly benchmarkPanel: Locator;
 
   async toggle() {
     await this.toggleButton.click();

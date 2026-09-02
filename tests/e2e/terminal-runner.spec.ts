@@ -9,32 +9,33 @@ test.describe('Terminal Runner View', () => {
     page.on('pageerror', error => console.log('PAGE ERROR:', error.message));
 
     await page.addInitScript(() => {
-      window.localStorage.setItem("onboardingState", "completed");
-      window["__TAURI_EVENT_PLUGIN_INTERNALS__"] = { unregisterListener: () => {} };
-      window['invokedCommands'] = [];
-      window['tauriEventCallbacks'] = {};
-      window['tauriListeners'] = {};
+      const win = window as Record<string, any>;
+      win.localStorage.setItem("onboardingState", "completed");
+      win["__TAURI_EVENT_PLUGIN_INTERNALS__"] = { unregisterListener: () => {} };
+      win['invokedCommands'] = [];
+      win['tauriEventCallbacks'] = {};
+      win['tauriListeners'] = {};
       let nextId = 1;
 
       Object.defineProperty(window, '__TAURI_INTERNALS__', {
         value: {
           transformCallback: (callback: any) => {
              const id = nextId++;
-             window['tauriEventCallbacks'][id] = callback;
+             win['tauriEventCallbacks'][id] = callback;
              return id;
           },
           plugins: { event: { unregisterListener: () => {} } },
           invoke: (cmd: string, args: any) => {
-            window['invokedCommands'].push({ cmd, args });
+            win['invokedCommands'].push({ cmd, args });
             console.log('IPC Mock Intercepted:', cmd, args);
             
             if (cmd === 'plugin:event|listen') {
                const eventName = args.event;
                const handlerId = args.handler;
-               if (!window['tauriListeners'][eventName]) {
-                   window['tauriListeners'][eventName] = [];
+               if (!win['tauriListeners'][eventName]) {
+                   win['tauriListeners'][eventName] = [];
                }
-               window['tauriListeners'][eventName].push(window['tauriEventCallbacks'][handlerId]);
+               win['tauriListeners'][eventName].push(win['tauriEventCallbacks'][handlerId]);
                return Promise.resolve(handlerId);
             }
 
@@ -55,8 +56,8 @@ test.describe('Terminal Runner View', () => {
         }
       });
 
-      (window as any).emitTauriEvent = (event: string, payload: any) => {
-         const listeners = window['tauriListeners'][event] || [];
+      win.emitTauriEvent = (event: string, payload: any) => {
+         const listeners = win['tauriListeners'][event] || [];
          for (const listener of listeners) {
              listener({ event, payload });
          }
@@ -83,19 +84,19 @@ test.describe('Terminal Runner View', () => {
 
     // Wait briefly and dump commands
     await page.waitForTimeout(1000);
-    const cmds = await page.evaluate(() => window['invokedCommands']);
+    const cmds = await page.evaluate(() => (window as Record<string, any>)['invokedCommands']);
     console.log('Invoked Commands:', cmds);
 
     // Verify spawn_pty and resize_pty were invoked
     await expect(async () => {
-      const currentCmds = await page.evaluate(() => window['invokedCommands']);
+      const currentCmds = await page.evaluate(() => (window as Record<string, any>)['invokedCommands']);
       const spawnCall = currentCmds.find((c: any) => c.cmd === 'spawn_pty');
       expect(spawnCall).toBeDefined();
     }).toPass({ timeout: 2000 });
     
     // Wait for resize_pty
     await expect(async () => {
-      const allCmds = await page.evaluate(() => window['invokedCommands']);
+      const allCmds = await page.evaluate(() => (window as Record<string, any>)['invokedCommands']);
       const resizeCall = allCmds.find((c: any) => c.cmd === 'resize_pty');
       expect(resizeCall).toBeDefined();
     }).toPass({ timeout: 2000 });
@@ -114,7 +115,7 @@ test.describe('Terminal Runner View', () => {
     await expect(terminal.xterm).not.toBeVisible();
 
     // Verify kill_pty was called
-    const finalCmds = await page.evaluate(() => window['invokedCommands']);
+    const finalCmds = await page.evaluate(() => (window as Record<string, any>)['invokedCommands']);
     const killCall = finalCmds.find((c: any) => c.cmd === 'kill_pty');
     expect(killCall).toBeDefined();
   });

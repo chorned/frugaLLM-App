@@ -6,11 +6,12 @@ import { MainCanvas } from '../pages/MainCanvas';
  */
 async function setupTauriMock(page: Page, vramMb: number) {
   await page.addInitScript((mockVram) => {
-    window.localStorage.setItem("onboardingState", "completed");
-    window["__TAURI_EVENT_PLUGIN_INTERNALS__"] = { unregisterListener: () => {} };
-    window['invokedCommands'] = [];
-    window['tauriEventCallbacks'] = {};
-    window['tauriListeners'] = {};
+    const win = window as Record<string, any>;
+    win.localStorage.setItem("onboardingState", "completed");
+    win["__TAURI_EVENT_PLUGIN_INTERNALS__"] = { unregisterListener: () => {} };
+    win['invokedCommands'] = [];
+    win['tauriEventCallbacks'] = {};
+    win['tauriListeners'] = {};
     let nextId = 1;
 
     const vramBytes = mockVram * 1024 * 1024;
@@ -20,7 +21,7 @@ async function setupTauriMock(page: Page, vramMb: number) {
       value: {
         transformCallback: (callback: any) => {
           const id = nextId++;
-          window['tauriEventCallbacks'][id] = callback;
+          win['tauriEventCallbacks'][id] = callback;
           return id;
         },
         plugins: {
@@ -29,15 +30,15 @@ async function setupTauriMock(page: Page, vramMb: number) {
           }
         },
         invoke: (cmd: string, args: any) => {
-          window['invokedCommands'].push({ cmd, args });
+          win['invokedCommands'].push({ cmd, args });
 
           if (cmd === 'plugin:event|listen') {
             const eventName = args.event;
             const handlerId = args.handler;
-            if (!window['tauriListeners'][eventName]) {
-              window['tauriListeners'][eventName] = [];
+            if (!win['tauriListeners'][eventName]) {
+              win['tauriListeners'][eventName] = [];
             }
-            window['tauriListeners'][eventName].push(window['tauriEventCallbacks'][handlerId]);
+            win['tauriListeners'][eventName].push(win['tauriEventCallbacks'][handlerId]);
             return Promise.resolve(handlerId);
           }
 
@@ -76,8 +77,8 @@ async function setupTauriMock(page: Page, vramMb: number) {
       }
     });
 
-    (window as any).emitTauriEvent = (event: string, payload: any) => {
-      const listeners = window['tauriListeners'][event] || [];
+    win.emitTauriEvent = (event: string, payload: any) => {
+      const listeners = win['tauriListeners'][event] || [];
       for (const listener of listeners) {
         listener({ event, payload });
       }
@@ -114,7 +115,7 @@ test.describe('Memory Pipeline & Strict Zero-Spillover Model Recommendation', ()
       // Verify Memory Pipeline widget is rendered
       const pipelineWidget = page.getByTestId('memory-pipeline-widget');
       await expect(pipelineWidget).toBeVisible();
-      await expect(page.getByTestId('memory-phase-badge')).toContainText('PRE-FLIGHT');
+      await expect(page.getByTestId('memory-phase-badge')).toContainText('ESTIMATED');
 
       if (expectedModel === 'gemma4:e2b') {
         await expect(page.getByTestId('segment-weights')).toContainText('1.4G');
@@ -222,20 +223,20 @@ test.describe('Memory Pipeline & Strict Zero-Spillover Model Recommendation', ()
     // Verify spillover segment is displayed in the stacked bar
     await expect(page.getByTestId('segment-spillover')).toBeVisible();
 
-    // Verify background canvas node mini-widget synchronized to 43.8 GB Req without remount
-    await expect(page.getByText('43.8 GB Req')).toBeVisible();
+    // Verify collapsed canvas node does not render compact estimation bar
+    await expect(page.getByTestId('compact-memory-stacked-bar')).not.toBeVisible();
   });
 
-  test('should synchronize model footprint between canvas Ollama node and settings modal for 8GB VRAM', async ({ page }) => {
+  test('should hide estimation functionality on collapsed Ollama node and display it in settings modal for 8GB VRAM', async ({ page }) => {
     await setupTauriMock(page, 8192);
 
     const canvas = new MainCanvas(page);
     await canvas.goto();
 
-    // Verify canvas Ollama node mini-widget initially renders 3.2 GB Req / 8.0 GB VRAM Ceiling
-    await expect(page.getByText('3.2 GB Req')).toBeVisible();
-    await expect(page.getByText('8.0 GB VRAM Ceiling')).toBeVisible();
-    await expect(page.getByTestId('compact-memory-stacked-bar')).toBeVisible();
+    // Verify collapsed canvas Ollama node renders allocation telemetry but hides estimation functionality
+    await expect(page.getByTestId('hardware-node-allocation')).toBeVisible();
+    await expect(page.getByTestId('compact-memory-stacked-bar')).not.toBeVisible();
+    await expect(page.getByText('Pre-Flight 128k Allocation')).not.toBeVisible();
 
     // Open Ollama settings modal
     await canvas.clickNode('Ollama');
@@ -243,10 +244,9 @@ test.describe('Memory Pipeline & Strict Zero-Spillover Model Recommendation', ()
     // Assert modal's recommended model input is gemma4:e2b and total required is 3.2 GB
     const recommendedModelInput = page.getByTestId('recommended-model-input');
     await expect(recommendedModelInput).toHaveValue('gemma4:e2b');
+    await expect(page.getByTestId('memory-pipeline-widget')).toBeVisible();
     await expect(page.getByTestId('total-required-stat')).toContainText('3.2 GB');
-
-    // Verify both modal and canvas node stay in sync
-    await expect(page.getByText('3.2 GB Req')).toBeVisible();
+    await expect(page.getByTestId('hardware-ceiling-stat')).toContainText('8.0 GB');
   });
 
 });

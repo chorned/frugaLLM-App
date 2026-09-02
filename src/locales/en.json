@@ -3,17 +3,17 @@
     "nodes": {
       "ollamaLocal": {
         "label": "Ollama",
-        "subheader": "Open source (local)",
+        "subheader": "Open source",
         "description": "Your private, local brain! Ollama runs lightweight open-source models right on your machine, keeping your data entirely private and free from cloud costs."
       },
       "openRouter": {
         "label": "Openrouter",
-        "subheader": "Stripe",
+        "subheader": "Stripe (cloud)",
         "description": ""
       },
       "googleAIStudio": {
         "label": "AI Studio",
-        "subheader": "Google",
+        "subheader": "Google (cloud)",
         "description": ""
       },
       "localHardware": {
@@ -75,6 +75,13 @@
           "label": "Make available everywhere",
           "helpText": "Allow other computers on your local network (LAN) to connect directly to your FrugaLLM proxy."
         },
+        "startOnLogin": {
+          "label": "Start on Login",
+          "helpText": "Automatically start FrugaLLM in the background when you log into your operating system."
+        },
+        "startMinimized": {
+          "label": "Start Minimized"
+        },
         "apiPassword": {
           "label": "API PASSWORD",
           "checkboxLabel": "Require API Password",
@@ -90,10 +97,14 @@
         },
         "openRouterApiKey": {
           "label": "API KEY",
+          "placeholder": "Insert key here",
+          "configuredPlaceholder": "•••••••••••••••• (Key Configured)",
           "helpText": "Your OpenRouter API Key. This will be securely saved into your operating system's native Keychain!"
         },
         "googleApiKey": {
           "label": "API KEY",
+          "placeholder": "Insert key here",
+          "configuredPlaceholder": "•••••••••••••••• (Key Configured)",
           "helpText": "Your Google AI Studio API Key. This will be securely saved into your operating system's native Keychain!"
         },
         "vramDetected": {
@@ -114,16 +125,16 @@
         "updateProtocol": "UPDATE PROTOCOL",
         "help": "HELP",
         "hermes": {
-          "missing": "HERMES AGENT MISSING",
           "prerequisite": "Please connect an intelligence source to FrugaLLM first.",
           "initialize": "INSTALL HERMES",
           "installed": "HERMES AGENT INSTALLED",
-          "launchDesktop": "LAUNCH DESKTOP",
+          "launchApp": "LAUNCH APP",
+          "launchGateway": "LAUNCH APP",
+          "launchDesktop": "LAUNCH APP",
           "launchWebUi": "LAUNCH WEBUI",
           "uninstall": "UNINSTALL HERMES"
         },
         "opencode": {
-          "missing": "OPENCODE AGENT MISSING",
           "prerequisite": "Please connect an intelligence source to FrugaLLM first.",
           "initialize": "INSTALL OPENCODE",
           "installed": "OPENCODE AGENT INSTALLED",
@@ -160,7 +171,8 @@
         "common": {
           "areYouSure": "ARE YOU SURE?",
           "workspaceFolder": "WORKSPACE FOLDER",
-          "kill": "KILL",
+          "kill": "CLOSE",
+          "close": "CLOSE",
           "editSoul": "EDIT SOUL.MD"
         }
       }
@@ -257,6 +269,21 @@
       "openRouterTitle": "Advanced OpenRouter Multiplexing",
       "openRouterSubtitle": "Route queries dynamically to save costs and avoid rate limits.",
       "guideTitle": "FRUGALLM // GUIDE"
+    },
+    "cloudRoutingPanel": {
+      "title": "GLOBAL ROUTING POOL",
+      "refresh": "REFRESH",
+      "refreshing": "REFRESHING...",
+      "noModels": "No models found. Please configure a provider.",
+      "rankTop": "Rank Top",
+      "rankUp": "Rank Up",
+      "rankDown": "Rank Down",
+      "scorePrefix": "⚡ SCORE: ",
+      "skippedQuota": "SKIPPED: 429 (QUOTA)",
+      "skippedError": "SKIPPED: ERROR",
+      "resetRankTitle": "Reset Rank (Drop to Dynamic)",
+      "resetButton": "Reset",
+      "active": "ACTIVE"
     }
   },
   "onboarding": {
@@ -279,5 +306,12 @@
     "configurePort": "Configure Port",
     "dismiss": "Dismiss",
     "helperText": "Port {{port}} is in use. Close the conflicting service and restart, or enter a new port."
+  },
+  "exitConfirmation": {
+    "title": "ACTIVE SERVICES RUNNING",
+    "description": "Hermes Gateway / WebUI is currently running in the background. Quitting FrugaLLM will terminate all active agent sessions and child processes.",
+    "stayButton": "KEEP RUNNING",
+    "quitButton": "QUIT & STOP SERVICES"
   }
 }
+

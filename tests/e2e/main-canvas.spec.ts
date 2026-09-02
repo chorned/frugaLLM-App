@@ -5,8 +5,9 @@ test.describe('Main Canvas Dashboard', () => {
   test.beforeEach(async ({ page }) => {
     // Mock Tauri IPC
     await page.addInitScript(() => {
-      window.localStorage.setItem("onboardingState", "completed");
-      window["__TAURI_EVENT_PLUGIN_INTERNALS__"] = { unregisterListener: () => {} };
+      const win = window as Record<string, any>;
+      win.localStorage.setItem("onboardingState", "completed");
+      win["__TAURI_EVENT_PLUGIN_INTERNALS__"] = { unregisterListener: () => {} };
       Object.defineProperty(window, '__TAURI_INTERNALS__', {
         value: { transformCallback: () => 1234, plugins: { event: { unregisterListener: () => {} } },
           invoke: (cmd: string, args: any) => {
@@ -99,5 +100,27 @@ test.describe('Main Canvas Dashboard', () => {
     await expect(sessionTokens).toBeVisible();
     await expect(totalTokens).toBeVisible();
     await expect(moneySaved).toBeVisible();
+  });
+
+  test('should have default cursor on background canvas and prevent overscroll bounce', async ({ page }) => {
+    const canvas = new MainCanvas(page);
+    await canvas.goto();
+
+    await expect(canvas.canvas).toBeVisible();
+
+    // Verify canvas background has default cursor (not grab or grabbing)
+    const cursor = await canvas.canvas.evaluate((el) => window.getComputedStyle(el).cursor);
+    expect(cursor).toBe('default');
+
+    // Verify body / html overscroll-behavior is none
+    const bodyOverscroll = await page.evaluate(() => window.getComputedStyle(document.body).overscrollBehavior);
+    expect(bodyOverscroll).toBe('none');
+
+    const htmlOverscroll = await page.evaluate(() => window.getComputedStyle(document.documentElement).overscrollBehavior);
+    expect(htmlOverscroll).toBe('none');
+
+    // Verify html background color is explicitly set to dark
+    const htmlBg = await page.evaluate(() => window.getComputedStyle(document.documentElement).backgroundColor);
+    expect(htmlBg).toBe('rgb(17, 24, 39)'); // #111827
   });
 });
