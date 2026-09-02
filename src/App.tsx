@@ -1545,12 +1545,12 @@ const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, 
         </h2>
         {showConfirmClose ? (
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <span style={{ color: '#ef4444', fontWeight: 600, fontSize: '0.85rem' }}>This will close the running process. Are you sure?</span>
+            <span style={{ color: '#ef4444', fontWeight: 600, fontSize: '0.85rem' }}>{en.routingGraph.terminal.confirmClose}</span>
             <button onClick={() => {
               invoke('kill_pty', { sessionId }).catch(console.error);
               onExit();
-            }} style={{ padding: '6px 12px', backgroundColor: '#ef4444', color: '#ffffff', border: 'none', fontWeight: 600, cursor: 'pointer', borderRadius: '8px' }}>Close Process</button>
-            <button onClick={() => setShowConfirmClose(false)} style={{ padding: '6px 12px', backgroundColor: 'transparent', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', fontWeight: 600, cursor: 'pointer', borderRadius: '8px' }}>Cancel</button>
+            }} style={{ padding: '6px 12px', backgroundColor: '#ef4444', color: '#ffffff', border: 'none', fontWeight: 600, cursor: 'pointer', borderRadius: '8px' }}>{en.routingGraph.terminal.yes}</button>
+            <button onClick={() => setShowConfirmClose(false)} style={{ padding: '6px 12px', backgroundColor: 'transparent', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', fontWeight: 600, cursor: 'pointer', borderRadius: '8px' }}>{en.routingGraph.terminal.cancel}</button>
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
