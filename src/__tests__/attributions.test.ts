@@ -6,7 +6,6 @@ describe('Open Source Compliance and Attributions (CHO-87)', () => {
   const rootDir = path.resolve(__dirname, '../..');
   const thirdPartyPath = path.join(rootDir, 'THIRDPARTY.md');
   const readmePath = path.join(rootDir, 'README.md');
-  const mainRustPath = path.join(rootDir, 'src-tauri/src/main.rs');
 
   it('THIRDPARTY.md exists and contains Frontend and Backend dependencies with licenses', () => {
     expect(fs.existsSync(thirdPartyPath)).toBe(true);
