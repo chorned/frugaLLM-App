@@ -131,7 +131,7 @@ test.describe('Main Canvas Dashboard', () => {
     // Verify header exists and contains logo
     const header = page.getByTestId('app-header');
     await expect(header).toBeVisible();
-    const logo = header.getByAltText('FrugaLLM Logo');
+    const logo = header.getByRole('img', { name: 'FrugaLLM Logo' });
     await expect(logo).toBeVisible();
 
     // Verify footer exists and contains hyperlinks

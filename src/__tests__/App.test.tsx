@@ -633,9 +633,9 @@ describe('App Component Integration', () => {
     // Header assertions: left-aligned logo and brand text
     const header = screen.getByTestId('app-header');
     expect(header).toBeInTheDocument();
-    const logoImg = screen.getByAltText('FrugaLLM Logo');
-    expect(logoImg).toBeInTheDocument();
-    expect(logoImg).toHaveAttribute('src', '/frugallm-icon.png');
+    const logoSvg = screen.getByRole('img', { name: 'FrugaLLM Logo' });
+    expect(logoSvg).toBeInTheDocument();
+    expect(screen.getByTestId('header-frugallm-icon')).toBeInTheDocument();
 
     // Footer assertions: placeholder hyperlinks
     const footer = screen.getByTestId('app-footer');

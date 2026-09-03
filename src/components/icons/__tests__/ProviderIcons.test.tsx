@@ -6,10 +6,20 @@ import {
   GeminiIcon,
   HermesIcon,
   OpenCodeIcon,
+  FrugaLLMIcon,
   getProviderIcon,
 } from '../ProviderIcons';
 
 describe('ProviderIcons', () => {
+  it('renders FrugaLLMIcon with custom size and accessible title', () => {
+    render(<FrugaLLMIcon size={14} title="FrugaLLM" data-testid="frugallm-icon" />);
+    const icon = screen.getByTestId('frugallm-icon');
+    expect(icon).toBeInTheDocument();
+    expect(screen.getByTitle('FrugaLLM')).toBeInTheDocument();
+    expect(icon).toHaveAttribute('width', '14');
+    expect(icon).toHaveAttribute('height', '14');
+  });
+
   it('renders OpenRouterIcon with accessible title and default size', () => {
     render(<OpenRouterIcon title="OpenRouter" data-testid="openrouter-icon" />);
     const icon = screen.getByTestId('openrouter-icon');
@@ -72,6 +82,9 @@ describe('ProviderIcons', () => {
 
       const oc = render(<>{getProviderIcon('node-opencode')}</>);
       expect(oc.container.querySelector('svg')).toBeInTheDocument();
+
+      const fl = render(<>{getProviderIcon('node-frugallm')}</>);
+      expect(fl.container.querySelector('svg')).toBeInTheDocument();
     });
 
     it('returns null for unknown provider strings', () => {

@@ -1,5 +1,7 @@
+// Notice: Portions of this file are derivative works based on the LiteLLM project, originally licensed under the MIT License.
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
+
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 

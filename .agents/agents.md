@@ -8,7 +8,10 @@ FrugaLLM is a sophisticated, local-first proxy application and AI router built o
 Treat the context window and token usage as a finite, expensive budget.
 *   **Plan Before Acting:** Before executing terminal commands, file reads, or MCP actions, briefly state a 1-3 step execution plan. 
 *   **No Blind Guessing:** Do not spam `cat` or `grep` sequentially. If you need to search, formulate a single, precise command. Never `cat` a file larger than 100 lines unless strictly necessary; use AST tools or precise grep patterns.
-*   **Linear MCP Integration:** You are authorized to manage the project backlog via the connected Linear MCP server. When tasked, autonomously query, update, and close tickets specifically in project `frugallm-production-app-8877093a8507`.
+*   **Linear MCP Integration:** You are authorized to manage the project backlog via the connected Linear MCP server:
+    *   **Project Scope:** Always target project `frugallm-production-app-8877093a8507`.
+    *   **Agent Identity ("Hermes"):** In Linear, your identity/username is **`Hermes`** (`hermes.horned@gmail.com`). When instructed to assign tickets to "yourself" or take ownership, always assign them to `Hermes` (`assignee: "Hermes"`). Never assign to `"me"` or `Carl Horned`, as `"me"` resolves to the human workspace owner.
+    *   **Issue Lifecycle & Transitions:** Autonomously query, triage, transition, and close issues (`Backlog` ↔ `Todo` ↔ `In Progress` ↔ `Done`). Selectively query only necessary fields (`id`, `title`, `status`, `priority`, `assignee`, `url`) to preserve context economy.
 
 # 2. Cross-Platform & Hardware Mandate (Strict)
 We are building a local-first application that MUST run seamlessly across **Windows, Linux, and macOS**. 

@@ -1,5 +1,7 @@
+// Notice: Portions of this file are derivative works based on the LiteLLM project, originally licensed under the MIT License.
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 
 mod telemetry;
 mod model_db;

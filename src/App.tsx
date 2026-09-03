@@ -22,6 +22,7 @@ import {
   GeminiIcon,
   HermesIcon,
   OpenCodeIcon,
+  FrugaLLMIcon,
   getProviderIcon,
 } from './components/icons/ProviderIcons';
 import { MemoryPipelineWidget } from './components/MemoryPipelineWidget';
@@ -2853,10 +2854,12 @@ function AppContent() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <img 
-            src="/frugallm-icon.png" 
-            alt="FrugaLLM Logo" 
-            style={{ width: '24px', height: '24px', borderRadius: '6px', objectFit: 'contain' }} 
+          <FrugaLLMIcon 
+            size={22} 
+            title="FrugaLLM Logo"
+            aria-label="FrugaLLM Logo"
+            data-testid="header-frugallm-icon"
+            style={{ color: 'var(--zen-text)', flexShrink: 0 }} 
           />
           <span style={{ fontWeight: 700, fontSize: '0.92rem', color: 'var(--zen-text)', letterSpacing: '-0.01em' }}>
             {en.header?.brandName || 'FrugaLLM'}

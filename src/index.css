@@ -130,11 +130,11 @@
     --zen-pill-bg: #F4EFEA;
     --zen-pill-hover: #E8E0D7;
     --zen-pill-border: #ECE5DD;
-    --zen-shadow-diffused: 0 4px 16px rgba(0, 0, 0, 0.04);
-    --zen-shadow-card: 0 4px 16px rgba(0, 0, 0, 0.04);
-    --zen-shadow-modal: 0 12px 40px rgba(65, 42, 24, 0.09);
-    --tw-shadow-glass: 0 4px 16px rgba(0, 0, 0, 0.04);
-    --tw-shadow-glass-sm: 0 2px 10px rgba(0, 0, 0, 0.03);
+    --zen-shadow-diffused: 0 12px 32px rgba(0, 0, 0, 0.16), 0 4px 12px rgba(0, 0, 0, 0.06);
+    --zen-shadow-card: 0 12px 32px rgba(0, 0, 0, 0.16), 0 4px 12px rgba(0, 0, 0, 0.06);
+    --zen-shadow-modal: 0 20px 50px rgba(0, 0, 0, 0.18), 0 8px 20px rgba(0, 0, 0, 0.08);
+    --tw-shadow-glass: 0 12px 32px rgba(0, 0, 0, 0.16);
+    --tw-shadow-glass-sm: 0 4px 16px rgba(0, 0, 0, 0.10);
     color-scheme: light;
   }
 
