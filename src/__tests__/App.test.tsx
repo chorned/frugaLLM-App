@@ -139,7 +139,7 @@ describe('App Component Integration', () => {
     // Assert: App finishes loader and displays nodes
     await waitFor(
       () => {
-        expect(screen.getByText('FrugaLLM')).toBeInTheDocument();
+        expect(screen.getAllByText('FrugaLLM').length).toBeGreaterThanOrEqual(1);
         expect(screen.getByText('Ollama')).toBeInTheDocument();
         expect(screen.getByText('AI Studio')).toBeInTheDocument();
       },
@@ -195,7 +195,7 @@ describe('App Component Integration', () => {
 
     await waitFor(
       () => {
-        expect(screen.getByText('FrugaLLM')).toBeInTheDocument();
+        expect(screen.getAllByText('FrugaLLM').length).toBeGreaterThanOrEqual(1);
       },
       { timeout: 10000 }
     );
@@ -303,7 +303,7 @@ describe('App Component Integration', () => {
 
     await waitFor(
       () => {
-        expect(screen.getByText('FrugaLLM')).toBeInTheDocument();
+        expect(screen.getAllByText('FrugaLLM').length).toBeGreaterThanOrEqual(1);
       },
       { timeout: 10000 }
     );
@@ -325,9 +325,10 @@ describe('App Component Integration', () => {
     const portInput = screen.getByTestId('input-frugallm-port');
     fireEvent.change(portInput, { target: { name: 'port', value: '62000' } });
 
-    // Button should now be enabled
+    // Button should now be enabled and have accent styling
     await waitFor(() => {
       expect(saveButton).not.toBeDisabled();
+      expect(saveButton).toHaveStyle({ backgroundColor: 'var(--zen-accent)' });
     });
 
     // Click SAVE CHANGES
@@ -425,7 +426,7 @@ describe('App Component Integration', () => {
 
     await waitFor(
       () => {
-        expect(screen.getByText('FrugaLLM')).toBeInTheDocument();
+        expect(screen.getAllByText('FrugaLLM').length).toBeGreaterThanOrEqual(1);
       },
       { timeout: 10000 }
     );
@@ -616,5 +617,100 @@ describe('App Component Integration', () => {
 
     expect(invoke).toHaveBeenCalledWith('kill_pty', { sessionId: 'run-hermes-desktop' });
   }, 15000);
+
+  it('renders header with left-aligned FrugaLLM logo, footer with placeholder hyperlinks, and dark grey node gear icons', async () => {
+    localStorage.setItem('onboardingState', 'completed');
+    const { container } = render(<App />);
+
+    await waitFor(
+      () => {
+        expect(screen.getByTestId('app-header')).toBeInTheDocument();
+        expect(screen.getByTestId('app-footer')).toBeInTheDocument();
+      },
+      { timeout: 10000 }
+    );
+
+    // Header assertions: left-aligned logo and brand text
+    const header = screen.getByTestId('app-header');
+    expect(header).toBeInTheDocument();
+    const logoSvg = screen.getByRole('img', { name: 'FrugaLLM Logo' });
+    expect(logoSvg).toBeInTheDocument();
+    expect(screen.getByTestId('header-frugallm-icon')).toBeInTheDocument();
+
+    // Footer assertions: placeholder hyperlinks
+    const footer = screen.getByTestId('app-footer');
+    expect(footer).toBeInTheDocument();
+    expect(screen.getByTestId('footer-link-docs')).toHaveTextContent('Documentation');
+    expect(screen.getByTestId('footer-link-github')).toHaveTextContent('GitHub');
+    expect(screen.getByTestId('footer-link-guides')).toHaveTextContent('Quickstart Guides');
+    expect(screen.getByTestId('footer-link-privacy')).toHaveTextContent('Privacy & Telemetry');
+
+    // Footer Guides link interaction
+    fireEvent.click(screen.getByTestId('footer-link-guides'));
+    await waitFor(() => {
+      expect(screen.getByText(/FRUGALLM \/\/ QUICKSTART GUIDES/i)).toBeInTheDocument();
+    });
+    // Close guides modal
+    fireEvent.click(screen.getByRole('button', { name: '✕' }));
+
+    // Canvas node gear icon styling assertion: Dark grey matching headerText
+    const frugalNode = container.querySelector('[data-node-id="node-frugallm"]') as HTMLElement;
+    expect(frugalNode).not.toBeNull();
+    const gearIconContainer = frugalNode?.querySelector('svg circle')?.closest('div');
+    expect(gearIconContainer).toHaveStyle({ color: 'var(--zen-text)' });
+
+    // Assert 3-Row Flexbox Router Architecture
+    const mainContainer = screen.getByTestId('router-main-container');
+    expect(mainContainer).toHaveStyle({
+      position: 'relative',
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'space-between'
+    });
+
+    // Assert Dynamic SVG Routing Layer
+    const svgLayer = screen.getByTestId('router-svg-layer');
+    expect(svgLayer).toBeInTheDocument();
+    expect(svgLayer).toHaveStyle({
+      position: 'absolute',
+      pointerEvents: 'none'
+    });
+
+    // Assert Top Row (3 nodes: ollama, google, openrouter)
+    const topRow = screen.getByTestId('router-top-row');
+    expect(topRow).toHaveStyle({
+      display: 'flex',
+      width: '100%',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start'
+    });
+    expect(topRow.querySelector('[data-node-id="node-ollama"]')).toBeInTheDocument();
+    expect(topRow.querySelector('[data-node-id="node-google"]')).toBeInTheDocument();
+    expect(topRow.querySelector('[data-node-id="node-openrouter"]')).toBeInTheDocument();
+
+    // Assert Middle Row (1 central router node: frugallm)
+    const middleRow = screen.getByTestId('router-middle-row');
+    expect(middleRow).toHaveStyle({
+      display: 'flex',
+      width: '100%',
+      justifyContent: 'center',
+      alignItems: 'center'
+    });
+    expect(middleRow.querySelector('[data-node-id="node-frugallm"]')).toBeInTheDocument();
+
+    // Assert Bottom Row (2 nodes: opencode, hermes with horizontal padding)
+    const bottomRow = screen.getByTestId('router-bottom-row');
+    expect(bottomRow).toHaveStyle({
+      display: 'flex',
+      width: '100%',
+      justifyContent: 'space-around',
+      alignItems: 'flex-end',
+      paddingLeft: '11%',
+      paddingRight: '11%'
+    });
+    expect(bottomRow.querySelector('[data-node-id="node-opencode"]')).toBeInTheDocument();
+    expect(bottomRow.querySelector('[data-node-id="node-hermes"]')).toBeInTheDocument();
+  }, 15000);
 });
+
 

@@ -177,7 +177,7 @@ export const MemoryPipelineWidget: React.FC<MemoryPipelineWidgetProps> = ({
         flexDirection: 'column',
         gap: '12px',
         backgroundColor: 'var(--zen-surface-hover)',
-        border: '1px solid var(--zen-border)',
+        border: 'none',
         borderRadius: '12px',
         padding: '14px',
         fontFamily: 'inherit',
@@ -207,7 +207,7 @@ export const MemoryPipelineWidget: React.FC<MemoryPipelineWidgetProps> = ({
                 letterSpacing: '0.4px',
                 backgroundColor: isLive ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)',
                 color: isLive ? 'var(--zen-success)' : 'var(--zen-accent)',
-                border: `1px solid ${isLive ? 'rgba(34, 197, 94, 0.3)' : 'rgba(59, 130, 246, 0.3)'}`,
+                border: 'none',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '4px'
@@ -239,7 +239,7 @@ export const MemoryPipelineWidget: React.FC<MemoryPipelineWidgetProps> = ({
               letterSpacing: '0.5px',
               backgroundColor: 'rgba(59, 130, 246, 0.12)',
               color: '#3b82f6',
-              border: '1px solid rgba(59, 130, 246, 0.25)',
+              border: 'none',
               display: 'inline-flex',
               alignItems: 'center'
             }}
@@ -256,7 +256,7 @@ export const MemoryPipelineWidget: React.FC<MemoryPipelineWidgetProps> = ({
               borderRadius: '6px',
               backgroundColor: '#1f2937',
               color: '#cbd5e1',
-              border: '1px solid #374151',
+              border: 'none',
               display: 'flex',
               alignItems: 'center',
               gap: '4px'
@@ -289,7 +289,7 @@ export const MemoryPipelineWidget: React.FC<MemoryPipelineWidgetProps> = ({
             borderRadius: '6px',
             overflow: 'hidden',
             boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.5)',
-            border: '1px solid #374151',
+            border: 'none',
           }}
         >
           {isUnknown ? (
@@ -445,7 +445,7 @@ export const MemoryPipelineWidget: React.FC<MemoryPipelineWidgetProps> = ({
             padding: '10px 12px',
             borderRadius: '8px',
             backgroundColor: spilloverType === 'ssd_swap' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(234, 179, 8, 0.12)',
-            border: `1px solid ${spilloverType === 'ssd_swap' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(234, 179, 8, 0.3)'}`,
+            border: 'none',
             color: spilloverType === 'ssd_swap' ? '#f87171' : '#facc15',
             fontSize: '0.7rem',
             lineHeight: '1.3',

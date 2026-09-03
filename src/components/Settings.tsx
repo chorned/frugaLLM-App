@@ -112,10 +112,9 @@ export const Settings: React.FC<SettingsProps> = ({
         display: 'flex',
         flexDirection: 'column',
         gap: '8px',
-        padding: '8px 10px',
-        backgroundColor: 'var(--zen-surface, #f9fafb)',
-        border: '1px solid var(--zen-border, #e5e7eb)',
-        borderRadius: '8px',
+        padding: '0',
+        backgroundColor: 'transparent',
+        border: 'none',
         fontFamily: 'inherit',
       }}
     >
@@ -128,8 +127,8 @@ export const Settings: React.FC<SettingsProps> = ({
             gap: '8px',
             cursor: 'pointer',
             fontSize: '0.8rem',
-            fontWeight: 600,
-            color: 'var(--zen-text, #111827)',
+            fontWeight: 500,
+            color: 'var(--zen-text)',
           }}
         >
           <input
@@ -140,6 +139,7 @@ export const Settings: React.FC<SettingsProps> = ({
             checked={localStartOnLogin}
             disabled={isSyncing}
             onChange={(e) => handleToggleAutostart(e.target.checked)}
+            style={{ borderRadius: '4px', cursor: 'pointer' }}
           />
           <span>{strings.startOnLogin.label}</span>
         </label>
@@ -154,8 +154,8 @@ export const Settings: React.FC<SettingsProps> = ({
             gap: '8px',
             cursor: 'pointer',
             fontSize: '0.8rem',
-            fontWeight: 600,
-            color: 'var(--zen-text, #111827)',
+            fontWeight: 500,
+            color: 'var(--zen-text)',
           }}
         >
           <input
@@ -166,6 +166,7 @@ export const Settings: React.FC<SettingsProps> = ({
             checked={localStartMinimized}
             disabled={isSyncing}
             onChange={(e) => handleToggleStartMinimized(e.target.checked)}
+            style={{ borderRadius: '4px', cursor: 'pointer' }}
           />
           <span>{strings.startMinimized.label}</span>
         </label>
@@ -177,9 +178,9 @@ export const Settings: React.FC<SettingsProps> = ({
           style={{
             fontSize: '0.72rem',
             color: '#dc2626',
-            backgroundColor: 'rgba(220, 38, 38, 0.08)',
-            padding: '6px 8px',
-            borderRadius: '4px',
+            backgroundColor: '#fee2e2',
+            padding: '6px 10px',
+            borderRadius: '8px',
             fontWeight: 500,
           }}
         >
@@ -191,3 +192,4 @@ export const Settings: React.FC<SettingsProps> = ({
 };
 
 export default Settings;
+

@@ -12,7 +12,7 @@ export const ExitConfirmationModal: React.FC<ExitConfirmationModalProps> = ({
   isOpen,
   onCancel,
   onConfirm,
-  activeServices,
+  activeServices = [],
 }) => {
   if (!isOpen) return null;
 
@@ -28,9 +28,9 @@ export const ExitConfirmationModal: React.FC<ExitConfirmationModalProps> = ({
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.65)',
-        backdropFilter: 'blur(6px)',
-        WebkitBackdropFilter: 'blur(6px)',
+        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -45,12 +45,12 @@ export const ExitConfirmationModal: React.FC<ExitConfirmationModalProps> = ({
         style={{
           width: '100%',
           maxWidth: '460px',
-          backgroundColor: '#18181b',
-          border: '1px solid #3f3f46',
-          borderRadius: '12px',
+          backgroundColor: '#FFFFFF',
+          border: 'none',
+          borderRadius: '20px',
           padding: '24px',
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5)',
-          color: '#f4f4f5',
+          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.08)',
+          color: 'var(--zen-text)',
           display: 'flex',
           flexDirection: 'column',
           gap: '16px',
@@ -58,22 +58,20 @@ export const ExitConfirmationModal: React.FC<ExitConfirmationModalProps> = ({
           animation: 'fadeIn 0.15s ease-out',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           <div
             style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '8px',
-              backgroundColor: 'rgba(239, 68, 68, 0.15)',
-              border: '1px solid rgba(239, 68, 68, 0.3)',
+              width: '38px',
+              height: '38px',
+              borderRadius: '9999px',
+              backgroundColor: '#FEE2E2',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#ef4444',
               flexShrink: 0,
             }}
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
               <line x1="12" y1="9" x2="12" y2="13" />
               <line x1="12" y1="17" x2="12.01" y2="17" />
@@ -84,40 +82,40 @@ export const ExitConfirmationModal: React.FC<ExitConfirmationModalProps> = ({
               id="exit-modal-title"
               style={{
                 margin: 0,
-                fontSize: '1rem',
+                fontSize: '1.05rem',
                 fontWeight: 700,
-                letterSpacing: '0.03em',
-                color: '#fafafa',
+                letterSpacing: '-0.01em',
+                color: 'var(--zen-text)',
               }}
             >
               {en.exitConfirmation.title}
             </h3>
-            <p
-              style={{
-                margin: '4px 0 0 0',
-                fontSize: '0.8rem',
-                color: '#a1a1aa',
-                lineHeight: 1.4,
-              }}
-            >
-              {en.exitConfirmation.description}
-            </p>
           </div>
         </div>
 
-        {activeServices && activeServices.length > 0 && (
+        <p
+          style={{
+            margin: 0,
+            fontSize: '0.84rem',
+            lineHeight: 1.5,
+            color: 'var(--zen-text-secondary)',
+          }}
+        >
+          {en.exitConfirmation.description}
+        </p>
+
+        {activeServices.length > 0 && (
           <div
             style={{
-              backgroundColor: '#27272a',
-              border: '1px solid #3f3f46',
-              borderRadius: '8px',
-              padding: '8px 12px',
+              backgroundColor: 'var(--zen-surface-hover)',
+              padding: '12px 14px',
+              borderRadius: '12px',
               display: 'flex',
               flexDirection: 'column',
-              gap: '4px',
+              gap: '6px',
             }}
           >
-            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#71717a', textTransform: 'uppercase' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--zen-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Active Background Daemons
             </span>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '2px' }}>
@@ -125,18 +123,19 @@ export const ExitConfirmationModal: React.FC<ExitConfirmationModalProps> = ({
                 <span
                   key={svc}
                   style={{
-                    backgroundColor: '#3f3f46',
-                    color: '#e4e4e7',
-                    padding: '2px 8px',
-                    borderRadius: '4px',
+                    backgroundColor: 'var(--zen-surface)',
+                    border: 'none',
+                    color: 'var(--zen-text)',
+                    padding: '3px 10px',
+                    borderRadius: '9999px',
                     fontSize: '0.75rem',
-                    fontWeight: 600,
+                    fontWeight: 500,
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '5px',
+                    gap: '6px',
                   }}
                 >
-                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#22c55e' }} />
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981' }} />
                   {svc}
                 </span>
               ))}
@@ -151,16 +150,18 @@ export const ExitConfirmationModal: React.FC<ExitConfirmationModalProps> = ({
             onClick={onCancel}
             style={{
               flex: 1,
-              padding: '9px 16px',
-              backgroundColor: '#27272a',
-              color: '#e4e4e7',
-              border: '1px solid #3f3f46',
-              borderRadius: '6px',
+              padding: '10px 18px',
+              backgroundColor: 'var(--zen-surface-hover)',
+              color: 'var(--zen-text)',
+              border: 'none',
+              borderRadius: '9999px',
               fontWeight: 600,
-              fontSize: '0.8rem',
+              fontSize: '0.82rem',
               cursor: 'pointer',
-              transition: 'background-color 0.15s ease',
+              transition: 'all 0.15s ease',
             }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--zen-surface-secondary)')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'var(--zen-surface-hover)')}
           >
             {en.exitConfirmation.stayButton}
           </button>
@@ -170,16 +171,18 @@ export const ExitConfirmationModal: React.FC<ExitConfirmationModalProps> = ({
             onClick={onConfirm}
             style={{
               flex: 1,
-              padding: '9px 16px',
-              backgroundColor: '#dc2626',
-              color: '#ffffff',
+              padding: '10px 18px',
+              backgroundColor: '#DC2626',
+              color: '#FFFFFF',
               border: 'none',
-              borderRadius: '6px',
-              fontWeight: 700,
-              fontSize: '0.8rem',
+              borderRadius: '9999px',
+              fontWeight: 600,
+              fontSize: '0.82rem',
               cursor: 'pointer',
-              transition: 'background-color 0.15s ease',
+              transition: 'all 0.15s ease',
             }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#B91C1C')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#DC2626')}
           >
             {en.exitConfirmation.quitButton}
           </button>

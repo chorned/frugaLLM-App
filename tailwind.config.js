@@ -7,24 +7,35 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
+        sans: ['"ABC Oracle"', 'Inter', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
       },
       colors: {
         zen: {
-          canvas: '#F9F9F8',
+          canvas: '#FFFFFF',
           surface: '#FFFFFF',
-          'surface-hover': '#F3F4F6',
-          border: '#E5E5EA',
-          text: '#2C2C2E',
-          'text-secondary': '#8E8E93',
-          accent: '#6B7F99',
-          'accent-hover': '#576A82',
-          success: '#A7D4B6',
+          'surface-hover': '#F4F4F5',
+          'surface-secondary': '#F9F9FB',
+          border: '#E5E7EB',
+          'border-subtle': '#F0F0F2',
+          text: '#171717',
+          'text-secondary': '#737373',
+          'text-tertiary': '#A1A1AA',
+          accent: '#000000',
+          'accent-hover': '#262626',
+          success: '#10B981',
+          pill: '#F4F4F5',
+          'pill-hover': '#E4E4E7',
         }
       },
       boxShadow: {
-        glass: '0 8px 32px rgba(0, 0, 0, 0.08)',
-        'glass-sm': '0 4px 12px rgba(0, 0, 0, 0.05)',
+        glass: '0 4px 20px rgba(0, 0, 0, 0.03)',
+        'glass-sm': '0 2px 10px rgba(0, 0, 0, 0.02)',
+        'glass-lg': '0 12px 40px rgba(0, 0, 0, 0.06)',
+      },
+      borderRadius: {
+        'pill': '9999px',
+        'card': '16px',
+        'input': '12px',
       },
       keyframes: {
         'stream-forward': {

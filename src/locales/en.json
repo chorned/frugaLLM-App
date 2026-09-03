@@ -7,7 +7,7 @@
         "description": "Your private, local brain! Ollama runs lightweight open-source models right on your machine, keeping your data entirely private and free from cloud costs."
       },
       "openRouter": {
-        "label": "Openrouter",
+        "label": "OpenRouter",
         "subheader": "Stripe (cloud)",
         "description": ""
       },
@@ -274,7 +274,7 @@
       "title": "GLOBAL ROUTING POOL",
       "refresh": "REFRESH",
       "refreshing": "REFRESHING...",
-      "noModels": "No models found. Please configure a provider.",
+      "noModels": "When you have connect one or more intelligence sources, all available models will be listed here.",
       "rankTop": "Rank Top",
       "rankUp": "Rank Up",
       "rankDown": "Rank Down",
@@ -312,6 +312,20 @@
     "description": "Hermes Gateway / WebUI is currently running in the background. Quitting FrugaLLM will terminate all active agent sessions and child processes.",
     "stayButton": "KEEP RUNNING",
     "quitButton": "QUIT & STOP SERVICES"
+  },
+  "header": {
+    "brandName": "FrugaLLM",
+    "toggleTheme": "Toggle theme",
+    "themeLight": "Switch to light theme",
+    "themeDark": "Switch to dark theme"
+  },
+  "footer": {
+    "documentation": "Documentation",
+    "github": "GitHub",
+    "guides": "Quickstart Guides",
+    "privacy": "Privacy & Telemetry",
+    "status": "System Ready"
   }
 }
+
 

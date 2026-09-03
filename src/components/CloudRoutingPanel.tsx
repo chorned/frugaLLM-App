@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import en from '../locales/en.json';
+import { getProviderIcon } from './icons/ProviderIcons';
 
 export interface CloudModel {
   model: string;
@@ -11,12 +12,18 @@ export interface CloudModel {
   iq?: number;
 }
 
-export const CloudRoutingPanel = () => {
+export interface CloudRoutingPanelProps {
+  overrides?: string[];
+  onOverridesChange?: (newOverrides: string[]) => void;
+}
+
+export const CloudRoutingPanel = ({ overrides: propOverrides, onOverridesChange }: CloudRoutingPanelProps = {}) => {
   const [chain, setChain] = useState<CloudModel[]>([]);
-  const [overrides, setOverrides] = useState<string[]>([]);
+  const [internalOverrides, setInternalOverrides] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const activeOverrides = propOverrides !== undefined ? propOverrides : internalOverrides;
   const t = en.routingGraph?.cloudRoutingPanel;
 
   const refreshChain = async () => {
@@ -24,7 +31,9 @@ export const CloudRoutingPanel = () => {
     setErrors({});
     try {
       const configRes: any = await invoke('get_frugallm_config');
-      setOverrides(configRes?.manual_model_overrides || []);
+      if (propOverrides === undefined) {
+        setInternalOverrides(configRes?.manual_model_overrides || []);
+      }
       const res: any = await invoke('refresh_routing_chain');
       const filteredRes = (res || []).filter((m: CloudModel) => !m?.model?.includes('computer-use'));
       setChain(filteredRes);
@@ -48,7 +57,9 @@ export const CloudRoutingPanel = () => {
       
       try {
         const res: any = await invoke('get_frugallm_config');
-        setOverrides(res?.manual_model_overrides || []);
+        if (propOverrides === undefined) {
+          setInternalOverrides(res?.manual_model_overrides || []);
+        }
         const cRes: any = await invoke('get_routing_chain');
         if (Array.isArray(cRes) && cRes.length > 0) {
           const filteredCRes = cRes.filter((m: CloudModel) => !m?.model?.includes('computer-use'));
@@ -80,7 +91,7 @@ export const CloudRoutingPanel = () => {
       const model = newChain[i].model;
       if (i === newIdx) {
         newOverrides.push(model);
-      } else if (overrides.includes(model)) {
+      } else if (activeOverrides.includes(model)) {
         newOverrides.push(model);
       } else {
         newOverrides.push("");
@@ -91,67 +102,85 @@ export const CloudRoutingPanel = () => {
         newOverrides.pop();
     }
 
-    setOverrides(newOverrides);
-    setChain(newChain); // Optimistic UI update
+    setChain(newChain); // Immediate optimistic UI update
 
-    try {
-      await invoke('set_model_override', { overrides: newOverrides });
-      await refreshChain();
-    } catch(err) {
-       console.error("Failed to save override", err);
+    if (onOverridesChange) {
+      // Controlled mode (inside settings panel): changes are temporary until user taps SAVE CHANGES
+      onOverridesChange(newOverrides);
+    } else {
+      // Standalone mode: immediate IPC persistence
+      setInternalOverrides(newOverrides);
+      try {
+        await invoke('set_model_override', { overrides: newOverrides });
+        await refreshChain();
+      } catch(err) {
+         console.error("Failed to save override", err);
+      }
     }
   };
 
   const unpinModel = async (e: React.MouseEvent, modelId: string) => {
     e.stopPropagation();
-    const newOverrides = overrides.map(id => id === modelId ? "" : id);
+    const newOverrides = activeOverrides.map(id => id === modelId ? "" : id);
     while (newOverrides.length > 0 && newOverrides[newOverrides.length - 1] === "") {
         newOverrides.pop();
     }
-    setOverrides(newOverrides);
     
-    try {
-      await invoke('set_model_override', { overrides: newOverrides });
-      await refreshChain();
-    } catch(err) {
-       console.error("Failed to save override", err);
+    if (onOverridesChange) {
+      // Controlled mode: temporary until user taps SAVE CHANGES
+      onOverridesChange(newOverrides);
+    } else {
+      // Standalone mode: immediate IPC persistence
+      setInternalOverrides(newOverrides);
+      try {
+        await invoke('set_model_override', { overrides: newOverrides });
+        await refreshChain();
+      } catch(err) {
+         console.error("Failed to save override", err);
+      }
     }
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--zen-text)', letterSpacing: '0.02em' }}>
           {t?.title || 'GLOBAL ROUTING POOL'}
         </div>
         <button 
           onClick={refreshChain} 
           disabled={loading}
           style={{ 
-            fontSize: '0.65rem', 
-            fontWeight: 600, 
-            padding: '2px 6px', 
-            borderRadius: '4px',
+            fontSize: '0.68rem', 
+            fontWeight: 500, 
+            padding: '4px 10px', 
+            borderRadius: '9999px',
             backgroundColor: 'var(--zen-surface-hover)', 
-            border: '1px solid var(--zen-border)',
+            border: 'none',
             color: 'var(--zen-text)',
-            cursor: loading ? 'wait' : 'pointer'
+            cursor: loading ? 'wait' : 'pointer',
+            transition: 'all 0.15s ease'
           }}
+          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--zen-surface-secondary)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--zen-surface-hover)'; }}
         >
           {loading ? (t?.refreshing || 'REFRESHING...') : (t?.refresh || 'REFRESH')}
         </button>
       </div>
       
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
+      <div 
+        className="routing-pool-scrollbar" 
+        style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '340px', overflowY: 'auto', paddingRight: '6px' }}
+      >
         {chain.length === 0 && !loading && (
-          <div style={{ fontSize: '0.75rem', color: '#6b7280', textAlign: 'center', padding: '8px' }}>
-            {t?.noModels || 'No models found. Please configure a provider.'}
+          <div style={{ fontSize: '0.78rem', color: 'var(--zen-text-secondary)', textAlign: 'center', padding: '24px 12px', lineHeight: 1.5 }}>
+            {t?.noModels || 'When you have connect one or more intelligence sources, all available models will be listed here.'}
           </div>
         )}
         <AnimatePresence>
           {chain.map((item, index) => {
             const isActive = index === 0;
-            const isPinned = overrides.includes(item.model);
+            const isPinned = activeOverrides.includes(item.model);
             
             return (
               <motion.div 
@@ -165,12 +194,14 @@ export const CloudRoutingPanel = () => {
                 style={{ 
                   display: 'flex', 
                   alignItems: 'center', 
-                  padding: '6px 10px', 
+                  padding: '8px 12px', 
                   backgroundColor: isActive ? 'var(--zen-surface-hover)' : 'var(--zen-surface)', 
-                  border: `1px solid ${isActive ? 'var(--zen-accent)' : 'var(--zen-border)'}`,
-                  borderRadius: '6px', 
-                  gap: '8px',
+                  border: 'none',
+                  borderRadius: '12px', 
+                  gap: '10px',
                   position: 'relative',
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
+                  transition: 'background-color 0.15s ease'
                 }}>
               
               {/* RANK CONTROLS */}
@@ -179,18 +210,18 @@ export const CloudRoutingPanel = () => {
                   onClick={() => handleMove(index, 0)}
                   disabled={index === 0}
                   title={t?.rankTop || "Rank Top"}
-                  style={{ background: 'transparent', border: 'none', cursor: index === 0 ? 'default' : 'pointer', opacity: index === 0 ? 0.2 : 0.7, padding: '2px', display: 'flex' }}
+                  style={{ background: 'transparent', border: 'none', cursor: index === 0 ? 'default' : 'pointer', opacity: index === 0 ? 0.2 : 0.7, padding: '2px', display: 'flex', borderRadius: '4px' }}
                   onMouseEnter={(e) => { if(index !== 0) e.currentTarget.style.opacity = '1'; }}
                   onMouseLeave={(e) => { if(index !== 0) e.currentTarget.style.opacity = '0.7'; }}
                 >
-                  <ArrowUpToLine size={12} color="var(--zen-text)" />
+                  <ArrowUpToLine size={13} color="var(--zen-text)" />
                 </button>
                 <div style={{ display: 'flex', gap: '2px' }}>
                   <button 
                     onClick={() => handleMove(index, index - 1)}
                     disabled={index === 0}
                     title={t?.rankUp || "Rank Up"}
-                    style={{ background: 'transparent', border: 'none', cursor: index === 0 ? 'default' : 'pointer', opacity: index === 0 ? 0.2 : 0.7, padding: '2px', display: 'flex' }}
+                    style={{ background: 'transparent', border: 'none', cursor: index === 0 ? 'default' : 'pointer', opacity: index === 0 ? 0.2 : 0.7, padding: '2px', display: 'flex', borderRadius: '4px' }}
                     onMouseEnter={(e) => { if(index !== 0) e.currentTarget.style.opacity = '1'; }}
                     onMouseLeave={(e) => { if(index !== 0) e.currentTarget.style.opacity = '0.7'; }}
                   >
@@ -200,7 +231,7 @@ export const CloudRoutingPanel = () => {
                     onClick={() => handleMove(index, index + 1)}
                     disabled={index === chain.length - 1}
                     title={t?.rankDown || "Rank Down"}
-                    style={{ background: 'transparent', border: 'none', cursor: index === chain.length - 1 ? 'default' : 'pointer', opacity: index === chain.length - 1 ? 0.2 : 0.7, padding: '2px', display: 'flex' }}
+                    style={{ background: 'transparent', border: 'none', cursor: index === chain.length - 1 ? 'default' : 'pointer', opacity: index === chain.length - 1 ? 0.2 : 0.7, padding: '2px', display: 'flex', borderRadius: '4px' }}
                     onMouseEnter={(e) => { if(index !== chain.length - 1) e.currentTarget.style.opacity = '1'; }}
                     onMouseLeave={(e) => { if(index !== chain.length - 1) e.currentTarget.style.opacity = '0.7'; }}
                   >
@@ -211,31 +242,33 @@ export const CloudRoutingPanel = () => {
               {isActive && (
                 <div style={{
                   position: 'absolute',
-                  left: '-4px',
+                  left: '-3px',
                   top: '50%',
                   transform: 'translateY(-50%)',
-                  width: '8px',
-                  height: '8px',
+                  width: '6px',
+                  height: '6px',
                   borderRadius: '50%',
-                  backgroundColor: 'var(--zen-accent)',
-                  boxShadow: '0 0 8px var(--zen-accent)'
+                  backgroundColor: '#171717'
                 }} />
               )}
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', pointerEvents: 'none' }}>
-                <span style={{ fontSize: '0.85rem', fontWeight: isActive ? 700 : 600, color: 'var(--zen-text)' }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: isActive ? 600 : 450, color: 'var(--zen-text)' }}>
                   {item.model}
                 </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
-                  <span style={{ fontSize: '0.7rem', color: '#6b7280', textTransform: 'uppercase' }}>
-                    {item.provider}
-                  </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '3px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    {getProviderIcon(item.provider, { size: 12 })}
+                    <span style={{ fontSize: '0.68rem', color: 'var(--zen-text-secondary)', textTransform: 'uppercase', fontWeight: 500 }}>
+                      {item.provider}
+                    </span>
+                  </div>
                   {item.iq !== undefined && (
-                    <span style={{ fontSize: '0.65rem', color: '#fff', backgroundColor: 'var(--zen-accent)', padding: '2px 6px', borderRadius: '12px', fontWeight: 700, letterSpacing: '0.05em', boxShadow: '0 0 8px rgba(139, 92, 246, 0.4)' }}>
-                      {t?.scorePrefix || '⚡ SCORE: '}{item.iq === 0 ? "N/A" : item.iq}
+                    <span style={{ fontSize: '0.65rem', color: '#171717', backgroundColor: '#E4E4E7', padding: '2px 8px', borderRadius: '9999px', fontWeight: 600, letterSpacing: '0.02em' }}>
+                      {t?.scorePrefix || '⚡ SCORE: '}{(item.iq && item.iq > 0) ? item.iq : 'N/A'}
                     </span>
                   )}
                   {errors[item.model] && (
-                    <span style={{ fontSize: '0.65rem', color: '#fff', backgroundColor: '#ef4444', padding: '2px 6px', borderRadius: '12px', fontWeight: 700, letterSpacing: '0.05em', boxShadow: '0 0 8px rgba(239, 68, 68, 0.4)' }}>
+                    <span style={{ fontSize: '0.65rem', color: '#DC2626', backgroundColor: '#FEE2E2', padding: '2px 8px', borderRadius: '9999px', fontWeight: 600, letterSpacing: '0.02em' }}>
                       {errors[item.model].includes("429") ? (t?.skippedQuota || "SKIPPED: 429 (QUOTA)") : (t?.skippedError || "SKIPPED: ERROR")}
                     </span>
                   )}
@@ -251,27 +284,26 @@ export const CloudRoutingPanel = () => {
                       display: 'flex',
                       alignItems: 'center',
                       gap: '4px',
-                      fontSize: '0.65rem', 
-                      fontWeight: 700, 
+                      fontSize: '0.68rem', 
+                      fontWeight: 500, 
                       color: 'var(--zen-text)', 
-                      backgroundColor: 'transparent', 
-                      padding: '4px 8px', 
-                      borderRadius: '4px',
+                      backgroundColor: 'var(--zen-surface-hover)', 
+                      padding: '4px 10px', 
+                      borderRadius: '9999px',
                       cursor: 'pointer',
-                      border: '1px solid var(--zen-border)',
-                      letterSpacing: '0.05em',
-                      transition: 'all 0.2s',
-                      opacity: 0.8
+                      border: 'none',
+                      letterSpacing: '0.02em',
+                      transition: 'all 0.15s ease'
                     }}
-                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--zen-surface-hover)'; e.currentTarget.style.opacity = '1'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.opacity = '0.8'; }}
+                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--zen-surface-secondary)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--zen-surface-hover)'; }}
                   >
                     <X size={12} color="var(--zen-text)" />
                     {t?.resetButton || "Reset"}
                   </button>
                 )}
                 {isActive && !isPinned && (
-                  <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--zen-accent)', pointerEvents: 'none' }}>
+                  <span style={{ fontSize: '0.68rem', fontWeight: 600, color: '#171717', backgroundColor: '#E4E4E7', padding: '2px 8px', borderRadius: '9999px', pointerEvents: 'none' }}>
                     {t?.active || "ACTIVE"}
                   </span>
                 )}

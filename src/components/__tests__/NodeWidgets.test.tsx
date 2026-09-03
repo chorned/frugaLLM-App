@@ -137,10 +137,23 @@ describe('NodeWidgets Components', () => {
 
       // Act 2: Click info button to open telemetry portal
       const infoBtn = screen.getByTestId('hardware-info-btn');
+      expect(infoBtn).toHaveStyle({ color: 'var(--zen-text)' });
       fireEvent.click(infoBtn);
 
       // Assert: Telemetry panel opens in portal
-      expect(screen.getByTestId('hardware-telemetry-panel')).toBeInTheDocument();
+      const panel = screen.getByTestId('hardware-telemetry-panel');
+      expect(panel).toBeInTheDocument();
+
+      // Assert flipped element order inside expanded panel:
+      // 1. Throughput -> 2. Memory -> 3. Load -> 4. MemoryPipelineWidget
+      const throughputEl = screen.getByTestId('live-throughput-stat');
+      const memoryEl = screen.getByTestId('telemetry-memory-label');
+      const loadEl = screen.getByTestId('telemetry-load-label');
+      const pipelineEl = screen.getByTestId('memory-pipeline-widget');
+
+      expect(throughputEl.compareDocumentPosition(memoryEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(memoryEl.compareDocumentPosition(loadEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(loadEl.compareDocumentPosition(pipelineEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
       // Act 3: Click benchmark info button inside panel
       const benchmarkBtn = screen.getByTestId('benchmark-info-btn');

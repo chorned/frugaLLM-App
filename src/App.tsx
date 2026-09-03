@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { TerminalLoader } from './components/TerminalLoader';
 import { useCanvasLogic } from './hooks/useCanvasLogic';
@@ -16,17 +16,27 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import ReactMarkdown from 'react-markdown';
 import { StatusLight, InfoField, HardwareNode } from './components/NodeWidgets';
+import {
+  OpenRouterIcon,
+  OllamaIcon,
+  GeminiIcon,
+  HermesIcon,
+  OpenCodeIcon,
+  FrugaLLMIcon,
+  getProviderIcon,
+} from './components/icons/ProviderIcons';
 import { MemoryPipelineWidget } from './components/MemoryPipelineWidget';
 import { MemoryProvider, useMemory } from './context/MemoryContext';
 import { HardwareProfile, AVAILABLE_MODELS, GRAPH_OVERHEAD_GB } from './services/memoryCalculator';
 import { CloudRoutingPanel } from './components/CloudRoutingPanel';
 import { useOnboarding } from './hooks/useOnboarding';
+import { useTheme } from './hooks/useTheme';
 import { OnboardingDecision } from './components/OnboardingDecision';
 import { OnboardingOverlay } from './components/OnboardingOverlay';
 import { PortConflictBanner } from './components/PortConflictBanner';
 import { ExitConfirmationModal } from './components/ExitConfirmationModal';
 import en from './locales/en.json';
-import { Eye, EyeOff, Copy, Check } from 'lucide-react';
+import { Eye, EyeOff, Copy, Check, Sun, Moon } from 'lucide-react';
 import { loadOnnxClassifier, clearOnnxCache } from './services/onnxGateway';
 import agentsGuide from './guides/agents.md?raw';
 import ollamaGuide from './guides/ollama.md?raw';
@@ -40,17 +50,18 @@ const GUIDES_MAP: Record<string, string> = {
 
 
 const NODE_WIDTH = 220;
-const NODE_HEIGHT = 130;
 
-const nodeLayout: Record<string, { rx: number, ry: number }> = {
-  'node-frugallm': { rx: 0, ry: 0 },
-  'node-ollama': { rx: -0.35, ry: -0.25 },
-  'node-google': { rx: 0, ry: -0.25 },
-  'node-openrouter': { rx: 0.35, ry: -0.25 },
-  'node-opencode': { rx: -0.25, ry: 0.25 },
-  'node-hermes': { rx: 0.25, ry: 0.25 }
+const CORE_NODE_HEIGHT = 140;
+const PERIPHERAL_NODE_HEIGHT = 112;
+
+const NODE_HEIGHTS: Record<string, number> = {
+  'node-frugallm': CORE_NODE_HEIGHT,
+  'node-ollama': PERIPHERAL_NODE_HEIGHT,
+  'node-google': PERIPHERAL_NODE_HEIGHT,
+  'node-openrouter': PERIPHERAL_NODE_HEIGHT,
+  'node-opencode': PERIPHERAL_NODE_HEIGHT,
+  'node-hermes': PERIPHERAL_NODE_HEIGHT,
 };
-
 
 type NodeData = {
   label: string;
@@ -96,7 +107,7 @@ const initialNodes: AppNode[] = [
     id: 'node-openrouter',
     x: 750, y: 50,
     data: {
-      label: 'Openrouter',
+      label: 'OpenRouter',
       subheader: 'Stripe (cloud)',
       description: '',
       ip: 'openrouter.ai',
@@ -168,7 +179,12 @@ const Icons = {
   workflow: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="6" height="6" rx="1"></rect><rect x="15" y="3" width="6" height="6" rx="1"></rect><rect x="9" y="15" width="6" height="6" rx="1"></rect><path d="M6 9v2a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9"></path><path d="M12 13v2"></path></svg>,
   agent: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a5 5 0 0 1 5 5v2a5 5 0 0 1-10 0V7a5 5 0 0 1 5-5z"></path><path d="M19 15v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v1"></path><path d="M5 22v-3a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3"></path></svg>,
   settings: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>,
-  info: <svg viewBox="-50 -50 590 590" width="14" height="14" style={{ display: 'block' }} fill="currentColor"><path d="M245.148,0C109.967,0,0.009,109.98,0.009,245.162c0,135.182,109.958,245.156,245.139,245.156 c135.186,0,245.162-109.978,245.162-245.156C490.31,109.98,380.333,0,245.148,0z M245.148,438.415 c-106.555,0-193.234-86.698-193.234-193.253c0-106.555,86.68-193.258,193.234-193.258c106.559,0,193.258,86.703,193.258,193.258 C438.406,351.717,351.706,438.415,245.148,438.415z"/><path d="M270.036,221.352h-49.771c-8.351,0-15.131,6.78-15.131,15.118v147.566c0,8.352,6.78,15.119,15.131,15.119h49.771 c8.351,0,15.131-6.77,15.131-15.119V236.471C285.167,228.133,278.387,221.352,270.036,221.352z"/><path d="M245.148,91.168c-24.48,0-44.336,19.855-44.336,44.336c0,24.484,19.855,44.34,44.336,44.34 c24.485,0,44.342-19.855,44.342-44.34C289.489,111.023,269.634,91.168,245.148,91.168z"/></svg>
+  info: <svg viewBox="-50 -50 590 590" width="14" height="14" style={{ display: 'block' }} fill="currentColor"><path d="M245.148,0C109.967,0,0.009,109.98,0.009,245.162c0,135.182,109.958,245.156,245.139,245.156 c135.186,0,245.162-109.978,245.162-245.156C490.31,109.98,380.333,0,245.148,0z M245.148,438.415 c-106.555,0-193.234-86.698-193.234-193.253c0-106.555,86.68-193.258,193.234-193.258c106.559,0,193.258,86.703,193.258,193.258 C438.406,351.717,351.706,438.415,245.148,438.415z"/><path d="M270.036,221.352h-49.771c-8.351,0-15.131,6.78-15.131,15.118v147.566c0,8.352,6.78,15.119,15.131,15.119h49.771 c8.351,0,15.131-6.77,15.131-15.119V236.471C285.167,228.133,278.387,221.352,270.036,221.352z"/><path d="M245.148,91.168c-24.48,0-44.336,19.855-44.336,44.336c0,24.484,19.855,44.34,44.336,44.34 c24.485,0,44.342-19.855,44.342-44.34C289.489,111.023,269.634,91.168,245.148,91.168z"/></svg>,
+  openrouter: <OpenRouterIcon size={14} />,
+  ollama: <OllamaIcon size={14} />,
+  gemini: <GeminiIcon size={14} />,
+  hermes: <HermesIcon size={14} />,
+  opencode: <OpenCodeIcon size={14} />,
 };
 
 const Tooltip = ({ text }: { text: string }) => {
@@ -313,7 +329,8 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
     hermes_workspace: frugalConfig?.hermes_workspace || '',
     opencode_workspace: frugalConfig?.opencode_workspace || '',
     start_on_login: false,
-    start_minimized: frugalConfig?.start_minimized || false
+    start_minimized: frugalConfig?.start_minimized || false,
+    manual_model_overrides: frugalConfig?.manual_model_overrides || []
   });
 
   useEffect(() => {
@@ -329,6 +346,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
         api_password: frugalConfig?.api_password || '',
         start_minimized: frugalConfig?.start_minimized || false,
         start_on_login: false,
+        manual_model_overrides: frugalConfig?.manual_model_overrides || []
       };
       setFormData(prev => ({
         ...prev,
@@ -358,7 +376,8 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
         hermes_workspace: frugalConfig?.hermes_workspace || '~/Hermes',
         opencode_workspace: frugalConfig?.opencode_workspace || '~/Opencode',
         start_on_login: false,
-        start_minimized: frugalConfig?.start_minimized || false
+        start_minimized: frugalConfig?.start_minimized || false,
+        manual_model_overrides: []
       };
       setFormData(initOther);
       setInitialData(initOther);
@@ -375,7 +394,8 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
       const passChanged = enablePassword ? (formData.api_password || '') !== (initialData.api_password || '') : false;
       const autostartChanged = Boolean(formData.start_on_login) !== Boolean(initialData.start_on_login);
       const minimizedChanged = Boolean(formData.start_minimized) !== Boolean(initialData.start_minimized);
-      return portChanged || bindChanged || enablePassChanged || passChanged || autostartChanged || minimizedChanged;
+      const overridesChanged = JSON.stringify(formData.manual_model_overrides || []) !== JSON.stringify(initialData.manual_model_overrides || []);
+      return portChanged || bindChanged || enablePassChanged || passChanged || autostartChanged || minimizedChanged || overridesChanged;
     }
 
     if (node.id === 'node-openrouter') {
@@ -436,7 +456,8 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
     }
     const dataToSave = {
       ...formData,
-      api_password: enablePassword ? formData.api_password : ''
+      api_password: enablePassword ? formData.api_password : '',
+      manual_model_overrides: formData.manual_model_overrides
     };
     onSave(node.id, dataToSave);
     setInitialData({ ...formData });
@@ -447,271 +468,363 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
 
   return (
     <div onClick={handlePanelClick} style={{ 
-      width: '400px', 
+      width: node.id === 'node-frugallm' ? '780px' : '440px', 
+      maxWidth: '92vw',
       maxHeight: '85vh',
-      border: '1px solid var(--zen-border)', backgroundColor: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(16px)', borderRadius: '12px',
-      display: 'flex', flexDirection: 'column',
-      boxShadow: '0 24px 48px rgba(0, 0, 0, 0.1)', overflow: 'hidden',
+      border: '1px solid var(--zen-border)', 
+      backgroundColor: 'var(--zen-surface)', 
+      borderRadius: '20px',
+      display: 'flex', 
+      flexDirection: 'column',
+      boxShadow: 'var(--zen-shadow-modal)', 
+      overflow: 'hidden',
       zIndex: 100,
       fontFamily: 'inherit'
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', borderBottom: '1px solid var(--zen-border)' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-          <h2 style={{ margin: 0, color: 'var(--zen-text)', fontSize: '1rem', fontWeight: 700 }}>{node.data.label}</h2>
-          {node.data.subheader && (
-            <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--zen-text-secondary)' }}>
-              ({node.data.subheader})
-            </span>
-          )}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', borderBottom: '1px solid var(--zen-border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {getProviderIcon(node.id, { size: 18 })}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+            <h2 style={{ margin: 0, color: 'var(--zen-text)', fontSize: '1rem', fontWeight: 700, letterSpacing: '-0.01em' }}>{node.data.label}</h2>
+            {node.data.subheader && (
+              <span style={{ fontSize: '0.75rem', fontWeight: 450, color: 'var(--zen-text-secondary)' }}>
+                {node.data.subheader}
+              </span>
+            )}
+          </div>
         </div>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', color: '#9ca3af', padding: '2px 6px' }}>✕</button>
+        <button 
+          onClick={onClose} 
+          data-testid="node-config-close-btn"
+          style={{ 
+            background: 'none', 
+            border: 'none', 
+            cursor: 'pointer', 
+            fontSize: '0.9rem', 
+            color: 'var(--zen-text-secondary)', 
+            width: '28px',
+            height: '28px',
+            borderRadius: '9999px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.15s ease'
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--zen-surface-hover)'; e.currentTarget.style.color = 'var(--zen-text)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--zen-text-secondary)'; }}
+        >
+          ✕
+        </button>
       </div>
       
-      <div style={{ padding: '14px 16px', flexGrow: 1, backgroundColor: 'transparent', overflowY: 'auto' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {node.data.isAgent ? (
+      <div style={{ padding: '18px 20px', flexGrow: 1, backgroundColor: 'transparent', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {node.id === 'node-frugallm' ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.15fr', gap: '24px', alignItems: 'start' }}>
+              {/* Left Column: Server & System Configuration */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: '10px' }}>
+                  <div>
+                    <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>IP ADDRESS / HOST <Tooltip text="Where does this service live on the network? Usually, it's right here on your computer ('127.0.0.1' or 'localhost'), but it could be a cloud API halfway across the world!" /></label>
+                    <div style={{ padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem' }}>
+                      {formData.bind_all_interfaces ? '0.0.0.0' : (formData.ip || '127.0.0.1')}
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>PORT <Tooltip text="Think of the IP address as the building, and the Port as the specific door to knock on. It's how our hub knows exactly where to send its messages." /></label>
+                    <input 
+                      type="text" 
+                      name="port" 
+                      data-testid="input-frugallm-port"
+                      value={formData.port} 
+                      onChange={handleChange} 
+                      style={{ 
+                        width: '100%', 
+                        padding: '9px 14px', 
+                        border: portConflict ? '1px solid #ef4444' : '1px solid var(--zen-border-input)', 
+                        borderRadius: '12px', 
+                        backgroundColor: 'var(--zen-surface-header)', 
+                        color: 'var(--zen-text)', 
+                        outline: 'none', 
+                        boxSizing: 'border-box', 
+                        fontFamily: 'inherit', 
+                        fontWeight: 500, 
+                        fontSize: '0.82rem', 
+                        boxShadow: 'none' 
+                      }} 
+                    />
+                    {portConflict && (
+                      <div data-testid="port-conflict-hint" style={{ fontSize: '0.7rem', color: '#ef4444', fontWeight: 500, marginTop: '4px', lineHeight: 1.2 }}>
+                        Port {portConflict.port} in use: Close conflicting service and restart, or enter a new port.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <button 
+                  onClick={async () => {
+                     try {
+                       await writeText(`http://${formData.bind_all_interfaces ? '0.0.0.0' : '127.0.0.1'}:${formData.port}`);
+                       setIpCopied(true);
+                       setTimeout(() => setIpCopied(false), 1500);
+                     } catch (err) {
+                       console.error('Clipboard write failed:', err);
+                     }
+                  }}
+                  style={{ 
+                    width: '100%', 
+                    padding: '9px 16px', 
+                    backgroundColor: ipCopied ? '#10B981' : '#171717', 
+                    color: '#ffffff', 
+                    border: 'none', 
+                    borderRadius: '9999px', 
+                    fontWeight: 600, 
+                    fontSize: '0.78rem', 
+                    cursor: 'pointer', 
+                    fontFamily: 'inherit', 
+                    transition: 'all 0.15s ease' 
+                  }}>
+                  {ipCopied ? '✓ OK' : 'COPY IP & PORT'}
+                </button>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '2px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 500, color: 'var(--zen-text)' }}>
+                    <input 
+                      type="checkbox" 
+                      name="bind_all_interfaces" 
+                      checked={formData.bind_all_interfaces} 
+                      onChange={(e) => setFormData(prev => ({ ...prev, bind_all_interfaces: e.target.checked }))} 
+                      style={{ borderRadius: '4px', cursor: 'pointer' }}
+                    />
+                    {en.routingGraph.nodeConfigPanel.inputs.bindAllInterfaces.label}
+                    <Tooltip text={en.routingGraph.nodeConfigPanel.inputs.bindAllInterfaces.helpText} />
+                  </label>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '2px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 500, color: 'var(--zen-text)' }}>
+                      <input 
+                        type="checkbox" 
+                        name="enable_api_password"
+                        data-testid="api-password-checkbox"
+                        checked={enablePassword} 
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setEnablePassword(checked);
+                          if (!checked) {
+                            setFormData(prev => ({ ...prev, api_password: '' }));
+                          }
+                        }} 
+                        style={{ borderRadius: '4px', cursor: 'pointer' }}
+                      />
+                      {en.routingGraph.nodeConfigPanel.inputs.apiPassword.checkboxLabel}
+                      <Tooltip text={en.routingGraph.nodeConfigPanel.inputs.apiPassword.helpText} />
+                    </label>
+                    {enablePassword && formData.api_password && (
+                      <span style={{ fontSize: '0.7rem', color: '#10B981', fontWeight: 600 }}>
+                        {en.routingGraph.nodeConfigPanel.inputs.apiPassword.active}
+                      </span>
+                    )}
+                  </div>
+
+                  {enablePassword && (
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <input 
+                        type={showPassword ? "text" : "password"} 
+                        name="api_password" 
+                        data-testid="api-password-input"
+                        value={formData.api_password} 
+                        onChange={handleChange} 
+                        placeholder={en.routingGraph.nodeConfigPanel.inputs.apiPassword.placeholder}
+                        style={{ 
+                          flex: 1, 
+                          padding: '9px 14px', 
+                          border: '1px solid var(--zen-border-input)', 
+                          borderRadius: '12px', 
+                          backgroundColor: 'var(--zen-surface-header)', 
+                          color: 'var(--zen-text)', 
+                          outline: 'none', 
+                          boxSizing: 'border-box', 
+                          fontFamily: 'inherit', 
+                          fontWeight: 500, 
+                          fontSize: '0.82rem',
+                          boxShadow: 'none' 
+                        }} 
+                      />
+                      <button
+                        type="button"
+                        data-testid="toggle-password-visibility"
+                        onClick={() => setShowPassword(prev => !prev)}
+                        title={showPassword ? en.routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.hide : en.routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.show}
+                        aria-label={showPassword ? en.routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.hide : en.routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.show}
+                        style={{
+                          padding: '9px 12px',
+                          backgroundColor: 'var(--zen-surface-hover)',
+                          color: 'var(--zen-text)',
+                          border: '1px solid var(--zen-border-input)',
+                          borderRadius: '12px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontFamily: 'inherit',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="copy-password-button"
+                        disabled={!formData.api_password}
+                        onClick={async () => {
+                          if (!formData.api_password) return;
+                          try {
+                            await writeText(formData.api_password);
+                            setPasswordCopied(true);
+                            setTimeout(() => setPasswordCopied(false), 1500);
+                          } catch (err) {
+                            console.error('Clipboard write failed:', err);
+                          }
+                        }}
+                        title={passwordCopied ? en.routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.copied : en.routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.copy}
+                        aria-label={passwordCopied ? en.routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.copied : en.routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.copy}
+                        style={{
+                          padding: '9px 12px',
+                          backgroundColor: passwordCopied ? '#10B981' : 'var(--zen-surface-hover)',
+                          color: passwordCopied ? '#ffffff' : 'var(--zen-text)',
+                          border: '1px solid var(--zen-border-input)',
+                          borderRadius: '12px',
+                          cursor: formData.api_password ? 'pointer' : 'not-allowed',
+                          opacity: formData.api_password ? 1 : 0.5,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontFamily: 'inherit',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {passwordCopied ? <Check size={15} /> : <Copy size={15} />}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div 
+                  data-testid="settings-section-divider"
+                  style={{ 
+                    height: '1px', 
+                    backgroundColor: 'var(--zen-border)', 
+                    width: '100%' 
+                  }} 
+                />
+
+                <div>
+                  <Settings
+                    startOnLogin={formData.start_on_login}
+                    onStartOnLoginChange={(enabled) => setFormData(prev => ({ ...prev, start_on_login: enabled }))}
+                    startMinimized={formData.start_minimized}
+                    onStartMinimizedChange={(minimized) => setFormData(prev => ({ ...prev, start_minimized: minimized }))}
+                  />
+                </div>
+              </div>
+
+              {/* Right Column: Global Routing Pool */}
+              <div style={{ borderLeft: '1px solid var(--zen-border)', paddingLeft: '24px', display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
+                <CloudRoutingPanel 
+                  overrides={formData.manual_model_overrides}
+                  onOverridesChange={(newOverrides) => setFormData(prev => ({ ...prev, manual_model_overrides: newOverrides }))}
+                />
+              </div>
+            </div>
+          ) : node.data.isAgent ? (
             <>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>SCHEMA PATH <Tooltip text="Think of this as the agent's strict instruction manual. By giving it a JSON schema, we force the AI to return data in the exact structure your application expects. No more messy text—just clean data!" /></label>
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>SCHEMA PATH <Tooltip text="Think of this as the agent's strict instruction manual. By giving it a JSON schema, we force the AI to return data in the exact structure your application expects. No more messy text—just clean data!" /></label>
                 <input type="text" name="schemaPath" value={formData.schemaPath} onChange={handleChange} 
-                  style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', boxShadow: 'none' }} />
+                  style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem', boxShadow: 'none' }} />
               </div>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>WORKING DIR (CWD) <Tooltip text="Where should the agent live while it works? This is the folder on your computer where the agent will run commands and look for files. It's basically the agent's home base." /></label>
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>WORKING DIR (CWD) <Tooltip text="Where should the agent live while it works? This is the folder on your computer where the agent will run commands and look for files. It's basically the agent's home base." /></label>
                 <input type="text" name="cwd" value={formData.cwd} onChange={handleChange} 
-                  style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', boxShadow: 'none' }} />
+                  style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem', boxShadow: 'none' }} />
               </div>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>EXECUTABLE (BIN) <Tooltip text="Which program is actually doing the heavy lifting? This tells the system what tool to launch under the hood. Usually, it's 'agy' for our Antigravity agent, but you can plug in any CLI tool!" /></label>
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>EXECUTABLE (BIN) <Tooltip text="Which program is actually doing the heavy lifting? This tells the system what tool to launch under the hood. Usually, it's 'agy' for our Antigravity agent, but you can plug in any CLI tool!" /></label>
                 <input type="text" name="bin" value={formData.bin} onChange={handleChange} 
-                  style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', boxShadow: 'none' }} />
+                  style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem', boxShadow: 'none' }} />
               </div>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>EXTRA ARGS (CSV) <Tooltip text="Want to tweak how the agent runs? You can pass secret flags here (like '--verbose' to see its inner thoughts). Just list them out, separated by commas." /></label>
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>EXTRA ARGS (CSV) <Tooltip text="Want to tweak how the agent runs? You can pass secret flags here (like '--verbose' to see its inner thoughts). Just list them out, separated by commas." /></label>
                 <input type="text" name="extraArgs" value={formData.extraArgs} onChange={handleChange} placeholder="--verbose, --force"
-                  style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', boxShadow: 'none' }} />
+                  style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem', boxShadow: 'none' }} />
               </div>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>INSTRUCTION PROMPT <Tooltip text="This is your agent's main mission. Tell it exactly what you want it to accomplish. Be as specific as possible—the better the prompt, the better the results!" /></label>
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>INSTRUCTION PROMPT <Tooltip text="This is your agent's main mission. Tell it exactly what you want it to accomplish. Be as specific as possible—the better the prompt, the better the results!" /></label>
                 <textarea name="prompt" value={formData.prompt} onChange={handleChange} rows={2} 
-                  style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', boxShadow: 'none' }} />
+                  style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem', boxShadow: 'none' }} />
               </div>
             </>
           ) : (
             <>
               {node.id !== 'node-openrouter' && node.id !== 'node-google' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 95px', gap: '8px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: '10px' }}>
                   <div>
-                    <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>IP ADDRESS / HOST <Tooltip text="Where does this service live on the network? Usually, it's right here on your computer ('127.0.0.1' or 'localhost'), but it could be a cloud API halfway across the world!" /></label>
-                    {node.id === 'node-frugallm' || node.id === 'node-hermes' || node.id === 'node-opencode' ? (
-                      <div style={{ padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: 'var(--zen-surface-hover)', color: '#4b5563', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem' }}>
-                        {node.id === 'node-frugallm' ? (formData.bind_all_interfaces ? '0.0.0.0' : '127.0.0.1') : formData.ip}
+                    <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>IP ADDRESS / HOST <Tooltip text="Where does this service live on the network? Usually, it's right here on your computer ('127.0.0.1' or 'localhost'), but it could be a cloud API halfway across the world!" /></label>
+                    {node.id === 'node-hermes' || node.id === 'node-opencode' ? (
+                      <div style={{ padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem' }}>
+                        {formData.ip}
                       </div>
                     ) : (
                       <input type="text" name="ip" value={formData.ip} onChange={handleChange} 
-                        style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', boxShadow: 'none' }} />
+                        style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem', boxShadow: 'none' }} />
                     )}
                   </div>
                   <div>
-                    <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>PORT <Tooltip text="Think of the IP address as the building, and the Port as the specific door to knock on. It's how our hub knows exactly where to send its messages." /></label>
+                    <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>PORT <Tooltip text="Think of the IP address as the building, and the Port as the specific door to knock on. It's how our hub knows exactly where to send its messages." /></label>
                     {node.id === 'node-hermes' || node.id === 'node-opencode' ? (
-                      <div style={{ padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: 'var(--zen-surface-hover)', color: '#4b5563', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem' }}>
+                      <div style={{ padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem' }}>
                         {formData.port}
                       </div>
                     ) : (
                       <input 
                         type="text" 
                         name="port" 
-                        data-testid={node.id === 'node-frugallm' ? 'input-frugallm-port' : 'input-port'}
+                        data-testid="input-port"
                         value={formData.port} 
                         onChange={handleChange} 
                         style={{ 
                           width: '100%', 
-                          padding: '7px 10px', 
-                          border: portConflict && node.id === 'node-frugallm' ? '2px solid #ef4444' : '1px solid var(--zen-border)', 
-                          borderRadius: '6px', 
-                          backgroundColor: '#ffffff', 
+                          padding: '9px 14px', 
+                          border: '1px solid var(--zen-border-input)', 
+                          borderRadius: '12px', 
+                          backgroundColor: 'var(--zen-surface-header)', 
                           color: 'var(--zen-text)', 
                           outline: 'none', 
                           boxSizing: 'border-box', 
                           fontFamily: 'inherit', 
-                          fontWeight: 600, 
-                          fontSize: '0.85rem', 
+                          fontWeight: 500, 
+                          fontSize: '0.82rem', 
                           boxShadow: 'none' 
                         }} 
                       />
                     )}
-                    {portConflict && node.id === 'node-frugallm' && (
-                      <div data-testid="port-conflict-hint" style={{ fontSize: '0.72rem', color: '#ef4444', fontWeight: 600, marginTop: '4px', lineHeight: 1.2 }}>
-                        Port {portConflict.port} in use: Close conflicting service and restart, or enter a new port.
-                      </div>
-                    )}
                   </div>
                 </div>
               )}
-              {node.id === 'node-frugallm' && (
-                <>
-                  <button 
-                    onClick={async () => {
-                       try {
-                         await writeText(`http://${formData.bind_all_interfaces ? '0.0.0.0' : '127.0.0.1'}:${formData.port}`);
-                         setIpCopied(true);
-                         setTimeout(() => setIpCopied(false), 1500);
-                       } catch (err) {
-                         console.error('Clipboard write failed:', err);
-                       }
-                    }}
-                    style={{ width: '100%', padding: '7px 10px', backgroundColor: ipCopied ? '#059669' : 'var(--zen-accent)', color: '#ffffff', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}>
-                    {ipCopied ? '✓ OK' : 'COPY IP & PORT'}
-                  </button>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '2px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, color: 'var(--zen-text)' }}>
-                      <input 
-                        type="checkbox" 
-                        name="bind_all_interfaces" 
-                        checked={formData.bind_all_interfaces} 
-                        onChange={(e) => setFormData(prev => ({ ...prev, bind_all_interfaces: e.target.checked }))} 
-                      />
-                      {en.routingGraph.nodeConfigPanel.inputs.bindAllInterfaces.label}
-                      <Tooltip text={en.routingGraph.nodeConfigPanel.inputs.bindAllInterfaces.helpText} />
-                    </label>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '2px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, color: 'var(--zen-text)' }}>
-                        <input 
-                          type="checkbox" 
-                          name="enable_api_password"
-                          data-testid="api-password-checkbox"
-                          checked={enablePassword} 
-                          onChange={(e) => {
-                            const checked = e.target.checked;
-                            setEnablePassword(checked);
-                            if (!checked) {
-                              setFormData(prev => ({ ...prev, api_password: '' }));
-                            }
-                          }} 
-                        />
-                        {en.routingGraph.nodeConfigPanel.inputs.apiPassword.checkboxLabel}
-                        <Tooltip text={en.routingGraph.nodeConfigPanel.inputs.apiPassword.helpText} />
-                      </label>
-                      {enablePassword && formData.api_password && (
-                        <span style={{ fontSize: '0.7rem', color: '#16a34a', fontWeight: 700 }}>
-                          {en.routingGraph.nodeConfigPanel.inputs.apiPassword.active}
-                        </span>
-                      )}
-                    </div>
-
-                    {enablePassword && (
-                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '2px' }}>
-                        <input 
-                          type={showPassword ? "text" : "password"} 
-                          name="api_password" 
-                          data-testid="api-password-input"
-                          value={formData.api_password} 
-                          onChange={handleChange} 
-                          placeholder={en.routingGraph.nodeConfigPanel.inputs.apiPassword.placeholder}
-                          style={{ 
-                            flex: 1, 
-                            padding: '7px 10px', 
-                            border: '1px solid var(--zen-border)', 
-                            borderRadius: '6px', 
-                            backgroundColor: '#ffffff', 
-                            color: 'var(--zen-text)', 
-                            outline: 'none', 
-                            boxSizing: 'border-box', 
-                            fontFamily: 'inherit', 
-                            fontWeight: 600, 
-                            fontSize: '0.85rem',
-                            boxShadow: 'none' 
-                          }} 
-                        />
-                        <button
-                          type="button"
-                          data-testid="toggle-password-visibility"
-                          onClick={() => setShowPassword(prev => !prev)}
-                          title={showPassword ? en.routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.hide : en.routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.show}
-                          aria-label={showPassword ? en.routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.hide : en.routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.show}
-                          style={{
-                            padding: '7px 10px',
-                            backgroundColor: 'var(--zen-surface-hover)',
-                            color: 'var(--zen-text)',
-                            border: '1px solid var(--zen-border)',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontFamily: 'inherit'
-                          }}
-                        >
-                          {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                        </button>
-                        <button
-                          type="button"
-                          data-testid="copy-password-button"
-                          disabled={!formData.api_password}
-                          onClick={async () => {
-                            if (!formData.api_password) return;
-                            try {
-                              await writeText(formData.api_password);
-                              setPasswordCopied(true);
-                              setTimeout(() => setPasswordCopied(false), 1500);
-                            } catch (err) {
-                              console.error('Clipboard write failed:', err);
-                            }
-                          }}
-                          title={passwordCopied ? en.routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.copied : en.routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.copy}
-                          aria-label={passwordCopied ? en.routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.copied : en.routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.copy}
-                          style={{
-                            padding: '7px 10px',
-                            backgroundColor: passwordCopied ? '#059669' : 'var(--zen-surface-hover)',
-                            color: passwordCopied ? '#ffffff' : 'var(--zen-text)',
-                            border: '1px solid var(--zen-border)',
-                            borderRadius: '6px',
-                            cursor: formData.api_password ? 'pointer' : 'not-allowed',
-                            opacity: formData.api_password ? 1 : 0.5,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontFamily: 'inherit',
-                            transition: 'all 0.15s'
-                          }}
-                        >
-                          {passwordCopied ? <Check size={15} /> : <Copy size={15} />}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <div style={{ marginTop: '6px' }}>
-                    <Settings
-                      startOnLogin={formData.start_on_login}
-                      onStartOnLoginChange={(enabled) => setFormData(prev => ({ ...prev, start_on_login: enabled }))}
-                      startMinimized={formData.start_minimized}
-                      onStartMinimizedChange={(minimized) => setFormData(prev => ({ ...prev, start_minimized: minimized }))}
-                    />
-                  </div>
-
-                  <div style={{ marginTop: '4px' }}>
-                    <CloudRoutingPanel />
-                  </div>
-                </>
-              )}
               {node.id === 'node-openrouter' && (
                 <div>
-                  <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>API KEY <Tooltip text="Your OpenRouter API Key. This will be securely saved into your operating system's native Keychain!" /></label>
+                  <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>API KEY <Tooltip text="Your OpenRouter API Key. This will be securely saved into your operating system's native Keychain!" /></label>
                   <input type="password" name="apiKey" value={formData.apiKey || ''} onChange={handleChange} placeholder={node.data.status === 'active' ? en.routingGraph.nodeConfigPanel.inputs.openRouterApiKey.configuredPlaceholder : en.routingGraph.nodeConfigPanel.inputs.openRouterApiKey.placeholder}
-                    style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', boxShadow: 'none' }} />
+                    style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem', boxShadow: 'none' }} />
                 </div>
               )}
               {node.id === 'node-google' && (
                 <div>
-                  <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>API KEY <Tooltip text="Your Google AI Studio API Key. This will be securely saved into your operating system's native Keychain!" /></label>
+                  <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>API KEY <Tooltip text="Your Google AI Studio API Key. This will be securely saved into your operating system's native Keychain!" /></label>
                   <input type="password" name="googleApiKey" value={formData.googleApiKey || ''} onChange={handleChange} placeholder={node.data.status === 'active' ? en.routingGraph.nodeConfigPanel.inputs.googleApiKey.configuredPlaceholder : en.routingGraph.nodeConfigPanel.inputs.googleApiKey.placeholder}
-                    style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', boxShadow: 'none' }} />
+                    style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem', boxShadow: 'none' }} />
                 </div>
               )}
             </>
@@ -720,19 +833,19 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
         </div>
         
         {node.data.description && node.id !== 'node-ollama' ? (
-          <p style={{ fontSize: '0.75rem', color: '#4b5563', marginTop: '12px', marginBottom: '0', lineHeight: 1.35, fontFamily: 'sans-serif', borderTop: '1px dashed #d1d5db', paddingTop: '10px' }}>
+          <p style={{ fontSize: '0.75rem', color: 'var(--zen-text-secondary)', marginTop: '16px', marginBottom: '0', lineHeight: 1.4, borderTop: '1px solid var(--zen-border)', paddingTop: '12px' }}>
             {node.data.description}
           </p>
         ) : null}
 
       {node.id === 'node-hermes' && isHermesInstalled === false && (
-        <div style={{ marginTop: '10px', padding: '12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px' }}>
+        <div style={{ marginTop: '12px', padding: '14px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '14px' }}>
           {!hasActiveBackend ? (
-            <p style={{ fontSize: '0.75rem', color: 'var(--zen-text)', margin: 0, fontWeight: 600 }}>Please connect an intelligence source to FrugaLLM first.</p>
+            <p style={{ fontSize: '0.75rem', color: 'var(--zen-text)', margin: 0, fontWeight: 500 }}>Please connect an intelligence source to FrugaLLM first.</p>
           ) : (
             <button 
               onClick={(e) => { e.stopPropagation(); handleInitializeHermes(); }}
-              style={{ width: '100%', padding: '9px 12px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+              style={{ width: '100%', padding: '10px 16px', backgroundColor: '#171717', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
               INSTALL HERMES
             </button>
           )}
@@ -740,37 +853,37 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
       )}
       
       {node.id === 'node-hermes' && isHermesInstalled === true && (
-        <div style={{ marginTop: '10px', padding: '12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px' }}>
-          <h4 style={{ margin: '0 0 6px 0', color: 'var(--zen-text)', fontSize: '0.8rem' }}>HERMES AGENT INSTALLED</h4>
+        <div style={{ marginTop: '12px', padding: '14px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '14px' }}>
+          <h4 style={{ margin: '0 0 8px 0', color: 'var(--zen-text)', fontSize: '0.8rem', fontWeight: 600 }}>HERMES AGENT INSTALLED</h4>
           {confirmUninstall === 'hermes' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 700 }}>ARE YOU SURE?</span>
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <button onClick={(e) => { e.stopPropagation(); handleUninstallHermes(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
-                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#e5e7eb', color: '#374151', border: '1px solid var(--zen-border)', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 600 }}>ARE YOU SURE?</span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={(e) => { e.stopPropagation(); handleUninstallHermes(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
+                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '9999px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
               </div>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>WORKSPACE FOLDER</label>
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '4px' }}>WORKSPACE FOLDER</label>
                 <input type="text" name="hermes_workspace" value={formData.hermes_workspace || ''} onChange={handleChange}
-                  style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem' }} />
+                  style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem' }} />
               </div>
               <button 
                 onClick={(e) => { e.stopPropagation(); handleOpenHermes(); }}
-                style={{ width: '100%', padding: '9px 12px', backgroundColor: '#16a34a', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+                style={{ width: '100%', padding: '10px 16px', backgroundColor: '#10B981', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
                 LAUNCH HERMES
               </button>
-              <div style={{ display: 'flex', gap: '6px' }}>
+              <div style={{ display: 'flex', gap: '8px' }}>
                 <button 
                   onClick={(e) => { e.stopPropagation(); (handleOpenHermesDesktop || handleOpenHermesGateway)(); }}
-                  style={{ flex: 1, padding: '6px 8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
+                  style={{ flex: 1, padding: '8px 12px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                   LAUNCH APP
                 </button>
                 <button 
                   onClick={(e) => { e.stopPropagation(); handleOpenHermesWeb(); }}
-                  style={{ flex: 1, padding: '6px 8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
+                  style={{ flex: 1, padding: '8px 12px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                   LAUNCH WEBUI
                 </button>
               </div>
@@ -789,23 +902,23 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
                   hermesModes.push({ key: 'hermes-cli', label: 'HERMES CLI ACTIVE', mode: 'run-hermes' });
                 }
                 return hermesModes.map(item => (
-                  <div key={item.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px', marginBottom: '4px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--zen-text)', fontWeight: 700, fontSize: '0.75rem' }}>
-                      <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#16a34a', boxShadow: '0 0 4px #16a34a' }} />
+                  <div key={item.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '12px', marginBottom: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--zen-text)', fontWeight: 600, fontSize: '0.75rem' }}>
+                      <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981' }} />
                       {item.label}
                     </div>
-                    <button onClick={(e) => { e.stopPropagation(); handleKillProcess(item.mode); }} style={{ backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '4px', padding: '3px 6px', fontSize: '0.65rem', fontWeight: 'bold', cursor: 'pointer' }}>CLOSE</button>
+                    <button onClick={(e) => { e.stopPropagation(); handleKillProcess(item.mode); }} style={{ backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '9999px', padding: '3px 8px', fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer' }}>CLOSE</button>
                   </div>
                 ));
               })()}
               <button 
                 onClick={(e) => { e.stopPropagation(); invoke('edit_hermes_soul').catch(console.error); }}
-                style={{ width: '100%', padding: '6px 8px', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '6px', color: '#374151', border: '1px solid #d1d5db', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
+                style={{ width: '100%', padding: '8px 12px', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '9999px', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                 EDIT SOUL.MD
               </button>
               <button 
                 onClick={(e) => { e.stopPropagation(); setConfirmUninstall('hermes'); }}
-                style={{ width: '100%', padding: '6px 8px', backgroundColor: 'transparent', color: '#ef4444', border: '1px dashed #ef4444', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
+                style={{ width: '100%', padding: '8px 12px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                 UNINSTALL HERMES
               </button>
             </div>
@@ -814,13 +927,13 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
       )}
 
       {node.id === 'node-opencode' && isOpenCodeInstalled === false && (
-        <div style={{ marginTop: '10px', padding: '12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px' }}>
+        <div style={{ marginTop: '12px', padding: '14px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '14px' }}>
           {!hasActiveBackend ? (
-            <p style={{ fontSize: '0.75rem', color: 'var(--zen-text)', margin: 0, fontWeight: 600 }}>Please connect an intelligence source to FrugaLLM first.</p>
+            <p style={{ fontSize: '0.75rem', color: 'var(--zen-text)', margin: 0, fontWeight: 500 }}>Please connect an intelligence source to FrugaLLM first.</p>
           ) : (
             <button 
               onClick={(e) => { e.stopPropagation(); handleInitializeOpenCode(); }}
-              style={{ width: '100%', padding: '9px 12px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+              style={{ width: '100%', padding: '10px 16px', backgroundColor: '#171717', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
               INSTALL OPENCODE
             </button>
           )}
@@ -828,45 +941,45 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
       )}
       
       {node.id === 'node-opencode' && isOpenCodeInstalled === true && (
-        <div style={{ marginTop: '10px', padding: '12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px' }}>
-          <h4 style={{ margin: '0 0 6px 0', color: 'var(--zen-text)', fontSize: '0.8rem' }}>OPENCODE AGENT INSTALLED</h4>
+        <div style={{ marginTop: '12px', padding: '14px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '14px' }}>
+          <h4 style={{ margin: '0 0 8px 0', color: 'var(--zen-text)', fontSize: '0.8rem', fontWeight: 600 }}>OPENCODE AGENT INSTALLED</h4>
           {confirmUninstall === 'opencode' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 700 }}>ARE YOU SURE?</span>
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <button onClick={(e) => { e.stopPropagation(); handleUninstallOpenCode(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
-                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#e5e7eb', color: '#374151', border: '1px solid var(--zen-border)', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 600 }}>ARE YOU SURE?</span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={(e) => { e.stopPropagation(); handleUninstallOpenCode(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
+                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '9999px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
               </div>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '3px' }}>WORKSPACE FOLDER</label>
+                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '4px' }}>WORKSPACE FOLDER</label>
                 <input type="text" name="opencode_workspace" value={formData.opencode_workspace || ''} onChange={handleChange}
-                  style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem' }} />
+                  style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem' }} />
               </div>
               <button 
                 onClick={(e) => { e.stopPropagation(); handleOpenOpenCode(); }}
-                style={{ width: '100%', padding: '9px 12px', backgroundColor: '#16a34a', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+                style={{ width: '100%', padding: '10px 16px', backgroundColor: '#10B981', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
                 LAUNCH OPENCODE
               </button>
               <button 
                 onClick={(e) => { e.stopPropagation(); handleOpenOpenCodeWeb(); }}
-                style={{ width: '100%', padding: '6px 8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
+                style={{ width: '100%', padding: '8px 12px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                 LAUNCH WEBUI
               </button>
               {['run-opencode', 'run-opencode-web'].map(mode => activeProcesses && activeProcesses[mode] && (
-                <div key={mode} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px', marginBottom: '4px', marginTop: '4px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--zen-text)', fontWeight: 700, fontSize: '0.75rem' }}>
-                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#16a34a', boxShadow: '0 0 4px #16a34a' }} />
+                <div key={mode} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '12px', marginBottom: '4px', marginTop: '4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--zen-text)', fontWeight: 600, fontSize: '0.75rem' }}>
+                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981' }} />
                     {mode.replace('run-', '').toUpperCase()} ACTIVE
                   </div>
-                  <button onClick={(e) => { e.stopPropagation(); handleKillProcess(mode); }} style={{ backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '4px', padding: '3px 6px', fontSize: '0.65rem', fontWeight: 'bold', cursor: 'pointer' }}>CLOSE</button>
+                  <button onClick={(e) => { e.stopPropagation(); handleKillProcess(mode); }} style={{ backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '9999px', padding: '3px 8px', fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer' }}>CLOSE</button>
                 </div>
               ))}
               <button 
                 onClick={(e) => { e.stopPropagation(); setConfirmUninstall('opencode'); }}
-                style={{ width: '100%', padding: '6px 8px', backgroundColor: 'transparent', color: '#ef4444', border: '1px dashed #ef4444', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
+                style={{ width: '100%', padding: '8px 12px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                 UNINSTALL OPENCODE
               </button>
             </div>
@@ -875,9 +988,9 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
       )}
 
       {node.id === 'node-ollama' && isOllamaInstalled === false && (
-        <div style={{ marginTop: '12px', padding: '12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '8px' }}>
+        <div style={{ marginTop: '12px', padding: '14px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '14px' }}>
           <div style={{ marginBottom: '10px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '4px' }}>VRAM DETECTED (GB) <Tooltip text="We tried to auto-detect your Video RAM, but you can correct this if it's wrong." /></label>
+            <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px' }}>VRAM DETECTED (GB) <Tooltip text="We tried to auto-detect your Video RAM, but you can correct this if it's wrong." /></label>
             <input 
               type="text" 
               value={detectedVram} 
@@ -887,17 +1000,17 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
                 if (num > 0) memory.setDetectedVramGb(num);
               }}
               data-testid="vram-detected-input"
-              style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem' }} 
+              style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem' }} 
             />
           </div>
 
           <div style={{ marginBottom: '12px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', marginBottom: '4px' }}>RECOMMENDED MODEL <Tooltip text="Based on your VRAM, we'll pull this model for you!" /></label>
+            <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px' }}>RECOMMENDED MODEL <Tooltip text="Based on your VRAM, we'll pull this model for you!" /></label>
             <select 
               value={memory.activeModelName} 
               onChange={(e) => memory.setActiveModelName(e.target.value)}
               data-testid="recommended-model-input"
-              style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--zen-border)', borderRadius: '6px', backgroundColor: '#ffffff', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7F99' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center', paddingRight: '30px' }} 
+              style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem', cursor: 'pointer', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23737373' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', paddingRight: '32px' }} 
             >
               {AVAILABLE_MODELS.map((model) => {
                 const totalGb = (model.weightsGb + model.kvCacheGb + GRAPH_OVERHEAD_GB).toFixed(1);
@@ -920,15 +1033,15 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
 
           <button 
             onClick={(e) => { e.stopPropagation(); handleInitializeOllama(); }}
-            style={{ width: '100%', padding: '9px 12px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'background-color 0.15s' }}>
+            style={{ width: '100%', padding: '10px 16px', backgroundColor: '#171717', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s ease' }}>
             INSTALL OLLAMA
           </button>
         </div>
       )}
       
       {node.id === 'node-ollama' && isOllamaInstalled === true && (
-        <div style={{ marginTop: '10px', padding: '12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px' }}>
-          <h4 style={{ margin: '0 0 6px 0', color: 'var(--zen-text)', fontSize: '0.8rem' }}>OLLAMA INSTALLED</h4>
+        <div style={{ marginTop: '12px', padding: '14px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '14px' }}>
+          <h4 style={{ margin: '0 0 8px 0', color: 'var(--zen-text)', fontSize: '0.8rem', fontWeight: 600 }}>OLLAMA INSTALLED</h4>
           
           <div style={{ marginBottom: '12px' }}>
             <MemoryPipelineWidget 
@@ -937,25 +1050,24 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
               hardwareProfile={hardwareProfile || memory.hardwareProfile || latestTelemetry?.hardware_profile} 
             />
           </div>
-
           {confirmUninstall === 'ollama' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 700 }}>ARE YOU SURE?</span>
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <button onClick={(e) => { e.stopPropagation(); handleUninstallOllama(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
-                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#e5e7eb', color: '#374151', border: '1px solid var(--zen-border)', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 600 }}>ARE YOU SURE?</span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={(e) => { e.stopPropagation(); handleUninstallOllama(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
+                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '9999px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
               </div>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <button 
                 onClick={(e) => { e.stopPropagation(); handleOpenOllama(); }}
-                style={{ width: '100%', padding: '9px 12px', backgroundColor: '#16a34a', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+                style={{ width: '100%', padding: '10px 16px', backgroundColor: '#10B981', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
                 CHAT WITH OLLAMA
               </button>
               <button 
                 onClick={(e) => { e.stopPropagation(); setConfirmUninstall('ollama'); }}
-                style={{ width: '100%', padding: '6px 8px', backgroundColor: 'transparent', color: '#ef4444', border: '1px dashed #ef4444', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
+                style={{ width: '100%', padding: '8px 12px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                 UNINSTALL OLLAMA
               </button>
             </div>
@@ -964,28 +1076,28 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
       )}
 
       {node.id === 'node-ollama' && isOllamaInstalled === true && (
-        <div style={{ marginTop: '10px', padding: '12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-            <h4 style={{ margin: 0, color: 'var(--zen-text)', fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.5px' }}>
+        <div style={{ marginTop: '12px', padding: '14px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '14px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <h4 style={{ margin: 0, color: 'var(--zen-text)', fontSize: '0.8rem', fontWeight: 600, letterSpacing: '0.02em' }}>
               {en.routingGraph.nodeConfigPanel.actions.toolGateway.title}
             </h4>
             <span 
               data-testid="tool-gateway-status"
               style={{ 
-              fontSize: '0.65rem', fontWeight: 700, padding: '2px 6px', borderRadius: '4px',
-              backgroundColor: isToolGatewayInstalled ? '#dcfce7' : '#f3f4f6',
-              color: isToolGatewayInstalled ? '#15803d' : '#6b7280',
-              border: `1px solid ${isToolGatewayInstalled ? '#86efac' : '#d1d5db'}`
+              fontSize: '0.65rem', fontWeight: 600, padding: '3px 8px', borderRadius: '9999px',
+              backgroundColor: isToolGatewayInstalled ? '#dcfce7' : '#F4F4F5',
+              color: isToolGatewayInstalled ? '#15803d' : 'var(--zen-text-secondary)',
+              border: `1px solid ${isToolGatewayInstalled ? '#86efac' : 'var(--zen-border)'}`
             }}>
               {isToolGatewayInstalled ? en.routingGraph.nodeConfigPanel.actions.toolGateway.installed : en.routingGraph.nodeConfigPanel.actions.toolGateway.notInstalled}
             </span>
           </div>
 
-          <p style={{ margin: '0 0 8px 0', fontSize: '0.7rem', color: 'var(--zen-text-secondary)', lineHeight: '1.3' }}>
+          <p style={{ margin: '0 0 10px 0', fontSize: '0.72rem', color: 'var(--zen-text-secondary)', lineHeight: '1.35' }}>
             {en.routingGraph.nodeConfigPanel.actions.toolGateway.description}
           </p>
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 500, color: 'var(--zen-text)', userSelect: 'none' }}>
             <input 
               type="checkbox"
               name="toolGatewayCheckbox"
@@ -1011,22 +1123,20 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
                   }
                 }
               }}
-              style={{ width: '15px', height: '15px', cursor: 'pointer' }}
+              style={{ width: '15px', height: '15px', cursor: 'pointer', borderRadius: '4px', accentColor: '#10B981' }}
             />
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--zen-text)' }}>
-              {en.routingGraph.nodeConfigPanel.actions.toolGateway.checkboxLabel}
-            </span>
+            <span>{en.routingGraph.nodeConfigPanel.actions.toolGateway.checkboxLabel}</span>
           </label>
 
           {showToolGatewayPrompt === 'install' && (
-            <div style={{ marginTop: '8px', padding: '10px', backgroundColor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '6px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <span style={{ fontSize: '0.75rem', color: '#9a3412', fontWeight: 700 }}>
+            <div style={{ marginTop: '10px', padding: '12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 600 }}>
                 {en.routingGraph.nodeConfigPanel.actions.toolGateway.installPromptTitle}
               </span>
-              <span style={{ fontSize: '0.7rem', color: '#9a3412', lineHeight: '1.3' }}>
+              <span style={{ fontSize: '0.72rem', color: 'var(--zen-text-secondary)', lineHeight: '1.3' }}>
                 {en.routingGraph.nodeConfigPanel.actions.toolGateway.installPromptText}
               </span>
-              <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '2px' }}>
                 <button 
                   data-testid="confirm-install-tool-gateway"
                   onClick={(e) => {
@@ -1034,7 +1144,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
                     setShowToolGatewayPrompt(null);
                     handleInstallToolGateway();
                   }}
-                  style={{ flex: 1, padding: '6px', backgroundColor: 'var(--zen-accent)', color: '#ffffff', border: 'none', borderRadius: '4px', fontWeight: 700, cursor: 'pointer', fontSize: '0.75rem' }}
+                  style={{ flex: 1, padding: '8px', backgroundColor: 'var(--zen-accent)', color: '#ffffff', border: 'none', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontSize: '0.75rem' }}
                 >
                   {en.routingGraph.nodeConfigPanel.actions.toolGateway.installButton}
                 </button>
@@ -1043,7 +1153,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
                     e.stopPropagation();
                     setShowToolGatewayPrompt(null);
                   }}
-                  style={{ flex: 1, padding: '6px', backgroundColor: '#f3f4f6', color: '#374151', border: '1px solid #d1d5db', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '0.75rem' }}
+                  style={{ flex: 1, padding: '8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontSize: '0.75rem' }}
                 >
                   {en.routingGraph.nodeConfigPanel.actions.toolGateway.cancelButton}
                 </button>
@@ -1052,14 +1162,14 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
           )}
 
           {showToolGatewayPrompt === 'uninstall' && (
-            <div style={{ marginTop: '8px', padding: '10px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <span style={{ fontSize: '0.75rem', color: '#991b1b', fontWeight: 700 }}>
+            <div style={{ marginTop: '10px', padding: '12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 600 }}>
                 {en.routingGraph.nodeConfigPanel.actions.toolGateway.uninstallPromptTitle}
               </span>
-              <span style={{ fontSize: '0.7rem', color: '#991b1b', lineHeight: '1.3' }}>
+              <span style={{ fontSize: '0.72rem', color: 'var(--zen-text-secondary)', lineHeight: '1.3' }}>
                 {en.routingGraph.nodeConfigPanel.actions.toolGateway.uninstallPromptText}
               </span>
-              <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '2px' }}>
                 <button 
                   data-testid="confirm-uninstall-tool-gateway"
                   onClick={(e) => {
@@ -1067,7 +1177,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
                     setShowToolGatewayPrompt(null);
                     handleUninstallToolGateway();
                   }}
-                  style={{ flex: 1, padding: '6px', backgroundColor: '#ef4444', color: '#ffffff', border: 'none', borderRadius: '4px', fontWeight: 700, cursor: 'pointer', fontSize: '0.75rem' }}
+                  style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#ffffff', border: 'none', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontSize: '0.75rem' }}
                 >
                   {en.routingGraph.nodeConfigPanel.actions.toolGateway.uninstallButton}
                 </button>
@@ -1076,7 +1186,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
                     e.stopPropagation();
                     setShowToolGatewayPrompt(null);
                   }}
-                  style={{ flex: 1, padding: '6px', backgroundColor: '#f3f4f6', color: '#374151', border: '1px solid #d1d5db', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '0.75rem' }}
+                  style={{ flex: 1, padding: '8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontSize: '0.75rem' }}
                 >
                   {en.routingGraph.nodeConfigPanel.actions.toolGateway.cancelButton}
                 </button>
@@ -1087,21 +1197,21 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
       )}
       
       {node.id === 'node-openrouter' && node.data.status === 'active' && (
-        <div style={{ marginTop: '10px', padding: '12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px' }}>
-          <h4 style={{ margin: '0 0 6px 0', color: 'var(--zen-text)', fontSize: '0.8rem' }}>OPENROUTER CONNECTED</h4>
+        <div style={{ marginTop: '12px', padding: '14px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '14px' }}>
+          <h4 style={{ margin: '0 0 8px 0', color: 'var(--zen-text)', fontSize: '0.8rem', fontWeight: 600 }}>OPENROUTER CONNECTED</h4>
           {confirmUninstall === 'openrouter' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 700 }}>ARE YOU SURE?</span>
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <button onClick={(e) => { e.stopPropagation(); handleDisconnectOpenRouter(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#ef4444', color: '#FFFFFF', border: '2px solid #991b1b', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>YES</button>
-                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#e5e7eb', color: '#374151', border: '2px solid #9ca3af', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>NO</button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 600 }}>ARE YOU SURE?</span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={(e) => { e.stopPropagation(); handleDisconnectOpenRouter(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>YES</button>
+                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>NO</button>
               </div>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <button 
                 onClick={(e) => { e.stopPropagation(); setConfirmUninstall('openrouter'); }}
-                style={{ width: '100%', padding: '6px 8px', backgroundColor: 'transparent', color: '#ef4444', border: '1px dashed #ef4444', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
+                style={{ width: '100%', padding: '8px 12px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                 DISCONNECT
               </button>
             </div>
@@ -1110,21 +1220,21 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
       )}
 
       {node.id === 'node-google' && node.data.status === 'active' && (
-        <div style={{ marginTop: '10px', padding: '12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '6px' }}>
-          <h4 style={{ margin: '0 0 6px 0', color: 'var(--zen-text)', fontSize: '0.8rem' }}>GOOGLE AI STUDIO CONNECTED</h4>
+        <div style={{ marginTop: '12px', padding: '14px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '14px' }}>
+          <h4 style={{ margin: '0 0 8px 0', color: 'var(--zen-text)', fontSize: '0.8rem', fontWeight: 600 }}>GOOGLE AI STUDIO CONNECTED</h4>
           {confirmUninstall === 'google' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 700 }}>ARE YOU SURE?</span>
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <button onClick={(e) => { e.stopPropagation(); handleDisconnectGoogle(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#ef4444', color: '#FFFFFF', border: '2px solid #991b1b', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>YES</button>
-                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '6px', backgroundColor: '#e5e7eb', color: '#374151', border: '2px solid #9ca3af', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>NO</button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 600 }}>ARE YOU SURE?</span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={(e) => { e.stopPropagation(); handleDisconnectGoogle(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>YES</button>
+                <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>NO</button>
               </div>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <button 
                 onClick={(e) => { e.stopPropagation(); setConfirmUninstall('google'); }}
-                style={{ width: '100%', padding: '6px 8px', backgroundColor: 'transparent', color: '#ef4444', border: '1px dashed #ef4444', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
+                style={{ width: '100%', padding: '8px 12px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                 DISCONNECT
               </button>
             </div>
@@ -1133,36 +1243,34 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
       )}
       </div>
       
-      <div style={{ padding: '10px 16px', borderTop: '1px solid var(--zen-border)', backgroundColor: '#ffffff', display: 'flex', gap: '8px' }}>
+      <div style={{ padding: '14px 20px', borderTop: '1px solid var(--zen-border)', backgroundColor: 'var(--zen-surface)', display: 'flex', gap: '8px' }}>
         <button 
           onClick={handleSave} 
           disabled={!hasChanges}
           data-testid="save-node-config-button"
           style={{ 
             flex: 1, 
-            padding: '9px 14px', 
-            backgroundColor: hasChanges ? 'var(--zen-accent)' : '#9ca3af', 
-            color: '#FFFFFF', 
-            border: '1px solid var(--zen-border)', 
-            borderRadius: '6px', 
-            fontWeight: 700, 
+            padding: '11px 20px', 
+            backgroundColor: hasChanges ? 'var(--zen-accent)' : 'var(--zen-pill-bg)', 
+            color: hasChanges ? '#FFFFFF' : 'var(--zen-text-secondary)', 
+            border: hasChanges ? 'none' : '1px solid var(--zen-pill-border)', 
+            borderRadius: '9999px', 
+            fontWeight: 600, 
             fontSize: '0.85rem', 
             cursor: hasChanges ? 'pointer' : 'not-allowed', 
-            opacity: hasChanges ? 1 : 0.6,
+            opacity: 1,
             fontFamily: 'inherit', 
-            boxShadow: 'none', 
-            transition: 'all 0.1s'
+            boxShadow: hasChanges ? 'var(--zen-active-glow)' : 'none', 
+            transition: 'all 0.15s ease'
           }}
           onMouseDown={e => { 
             if (hasChanges) {
-              e.currentTarget.style.transform = 'translate(1px, 1px)'; 
-              e.currentTarget.style.opacity = '0.9'; 
+              e.currentTarget.style.transform = 'scale(0.99)'; 
             }
           }}
           onMouseUp={e => { 
             if (hasChanges) {
               e.currentTarget.style.transform = 'none'; 
-              e.currentTarget.style.opacity = '1'; 
             }
           }}
         >
@@ -1540,9 +1648,12 @@ const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', backgroundColor: 'var(--zen-surface)', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--zen-border)', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', backgroundColor: 'var(--zen-surface-hover)', borderBottom: '1px solid var(--zen-border)' }}>
-        <h2 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--zen-text)', margin: 0 }}>
-          {title}
-        </h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {getProviderIcon(mode, { size: 16 })}
+          <h2 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--zen-text)', margin: 0 }}>
+            {title}
+          </h2>
+        </div>
         {showConfirmClose ? (
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
             <span style={{ color: '#ef4444', fontWeight: 600, fontSize: '0.85rem' }}>{en.routingGraph.terminal.confirmClose}</span>
@@ -1624,10 +1735,12 @@ function AppContent() {
   }, [memory]);
 
   const { onboardingState, handleDecision, isLoaded } = useOnboarding();
+  const { theme, toggleTheme, isDark } = useTheme();
   const [nodes, setNodes] = useState(initialNodes);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
   
   const {
     pan,
@@ -1820,22 +1933,18 @@ function AppContent() {
     // Resize observer logic moved to useCanvasLogic
   }, [terminalMode]);
 
-  const spreadWidth = Math.max(containerSize.width, 800);
-  const spreadHeight = Math.max(containerSize.height, 600);
-  const autoScale = Math.min(containerSize.width / 800, containerSize.height / 600, 1);
-
-  const renderedNodes = nodes.map(node => {
-    const layout = nodeLayout[node.id] || { rx: 0, ry: 0 };
-    return {
-      ...node,
-      x: (containerSize.width / 2) + (layout.rx * spreadWidth) - (NODE_WIDTH / 2),
-      y: (containerSize.height / 2) + (layout.ry * spreadHeight) - (NODE_HEIGHT / 2)
-    };
-  });
-
+  // Viewport Hub Centering Mandate:
+  // The central FrugaLLM node must be mathematically positioned such that its geometric center
+  // (accounting for its true card height and width) coincides exactly with the viewport midpoint
+  // (50% of inner window width, 50% of inner window height).
+  const headerHeight = (headerRef.current && headerRef.current.offsetHeight > 0) ? headerRef.current.offsetHeight : 41;
+  const currentViewportWidth = typeof window !== 'undefined' && window.innerWidth > 0 ? window.innerWidth : containerSize.width;
+  const currentViewportHeight = typeof window !== 'undefined' && window.innerHeight > 0 ? window.innerHeight : (containerSize.height + headerHeight);
+  const activeWidth = containerSize.width > 0 ? containerSize.width : currentViewportWidth;
+  const activeHeight = containerSize.height > 0 ? containerSize.height : (currentViewportHeight - headerHeight);
+  const autoScale = Math.min(activeWidth / 800, activeHeight / 600, 1);
 
   // UI State
-
   const [portConflict, setPortConflict] = useState<{ port: number; message: string } | null>(null);
   const [detectedVram, setDetectedVram] = useState<string>('8'); // Default placeholder
   const [latestTelemetry, setLatestTelemetry] = useState<any>(null);
@@ -2096,10 +2205,15 @@ function AppContent() {
     
     if (nodeId === 'node-frugallm') {
       try {
+        if (finalConfig.manual_model_overrides !== undefined) {
+          await invoke('set_model_override', { overrides: finalConfig.manual_model_overrides });
+          await invoke('refresh_routing_chain').catch(console.error);
+        }
         const newConf = {
           port: parseInt(finalConfig.port, 10),
           bind_all_interfaces: finalConfig.bind_all_interfaces,
           api_password: finalConfig.api_password || null,
+          manual_model_overrides: finalConfig.manual_model_overrides !== undefined ? finalConfig.manual_model_overrides : (frugalConfig?.manual_model_overrides || []),
           input_tokens_session: frugalConfig?.input_tokens_session || 0,
           output_tokens_session: frugalConfig?.output_tokens_session || 0,
           input_tokens_lifetime: frugalConfig?.input_tokens_lifetime || 0,
@@ -2251,60 +2365,439 @@ function AppContent() {
     setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, ...finalConfig } } : n));
   };
 
-  const renderEdge = (edge: any) => {
-    const source = renderedNodes.find(n => n.id === edge.source);
-    const target = renderedNodes.find(n => n.id === edge.target);
-    if (!source || !target) return null;
+  interface SvgLineCoord {
+    id: string;
+    sourceId: string;
+    targetId: string;
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+    isActive: boolean;
+  }
 
-    const sx = source.x + NODE_WIDTH / 2;
-    const sy = source.y + NODE_HEIGHT / 2;
-    const tx = target.x + NODE_WIDTH / 2;
-    const ty = target.y + NODE_HEIGHT / 2;
+  const mainContainerRef = useRef<HTMLDivElement | null>(null);
+  const centralNodeRef = useRef<HTMLDivElement | null>(null);
+  const outerNodeRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-    const pathD = `M ${sx} ${sy} L ${tx} ${ty}`;
-    
-    let isGenerating = false;
-    if (edge.id === 'edge-hermes-frugallm') isGenerating = activeProxyState?.source === 'hermes';
-    else if (edge.id === 'edge-opencode-frugallm') isGenerating = activeProxyState?.source === 'opencode';
-    else if (edge.id === 'edge-frugallm-ollama') isGenerating = activeProxyState?.target === 'ollama';
-    else if (edge.id === 'edge-frugallm-openrouter') isGenerating = activeProxyState?.target === 'openrouter';
-    else if (edge.id === 'edge-ollama-hardware') isGenerating = activeProxyState?.target === 'ollama' || terminalMode === 'run-ollama';
-    else if (edge.id === 'edge-openrouter-cloud') isGenerating = source.data.isGenerating === true || activeProxyState?.target === 'openrouter';
+  const [lines, setLines] = useState<SvgLineCoord[]>([]);
 
-    return (
-      <g key={edge.id}>
-        {/* Base line */}
-        <path
-          d={pathD}
-          fill="none"
-          stroke="var(--zen-border)"
-          strokeWidth="3"
-          strokeOpacity="1"
-          strokeLinecap="round"
-        />
-        {/* Animated active state */}
-        <path
-          d={pathD}
-          fill="none"
-          stroke="var(--zen-accent)"
-          strokeWidth="3"
-          strokeOpacity={isGenerating ? "1" : "0"}
-          strokeDasharray="8 8"
-          strokeLinecap="round"
-          className={isGenerating ? "edge-stream-forward" : ""}
-        />
-      </g>
-    );
-  };
+  const calculateLines = useCallback(() => {
+    const container = mainContainerRef.current;
+    const centralEl = centralNodeRef.current;
+    if (!container || !centralEl) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const isZeroSize = containerRect.width === 0 && containerRect.height === 0;
+
+    const scaleX = (!isZeroSize && container.offsetWidth > 0) ? (containerRect.width / container.offsetWidth) : 1;
+    const scaleY = (!isZeroSize && container.offsetHeight > 0) ? (containerRect.height / container.offsetHeight) : 1;
+
+    const getCenter = (el: HTMLElement | null, fallbackCoord: { x: number; y: number }) => {
+      if (!el) return fallbackCoord;
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) {
+        return fallbackCoord;
+      }
+      return {
+        x: ((r.left + r.width / 2) - containerRect.left) / scaleX,
+        y: ((r.top + r.height / 2) - containerRect.top) / scaleY,
+      };
+    };
+
+    const defaultFallback: Record<string, { x: number; y: number }> = {
+      'node-ollama': { x: 140, y: 70 },
+      'node-google': { x: 500, y: 70 },
+      'node-openrouter': { x: 860, y: 70 },
+      'node-frugallm': { x: 500, y: 300 },
+      'node-opencode': { x: 300, y: 530 },
+      'node-hermes': { x: 700, y: 530 },
+    };
+
+    const centralCenter = getCenter(centralEl, defaultFallback['node-frugallm']);
+
+    const computedLines: SvgLineCoord[] = [];
+
+    for (const edge of initialEdges) {
+      const isCentralSource = edge.source === 'node-frugallm';
+      const outerId = isCentralSource ? edge.target : edge.source;
+      const outerEl = outerNodeRefs.current[outerId];
+      const outerCenter = getCenter(outerEl, defaultFallback[outerId] || { x: 0, y: 0 });
+
+      let isActive = false;
+      if (edge.id === 'edge-hermes-frugallm') {
+        isActive = activeProxyState?.source === 'hermes' || !!activeProcesses['run-hermes'] || !!activeProcesses['run-hermes-gateway'];
+      } else if (edge.id === 'edge-opencode-frugallm') {
+        isActive = activeProxyState?.source === 'opencode' || !!activeProcesses['run-opencode'];
+      } else if (edge.id === 'edge-frugallm-ollama') {
+        isActive = activeProxyState?.target === 'ollama' || terminalMode === 'run-ollama';
+      } else if (edge.id === 'edge-frugallm-openrouter') {
+        isActive = activeProxyState?.target === 'openrouter';
+      } else if (edge.id === 'edge-frugallm-google') {
+        isActive = activeProxyState?.target === 'google';
+      }
+
+      const sx = isCentralSource ? centralCenter.x : outerCenter.x;
+      const sy = isCentralSource ? centralCenter.y : outerCenter.y;
+      const tx = isCentralSource ? outerCenter.x : centralCenter.x;
+      const ty = isCentralSource ? outerCenter.y : centralCenter.y;
+
+      computedLines.push({
+        id: edge.id,
+        sourceId: edge.source,
+        targetId: edge.target,
+        x1: sx,
+        y1: sy,
+        x2: tx,
+        y2: ty,
+        isActive,
+      });
+    }
+
+    setLines(prev => {
+      if (
+        prev.length === computedLines.length &&
+        prev.every((p, i) => {
+          const c = computedLines[i];
+          return (
+            p.id === c.id &&
+            Math.abs(p.x1 - c.x1) < 0.5 &&
+            Math.abs(p.y1 - c.y1) < 0.5 &&
+            Math.abs(p.x2 - c.x2) < 0.5 &&
+            Math.abs(p.y2 - c.y2) < 0.5 &&
+            p.isActive === c.isActive
+          );
+        })
+      ) {
+        return prev;
+      }
+      return computedLines;
+    });
+  }, [activeProxyState, activeProcesses, terminalMode]);
+
+  const handleToggleTheme = useCallback(() => {
+    toggleTheme();
+    calculateLines();
+    setTimeout(() => {
+      calculateLines();
+    }, 50);
+  }, [toggleTheme, calculateLines]);
+
+  useLayoutEffect(() => {
+    calculateLines();
+  }, [calculateLines, nodes, portConflict, isAppLoaded, theme]);
+
+  useEffect(() => {
+    const container = mainContainerRef.current;
+    if (!container) return;
+
+    const mountTimer = setTimeout(() => {
+      calculateLines();
+    }, 50);
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => {
+        calculateLines();
+      });
+      ro.observe(container);
+    }
+
+    window.addEventListener('resize', calculateLines);
+
+    return () => {
+      clearTimeout(mountTimer);
+      if (ro) ro.disconnect();
+      window.removeEventListener('resize', calculateLines);
+    };
+  }, [calculateLines, nodes, portConflict, terminalMode, isAppLoaded, theme]);
+
+  const topNodes = ['node-ollama', 'node-google', 'node-openrouter']
+    .map(id => nodes.find(n => n.id === id))
+    .filter(Boolean) as AppNode[];
+
+  const centralNode = nodes.find(n => n.id === 'node-frugallm');
+
+  const bottomNodes = ['node-opencode', 'node-hermes']
+    .map(id => nodes.find(n => n.id === id))
+    .filter(Boolean) as AppNode[];
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
   const hasActiveBackend = nodes.some(n => (n.id === 'node-ollama' || n.id === 'node-openrouter' || n.id === 'node-google') && n.data.status === 'active');
+
+  const renderNode = (node: AppNode) => {
+    const isSelected = selectedNodeId === node.id;
+    const isCore = node.id === 'node-frugallm';
+    const nodeH = (isCore && portConflict) ? 176 : (NODE_HEIGHTS[node.id] || PERIPHERAL_NODE_HEIGHT);
+
+    let stateColors = {
+      border: isCore && portConflict ? '#ef4444' : 'transparent',
+      headerBg: isCore && portConflict ? '#fef2f2' : (isSelected ? 'var(--zen-surface-header-active)' : 'var(--zen-surface-header)'), 
+      headerText: isCore && portConflict ? '#991b1b' : 'var(--zen-text)',
+      bodyBg: 'var(--zen-surface)',
+      dot: isCore && portConflict ? '#ef4444' : '#10B981',
+      statusText: 'var(--zen-text-secondary)',
+      boxShadow: isCore && portConflict ? '0 0 16px rgba(239, 68, 68, 0.2), var(--zen-shadow-diffused)' : 'var(--zen-shadow-diffused)',
+      borderStyle: 'none',
+      borderWidth: '0px'
+    };
+
+    let Icon: React.ReactNode = Icons.cpu;
+    const providerIcon = getProviderIcon(node.id, { size: 14 });
+    if (providerIcon) {
+      Icon = providerIcon;
+    } else if (node.data.isAgent) {
+      Icon = Icons.agent;
+    }
+
+    const setNodeRef = (el: HTMLDivElement | null) => {
+      if (isCore) {
+        centralNodeRef.current = el;
+      } else {
+        outerNodeRefs.current[node.id] = el;
+      }
+    };
+
+    if (node.id === 'node-ollama') {
+      const isOllamaGenerating = activeProxyState?.target === 'ollama' || terminalMode === 'run-ollama';
+      return (
+        <div
+          key={node.id}
+          id={node.id}
+          data-node-id={node.id}
+          ref={setNodeRef}
+          className="retro-node"
+          style={{ 
+            position: 'relative',
+            width: NODE_WIDTH, 
+            height: nodeH,
+            boxSizing: 'border-box',
+            zIndex: isSelected ? 5 : 1,
+            backgroundColor: 'var(--zen-surface)',
+            border: 'none',
+            borderRadius: '16px',
+            boxShadow: isSelected ? '0 0 0 2px var(--zen-active-border), var(--zen-active-glow), var(--zen-shadow-diffused)' : 'var(--zen-shadow-diffused)',
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            userSelect: 'none',
+            overflow: 'hidden'
+          }}
+          onMouseDown={(e) => handleCanvasMouseDown(e)}
+          onClick={(e) => handleNodeClick(e, node.id)}
+        >
+          <HardwareNode isGenerating={isOllamaGenerating} label={node.data.label} subheader={node.data.subheader} icon={<OllamaIcon size={14} />} isSelected={isSelected} />
+        </div>
+      );
+    }
+
+    return (
+      <div 
+        key={node.id}
+        id={node.id}
+        data-node-id={node.id}
+        ref={setNodeRef}
+        className="retro-node"
+        style={{
+          position: 'relative',
+          width: NODE_WIDTH,
+          height: nodeH,
+          boxSizing: 'border-box',
+          cursor: 'pointer',
+          backgroundColor: stateColors.bodyBg,
+          border: 'none',
+          borderRadius: '16px',
+          overflow: 'hidden',
+          boxShadow: isSelected ? `0 0 0 2px var(--zen-active-border), var(--zen-active-glow), ${stateColors.boxShadow}` : stateColors.boxShadow,
+          zIndex: isSelected ? 5 : 1,
+          display: 'flex',
+          flexDirection: 'column',
+          userSelect: 'none'
+        }}
+        onMouseDown={(e) => handleCanvasMouseDown(e)}
+        onClick={(e) => handleNodeClick(e, node.id)}
+      >
+        {/* Header */}
+        <div style={{ 
+          backgroundColor: stateColors.headerBg, 
+          color: stateColors.headerText,
+          padding: '10px 14px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          borderBottom: 'none'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {Icon}
+            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
+              <span style={{ fontWeight: 600, fontSize: '0.82rem', color: stateColors.headerText, letterSpacing: '0.02em' }}>
+                {node.data.label}
+              </span>
+              {node.data.subheader && (
+                <span style={{ fontWeight: 450, fontSize: '0.65rem', color: 'var(--zen-text-secondary)' }}>
+                  {node.data.subheader}
+                </span>
+              )}
+            </div>
+            {isCore && portConflict && (
+              <span
+                data-testid="frugallm-port-conflict-badge"
+                style={{
+                  fontSize: '0.6rem',
+                  fontWeight: 700,
+                  backgroundColor: '#ef4444',
+                  color: '#ffffff',
+                  padding: '2px 6px',
+                  borderRadius: '9999px',
+                  letterSpacing: '0.04em'
+                }}
+              >
+                PORT CONFLICT
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div 
+              onClick={(e) => {
+                e.stopPropagation();
+                handleNodeClick(e, node.id);
+              }}
+              style={{
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--zen-text)',
+                padding: '4px',
+                borderRadius: '9999px',
+                opacity: 0.8
+              }}
+            >
+              {Icons.settings}
+            </div>
+          </div>
+        </div>
+        
+        {/* Body */}
+        <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: '8px', backgroundColor: stateColors.bodyBg, color: 'var(--zen-text)' }}>
+          {isCore ? (
+            <>
+              {portConflict && (
+                <div
+                  data-testid="frugallm-node-conflict-warning"
+                  style={{
+                    backgroundColor: '#fee2e2',
+                    border: 'none',
+                    color: '#991b1b',
+                    borderRadius: '8px',
+                    padding: '6px 8px',
+                    fontSize: '0.72rem',
+                    fontWeight: 600,
+                    textAlign: 'center'
+                  }}
+                >
+                  Port {portConflict.port} Conflict
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>Session tokens:</span>
+                <span data-testid="frugallm-session-tokens" style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--zen-text)' }}>
+                  {((frugalConfig?.input_tokens_session || 0) + (frugalConfig?.output_tokens_session || 0)).toLocaleString()}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>Total tokens:</span>
+                <span data-testid="frugallm-total-tokens" style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--zen-text)' }}>
+                  {((frugalConfig?.input_tokens_lifetime || 0) + (frugalConfig?.output_tokens_lifetime || 0)).toLocaleString()}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>$ Saved:</span>
+                <span data-testid="frugallm-money-saved" style={{ fontSize: '0.78rem', fontWeight: 600, color: '#10B981' }}>
+                  ${((((frugalConfig?.input_tokens_lifetime || 0) * 3.0) + ((frugalConfig?.output_tokens_lifetime || 0) * 15.0)) / 1_000_000).toFixed(2)}
+                </span>
+              </div>
+            </>
+          ) : (node.id === 'node-openrouter' || node.id === 'node-google') ? (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>API Key</span>
+                {node.data.status === 'active' ? (
+                  <span data-testid={`${node.id}-api-key`} style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--zen-text)', fontFamily: 'monospace', letterSpacing: '0.5px' }}>
+                    {node.data.keyPrefix ? `${node.data.keyPrefix}...` : (node.id === 'node-google' ? 'AIzaS...' : 'sk-or...')}
+                  </span>
+                ) : (
+                  <a
+                    href={node.id === 'node-openrouter' ? 'https://openrouter.ai' : 'https://aistudio.google.com'}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openUrl(node.id === 'node-openrouter' ? 'https://openrouter.ai' : 'https://aistudio.google.com').catch(() => {});
+                    }}
+                    style={{
+                      fontSize: '0.75rem',
+                      fontWeight: 500,
+                      color: 'var(--zen-text)',
+                      textDecoration: 'underline',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Get key
+                  </a>
+                )}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>Status</span>
+                <span data-testid={`${node.id}-status`} style={{ fontSize: '0.78rem', fontWeight: 500, color: node.data.status === 'active' ? '#10B981' : 'var(--zen-text-secondary)' }}>
+                  {node.data.status === 'active' ? (node.data.lastStatus || '200 OK') : 'N/A'}
+                </span>
+              </div>
+            </>
+          ) : (node.id === 'node-hermes' || node.id === 'node-opencode') ? (
+            (() => {
+              const isHermes = node.id === 'node-hermes';
+              const isInstalled = isHermes ? isHermesInstalled : isOpenCodeInstalled;
+              const isRunning = isHermes 
+                ? !!(activeProcesses['run-hermes'] || activeProcesses['run-hermes-gateway'] || activeProcesses['run-hermes-desktop'] || activeProcesses['run-hermes-web'] || activeProcesses['hermes-gateway'] || activeProcesses['hermes-dashboard'] || node.data.status === 'active')
+                : !!(activeProcesses['run-opencode'] || activeProcesses['run-opencode-web'] || node.data.status === 'active');
+              
+              const statusText = !isInstalled ? 'N/A' : (isRunning ? 'Active' : 'Standby');
+              const statusColor = !isInstalled ? 'var(--zen-text-secondary)' : (isRunning ? '#10B981' : '#eab308');
+              const versionText = !isInstalled ? 'N/A' : (isHermes ? hermesVersion : opencodeVersion);
+
+              return (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>Status:</span>
+                    <span data-testid={`${node.id}-status`} style={{ fontSize: '0.78rem', fontWeight: 500, color: statusColor }}>
+                      {statusText}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>Version:</span>
+                    <span data-testid={`${node.id}-version`} style={{ fontSize: '0.78rem', fontWeight: 500, color: 'var(--zen-text)' }}>
+                      {versionText}
+                    </span>
+                  </div>
+                </>
+              );
+            })()
+          ) : (
+            <>
+              <StatusLight status={node.data.status as any} text={node.data.status === 'active' ? 'Connected' : node.data.status === 'ready' ? (node.id === 'node-ollama' && isOllamaInstalled ? 'Stopped' : 'Ready') : (node.data.status.replace('_', ' ').toUpperCase())} />
+              <InfoField label={'ENDPOINT'} value={node.data.port ? `${node.data.ip}:${node.data.port}` : `${node.data.ip}`} />
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   if (!isLoaded) return null;
 
   return !isAppLoaded ? <TerminalLoader logs={initLogs} /> : (
     <div 
-      style={{ display: 'flex', width: '100%', height: '100vh', fontFamily: 'inherit', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '8px', overflow: 'hidden', overscrollBehavior: 'none' }}
+      style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100vh', fontFamily: 'inherit', backgroundColor: 'var(--zen-canvas)', backgroundImage: 'var(--zen-canvas-texture)', overflow: 'hidden', overscrollBehavior: 'none' }}
     >
       <style>
         {`
@@ -2316,17 +2809,26 @@ function AppContent() {
             0% { stroke-dashoffset: 0; }
             100% { stroke-dashoffset: 40; }
           }
+          @keyframes flowAnimation {
+            to {
+              stroke-dashoffset: -16;
+            }
+          }
           .edge-stream-forward {
             animation: streamForward 0.8s linear infinite;
           }
           .edge-stream-reverse {
             animation: streamReverse 1.1s linear infinite;
           }
+          .edge-flow-active {
+            animation: flowAnimation 0.8s linear infinite;
+          }
           .retro-node {
             transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s;
           }
           .retro-node:hover {
-            transform: translateY(-4px) scale(1.02);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.05);
           }
           .terminal-drawer {
             transition: transform 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
@@ -2334,12 +2836,93 @@ function AppContent() {
         `}
       </style>
 
+      {/* Header */}
+      <header 
+        ref={headerRef}
+        data-testid="app-header" 
+        style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between', 
+          padding: '10px 20px', 
+          backgroundColor: 'var(--zen-header-bg)', 
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          borderBottom: '1px solid var(--zen-header-border)',
+          flexShrink: 0,
+          zIndex: 10
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <FrugaLLMIcon 
+            size={22} 
+            title="FrugaLLM Logo"
+            aria-label="FrugaLLM Logo"
+            data-testid="header-frugallm-icon"
+            style={{ color: 'var(--zen-text)', flexShrink: 0 }} 
+          />
+          <span style={{ fontWeight: 700, fontSize: '0.92rem', color: 'var(--zen-text)', letterSpacing: '-0.01em' }}>
+            {en.header?.brandName || 'FrugaLLM'}
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            onClick={handleToggleTheme}
+            data-testid="header-theme-toggle-btn"
+            aria-label={en.header?.toggleTheme || "Toggle theme"}
+            role="button"
+            title={isDark ? (en.header?.themeLight || "Switch to light theme") : (en.header?.themeDark || "Switch to dark theme")}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '32px',
+              height: '32px',
+              padding: 0,
+              backgroundColor: 'var(--zen-pill-bg)',
+              border: '1px solid var(--zen-pill-border)',
+              borderRadius: '9999px',
+              color: 'var(--zen-text)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--zen-pill-hover)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--zen-pill-bg)'; }}
+          >
+            {isDark ? <Sun size={15} /> : <Moon size={15} />}
+          </button>
+          <button
+            onClick={() => setGuidesOpen(true)}
+            data-testid="header-guides-btn"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 14px',
+              backgroundColor: 'var(--zen-surface-hover)',
+              border: '1px solid var(--zen-border-subtle)',
+              borderRadius: '9999px',
+              fontSize: '0.75rem',
+              fontWeight: 500,
+              color: 'var(--zen-text)',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--zen-surface-secondary)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--zen-surface-hover)'; }}
+          >
+            {en.footer?.guides || 'Quickstart Guides'}
+          </button>
+        </div>
+      </header>
+
       {/* Canvas Area */}
       {(['install-hermes', 'run-hermes', 'run-hermes-web', 'run-hermes-gateway', 'run-hermes-desktop', 'install-opencode', 'run-opencode', 'run-opencode-web', 'install-ollama', 'run-ollama', 'install-tool-gateway', 'uninstall-tool-gateway'] as const).map((mode) => {
         const isActive = activeProcesses[mode] || terminalMode === mode;
         if (!isActive) return null;
         return (
-          <div key={mode} style={{ display: terminalMode === mode ? 'flex' : 'none', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, zIndex: 50, backgroundColor: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(4px)' }}>
+          <div key={mode} style={{ display: terminalMode === mode ? 'flex' : 'none', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, zIndex: 50, backgroundColor: 'rgba(0, 0, 0, 0.3)', backdropFilter: 'blur(8px)' }}>
             <TerminalView
                mode={mode}
                sessionId={mode}
@@ -2370,8 +2953,12 @@ function AppContent() {
           style={{ 
             flexGrow: 1, position: 'relative', 
             cursor: 'default',
-            display: terminalMode ? 'none' : 'block',
-            overscrollBehavior: 'none'
+            display: terminalMode ? 'none' : 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            overscrollBehavior: 'none',
+            minHeight: 0,
+            overflow: 'hidden'
           }}
         >
         {portConflict && !terminalMode && (
@@ -2387,317 +2974,225 @@ function AppContent() {
 
         <div style={{
           position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
           transform: `scale(${autoScale}) translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
           transformOrigin: 'center center',
           pointerEvents: 'none'
         }}>
-          {/* SVG Layer for Connections */}
-          <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 0, overflow: 'visible' }}>
-            {initialEdges.map(renderEdge)}
-          </svg>
+          {/* Main Relative Container for 3-Row Flexbox Router */}
+          <div
+            ref={mainContainerRef}
+            data-testid="router-main-container"
+            style={{
+              position: 'relative',
+              width: '100%',
+              maxWidth: '1100px',
+              height: '100%',
+              maxHeight: '660px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              padding: '24px 32px',
+              boxSizing: 'border-box',
+              pointerEvents: 'auto'
+            }}
+          >
+            {/* Dynamic SVG Routing Layer */}
+            <svg
+              data-testid="router-svg-layer"
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                width: '100%',
+                height: '100%',
+                pointerEvents: 'none',
+                zIndex: 0,
+                overflow: 'visible'
+              }}
+            >
+              {lines.map((line) => (
+                <line
+                  key={line.id}
+                  id={line.id}
+                  data-testid={`svg-line-${line.id}`}
+                  x1={line.x1}
+                  y1={line.y1}
+                  x2={line.x2}
+                  y2={line.y2}
+                  stroke={line.isActive ? "var(--zen-accent)" : "var(--zen-edge)"}
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeDasharray={line.isActive ? 8 : undefined}
+                  className={line.isActive ? "edge-flow-active" : ""}
+                  style={line.isActive ? { strokeDasharray: '8', animation: 'flowAnimation 0.8s linear infinite' } : {}}
+                />
+              ))}
+            </svg>
 
-          {/* Nodes Layer */}
-          <div style={{ pointerEvents: 'auto' }}>
-            {renderedNodes.map(node => {
-              const isSelected = selectedNodeId === node.id;
-              const isCore = node.id === 'node-frugallm';
-              
-              let stateColors = {
-                border: isCore && portConflict ? '#ef4444' : 'var(--zen-border)',
-                headerBg: isCore && portConflict ? '#fef2f2' : 'var(--zen-surface-hover)', 
-                headerText: isCore && portConflict ? '#991b1b' : 'var(--zen-text)',
-                bodyBg: 'var(--zen-surface)',
-                dot: isCore && portConflict ? '#ef4444' : 'var(--zen-success)',
-                statusText: 'var(--zen-text-secondary)',
-                boxShadow: isCore && portConflict ? '0 0 16px rgba(239, 68, 68, 0.4), var(--tw-shadow-glass)' : 'var(--tw-shadow-glass)',
-                borderStyle: 'solid',
-                borderWidth: '2px'
-              };
+            {/* Top Row (3 nodes) */}
+            <div
+              data-testid="router-top-row"
+              style={{
+                display: 'flex',
+                width: '100%',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                zIndex: 10,
+                flex: 1
+              }}
+            >
+              {topNodes.map(renderNode)}
+            </div>
 
-              let Icon = Icons.cpu;
-              if (node.id.includes('openrouter') || node.id.includes('google')) Icon = Icons.cloud;
-              if (node.id === 'node-opencode') Icon = Icons.code;
-              if (node.id === 'node-hermes') Icon = Icons.workflow;
-              if (node.data.isAgent) Icon = Icons.agent;
+            {/* Middle Row (1 central router node) */}
+            <div
+              data-testid="router-middle-row"
+              style={{
+                display: 'flex',
+                width: '100%',
+                justifyContent: 'center',
+                alignItems: 'center',
+                zIndex: 10,
+                flex: 1
+              }}
+            >
+              {centralNode && renderNode(centralNode)}
+            </div>
 
-              if (node.id === 'node-ollama') {
-                const isOllamaGenerating = activeProxyState?.target === 'ollama' || terminalMode === 'run-ollama';
-                return (
-                  <div
-                    key={node.id}
-                    id={node.id}
-                    data-node-id={node.id}
-                    className="retro-node"
-                    style={{ 
-                      position: 'absolute', left: node.x, top: node.y, width: NODE_WIDTH, 
-                      zIndex: isSelected ? 5 : 1,
-                      backgroundColor: 'var(--zen-surface)',
-                      border: '2px solid var(--zen-border)',
-                      borderRadius: '8px',
-                      boxShadow: isSelected ? `0 0 0 4px #cbd5e1, var(--tw-shadow-glass)` : 'var(--tw-shadow-glass)',
-                      cursor: 'pointer',
-                      fontFamily: 'inherit',
-                      userSelect: 'none',
-                      overflow: 'hidden'
-                    }}
-                    onMouseDown={(e) => handleCanvasMouseDown(e)}
-                    onClick={(e) => handleNodeClick(e, node.id)}
-                  >
-                    <HardwareNode isGenerating={isOllamaGenerating} label={node.data.label} subheader={node.data.subheader} />
-                  </div>
-                );
-              }
-              
-
-
-              return (
-                <div 
-                  key={node.id}
-                  data-node-id={node.id}
-                  className="retro-node"
-                  style={{
-                    position: 'absolute',
-                    left: node.x,
-                    top: node.y,
-                    width: NODE_WIDTH,
-                    boxSizing: 'border-box',
-                    cursor: 'pointer',
-                    backgroundColor: stateColors.bodyBg,
-                    border: `${stateColors.borderWidth} ${stateColors.borderStyle} ${stateColors.border}`,
-                    borderRadius: '8px',
-                    overflow: 'hidden',
-                    boxShadow: isSelected ? `0 0 0 4px #cbd5e1, ${stateColors.boxShadow}` : stateColors.boxShadow,
-                    zIndex: isSelected ? 5 : 1,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    userSelect: 'none'
-                  }}
-                  onMouseDown={(e) => handleCanvasMouseDown(e)}
-                  onClick={(e) => handleNodeClick(e, node.id)}
-                >
-                  {/* Header */}
-                  <div style={{ 
-                    backgroundColor: stateColors.headerBg, 
-                    color: stateColors.headerText,
-                    padding: '8px 12px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    borderBottom: `2px ${stateColors.borderStyle} ${stateColors.border}`
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      {Icon}
-                      <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
-                        <span style={{ fontWeight: 700, fontSize: '0.8rem', color: stateColors.headerText, letterSpacing: '0.5px' }}>
-                          {node.data.label}
-                        </span>
-                        {node.data.subheader && (
-                          <span style={{ fontWeight: 500, fontSize: '0.62rem', color: 'var(--zen-text-secondary)', opacity: 0.9 }}>
-                            {node.data.subheader}
-                          </span>
-                        )}
-                      </div>
-                      {isCore && portConflict && (
-                        <span
-                          data-testid="frugallm-port-conflict-badge"
-                          style={{
-                            fontSize: '0.6rem',
-                            fontWeight: 800,
-                            backgroundColor: '#ef4444',
-                            color: '#ffffff',
-                            padding: '2px 5px',
-                            borderRadius: '4px',
-                            letterSpacing: '0.05em'
-                          }}
-                        >
-                          PORT CONFLICT
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <div 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleNodeClick(e, node.id);
-                        }}
-                        style={{
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: stateColors.dot,
-                          transition: 'opacity 0.2s',
-                          opacity: 0.8
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-                        onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
-                      >
-                        {Icons.settings}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Body */}
-                  <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: stateColors.bodyBg, color: 'var(--zen-text)' }}>
-                    {isCore ? (
-                      <>
-                        {portConflict && (
-                          <div
-                            data-testid="frugallm-node-conflict-warning"
-                            style={{
-                              backgroundColor: '#fee2e2',
-                              border: '1px solid #fca5a5',
-                              color: '#991b1b',
-                              borderRadius: '4px',
-                              padding: '4px 6px',
-                              fontSize: '0.68rem',
-                              fontWeight: 700,
-                              textAlign: 'center'
-                            }}
-                          >
-                            Port {portConflict.port} Conflict
-                          </div>
-                        )}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>Session tokens:</span>
-                          <span data-testid="frugallm-session-tokens" style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)' }}>
-                            {((frugalConfig?.input_tokens_session || 0) + (frugalConfig?.output_tokens_session || 0)).toLocaleString()}
-                          </span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>Total tokens:</span>
-                          <span data-testid="frugallm-total-tokens" style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)' }}>
-                            {((frugalConfig?.input_tokens_lifetime || 0) + (frugalConfig?.output_tokens_lifetime || 0)).toLocaleString()}
-                          </span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>$ Saved:</span>
-                          <span data-testid="frugallm-money-saved" style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-success)' }}>
-                            ${((((frugalConfig?.input_tokens_lifetime || 0) * 3.0) + ((frugalConfig?.output_tokens_lifetime || 0) * 15.0)) / 1_000_000).toFixed(2)}
-                          </span>
-                        </div>
-                      </>
-                    ) : (node.id === 'node-openrouter' || node.id === 'node-google') ? (
-                      <>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>API Key</span>
-                          {node.data.status === 'active' ? (
-                            <span data-testid={`${node.id}-api-key`} style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)', fontFamily: 'monospace', letterSpacing: '0.5px' }}>
-                              {node.data.keyPrefix ? `${node.data.keyPrefix}...` : (node.id === 'node-google' ? 'AIzaS...' : 'sk-or...')}
-                            </span>
-                          ) : (
-                            <a
-                              href={node.id === 'node-openrouter' ? 'https://openrouter.ai' : 'https://aistudio.google.com'}
-                              target="_blank"
-                              rel="noreferrer"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openUrl(node.id === 'node-openrouter' ? 'https://openrouter.ai' : 'https://aistudio.google.com').catch(() => {});
-                              }}
-                              style={{
-                                fontSize: '0.72rem',
-                                fontWeight: 600,
-                                color: 'var(--zen-accent)',
-                                textDecoration: 'underline',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              Get key
-                            </a>
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>Status</span>
-                          <span data-testid={`${node.id}-status`} style={{ fontSize: '0.75rem', fontWeight: 600, color: node.data.status === 'active' ? 'var(--zen-success)' : 'var(--zen-text-secondary)' }}>
-                            {node.data.status === 'active' ? (node.data.lastStatus || '200 OK') : 'N/A'}
-                          </span>
-                        </div>
-                      </>
-                    ) : (node.id === 'node-hermes' || node.id === 'node-opencode') ? (
-                      (() => {
-                        const isHermes = node.id === 'node-hermes';
-                        const isInstalled = isHermes ? isHermesInstalled : isOpenCodeInstalled;
-                        const isRunning = isHermes 
-                          ? !!(activeProcesses['run-hermes'] || activeProcesses['run-hermes-gateway'] || activeProcesses['run-hermes-desktop'] || activeProcesses['run-hermes-web'] || activeProcesses['hermes-gateway'] || activeProcesses['hermes-dashboard'] || node.data.status === 'active')
-                          : !!(activeProcesses['run-opencode'] || activeProcesses['run-opencode-web'] || node.data.status === 'active');
-                        
-                        const statusText = !isInstalled ? 'N/A' : (isRunning ? 'Active' : 'Standby');
-                        const statusColor = !isInstalled ? 'var(--zen-text-secondary)' : (isRunning ? 'var(--zen-success)' : '#eab308');
-                        const versionText = !isInstalled ? 'N/A' : (isHermes ? hermesVersion : opencodeVersion);
-
-                        return (
-                          <>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>Status:</span>
-                              <span data-testid={`${node.id}-status`} style={{ fontSize: '0.75rem', fontWeight: 600, color: statusColor }}>
-                                {statusText}
-                              </span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>Version:</span>
-                              <span data-testid={`${node.id}-version`} style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--zen-text)' }}>
-                                {versionText}
-                              </span>
-                            </div>
-                          </>
-                        );
-                      })()
-                    ) : (
-                      <>
-                        <StatusLight status={node.data.status as any} text={node.data.status === 'active' ? 'Connected' : node.data.status === 'ready' ? (node.id === 'node-ollama' && isOllamaInstalled ? 'Stopped' : 'Ready') : (node.data.status.replace('_', ' ').toUpperCase())} />
-                        <InfoField label={'ENDPOINT'} value={node.data.port ? `${node.data.ip}:${node.data.port}` : `${node.data.ip}`} />
-                      </>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+            {/* Bottom Row (2 nodes) */}
+            <div
+              data-testid="router-bottom-row"
+              style={{
+                display: 'flex',
+                width: '100%',
+                justifyContent: 'space-around',
+                alignItems: 'flex-end',
+                paddingLeft: '11%',
+                paddingRight: '11%',
+                boxSizing: 'border-box',
+                zIndex: 10,
+                flex: 1
+              }}
+            >
+              {bottomNodes.map(renderNode)}
+            </div>
           </div>
         </div>
 
       </div>
+
+      {/* Footer */}
+      <footer 
+        data-testid="app-footer" 
+        style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between', 
+          padding: '10px 20px', 
+          backgroundColor: 'var(--zen-footer-bg)', 
+          borderTop: '1px solid var(--zen-footer-border)',
+          flexShrink: 0,
+          zIndex: 10,
+          fontSize: '0.75rem',
+          color: 'var(--zen-text-secondary)'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
+          <a 
+            href="#docs" 
+            data-testid="footer-link-docs"
+            onClick={(e) => { e.preventDefault(); }} 
+            style={{ color: 'var(--zen-text-secondary)', textDecoration: 'none', fontWeight: 500, transition: 'color 0.15s' }}
+            onMouseEnter={(e) => e.currentTarget.style.color = 'var(--zen-text)'}
+            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--zen-text-secondary)'}
+          >
+            {en.footer?.documentation || 'Documentation'}
+          </a>
+          <a 
+            href="https://github.com" 
+            target="_blank" 
+            rel="noreferrer"
+            data-testid="footer-link-github"
+            onClick={(e) => { e.preventDefault(); openUrl('https://github.com').catch(() => {}); }} 
+            style={{ color: 'var(--zen-text-secondary)', textDecoration: 'none', fontWeight: 500, transition: 'color 0.15s' }}
+            onMouseEnter={(e) => e.currentTarget.style.color = 'var(--zen-text)'}
+            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--zen-text-secondary)'}
+          >
+            {en.footer?.github || 'GitHub'}
+          </a>
+          <a 
+            href="#guides" 
+            data-testid="footer-link-guides"
+            onClick={(e) => { e.preventDefault(); setGuidesOpen(true); }} 
+            style={{ color: 'var(--zen-text-secondary)', textDecoration: 'none', fontWeight: 500, transition: 'color 0.15s' }}
+            onMouseEnter={(e) => e.currentTarget.style.color = 'var(--zen-text)'}
+            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--zen-text-secondary)'}
+          >
+            {en.footer?.guides || 'Quickstart Guides'}
+          </a>
+          <a 
+            href="#privacy" 
+            data-testid="footer-link-privacy"
+            onClick={(e) => { e.preventDefault(); }} 
+            style={{ color: 'var(--zen-text-secondary)', textDecoration: 'none', fontWeight: 500, transition: 'color 0.15s' }}
+            onMouseEnter={(e) => e.currentTarget.style.color = 'var(--zen-text)'}
+            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--zen-text-secondary)'}
+          >
+            {en.footer?.privacy || 'Privacy & Telemetry'}
+          </a>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981' }} />
+          <span style={{ fontWeight: 500, color: 'var(--zen-text-secondary)' }}>{en.footer?.status || 'System Ready'}</span>
+        </div>
+      </footer>
       {/* Settings Modal */}
       {selectedNode && !terminalMode && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setSelectedNodeId(null)}>
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.3)', backdropFilter: 'blur(8px)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setSelectedNodeId(null)}>
           <NodeConfigPanel node={selectedNode} onClose={() => setSelectedNodeId(null)} onSave={handleSaveNodeConfig} onOpenGuide={setActiveGuide} isHermesInstalled={isHermesInstalled} isOpenCodeInstalled={isOpenCodeInstalled} isOllamaInstalled={isOllamaInstalled} isToolGatewayInstalled={isToolGatewayInstalled} detectedVram={detectedVram} setDetectedVram={setDetectedVram} hasActiveBackend={hasActiveBackend} handleInitializeHermes={handleInitializeHermes} handleOpenHermes={handleOpenHermes} handleUninstallHermes={handleUninstallHermes} handleInitializeOpenCode={handleInitializeOpenCode} handleOpenOpenCode={handleOpenOpenCode} handleUninstallOpenCode={handleUninstallOpenCode} handleInitializeOllama={handleInitializeOllama} handleOpenOllama={handleOpenOllama} handleUninstallOllama={handleUninstallOllama} handleInstallToolGateway={handleInstallToolGateway} handleUninstallToolGateway={handleUninstallToolGateway} handleDisconnectOpenRouter={handleDisconnectOpenRouter} handleDisconnectGoogle={handleDisconnectGoogle} frugalConfig={frugalConfig} setFrugalConfig={setFrugalConfig} handleOpenHermesGateway={handleOpenHermesGateway} handleOpenHermesDesktop={handleOpenHermesDesktop} handleOpenHermesWeb={handleOpenHermesWeb} handleOpenOpenCodeWeb={handleOpenOpenCodeWeb} activeProcesses={activeProcesses} handleKillProcess={handleKillProcess} latestTelemetry={latestTelemetry} hardwareProfile={hardwareProfile} portConflict={portConflict} />
         </div>
       )}
 
       {/* Guides Modal */}
       {guidesOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setGuidesOpen(false)}>
-          <div onClick={e => e.stopPropagation()} style={{ width: '500px', backgroundColor: '#ffffff', border: '4px solid #111827', boxShadow: '0 24px 48px rgba(0, 0, 0, 0.1)', overflow: 'hidden', padding: '30px', display: 'flex', flexDirection: 'column', fontFamily: 'inherit' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #111827', paddingBottom: '10px' }}>
-              <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, letterSpacing: '1px' }}>FRUGALLM // QUICKSTART GUIDES</h2>
-              <button onClick={() => setGuidesOpen(false)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: 'var(--zen-text)', fontWeight: 'bold' }}>✕</button>
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.3)', backdropFilter: 'blur(8px)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setGuidesOpen(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ width: '520px', backgroundColor: 'var(--zen-surface)', border: 'none', borderRadius: '20px', boxShadow: 'var(--zen-shadow-modal)', overflow: 'hidden', padding: '28px', display: 'flex', flexDirection: 'column', fontFamily: 'inherit' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: 'none', paddingBottom: '12px' }}>
+              <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, letterSpacing: '-0.01em', color: 'var(--zen-text)' }}>FRUGALLM // QUICKSTART GUIDES</h2>
+              <button onClick={() => setGuidesOpen(false)} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: 'var(--zen-text-secondary)', fontWeight: 'bold' }}>✕</button>
             </div>
             
-            <p style={{ fontSize: '0.9rem', color: '#4b5563', marginBottom: '24px', fontFamily: 'sans-serif', lineHeight: 1.5 }}>
+            <p style={{ fontSize: '0.85rem', color: 'var(--zen-text-secondary)', marginBottom: '20px', lineHeight: 1.5 }}>
               Welcome to the FrugalLLM Central Hub. Select a guide below to learn how to configure your neural topology and orchestrate your AI agents:
             </p>
             
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ padding: '16px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: 'none', transition: 'transform 0.1s' }} onMouseDown={e => { e.currentTarget.style.transform = 'translate(2px, 2px)'; e.currentTarget.style.boxShadow = 'none'; }} onMouseUp={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '2px 2px 0px #111827'; }}>
-                <div style={{ width: '32px', height: '32px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 'bold', fontSize: '1.2rem', borderRadius: '4px' }}>1</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ padding: '14px 16px', border: 'none', borderRadius: '14px', backgroundColor: 'var(--zen-surface-hover)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '14px', transition: 'background-color 0.15s ease' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--zen-surface-secondary)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'var(--zen-surface-hover)'}>
+                <div style={{ width: '28px', height: '28px', backgroundColor: '#171717', color: '#FFFFFF', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 'bold', fontSize: '0.85rem', borderRadius: '9999px' }}>1</div>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--zen-text)', marginBottom: '4px' }}>Defining JSON Schemas</div>
-                  <div style={{ fontSize: '0.75rem', color: '#6b7280', fontFamily: 'sans-serif' }}>Learn how to force agents to return strict data formats.</div>
+                  <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--zen-text)', marginBottom: '2px' }}>Defining JSON Schemas</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--zen-text-secondary)' }}>Learn how to force agents to return strict data formats.</div>
                 </div>
               </div>
               
-              <div style={{ padding: '16px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: 'none', transition: 'transform 0.1s' }} onMouseDown={e => { e.currentTarget.style.transform = 'translate(2px, 2px)'; e.currentTarget.style.boxShadow = 'none'; }} onMouseUp={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '2px 2px 0px #111827'; }}>
-                <div style={{ width: '32px', height: '32px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 'bold', fontSize: '1.2rem', borderRadius: '4px' }}>2</div>
+              <div style={{ padding: '14px 16px', border: 'none', borderRadius: '14px', backgroundColor: 'var(--zen-surface-hover)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '14px', transition: 'background-color 0.15s ease' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--zen-surface-secondary)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'var(--zen-surface-hover)'}>
+                <div style={{ width: '28px', height: '28px', backgroundColor: '#171717', color: '#FFFFFF', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 'bold', fontSize: '0.85rem', borderRadius: '9999px' }}>2</div>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--zen-text)', marginBottom: '4px' }}>Connecting Local Ollama</div>
-                  <div style={{ fontSize: '0.75rem', color: '#6b7280', fontFamily: 'sans-serif' }}>How to run completely private models locally on port 11434.</div>
+                  <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--zen-text)', marginBottom: '2px' }}>Connecting Local Ollama</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--zen-text-secondary)' }}>How to run completely private models locally on port 11434.</div>
                 </div>
               </div>
               
-              <div style={{ padding: '16px', border: '1px solid var(--zen-border)', borderRadius: '8px', backgroundColor: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: 'none', transition: 'transform 0.1s' }} onMouseDown={e => { e.currentTarget.style.transform = 'translate(2px, 2px)'; e.currentTarget.style.boxShadow = 'none'; }} onMouseUp={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '2px 2px 0px #111827'; }}>
-                <div style={{ width: '32px', height: '32px', backgroundColor: 'var(--zen-accent)', color: '#FFFFFF', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 'bold', fontSize: '1.2rem', borderRadius: '4px' }}>3</div>
+              <div style={{ padding: '14px 16px', border: 'none', borderRadius: '14px', backgroundColor: 'var(--zen-surface-hover)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '14px', transition: 'background-color 0.15s ease' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--zen-surface-secondary)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'var(--zen-surface-hover)'}>
+                <div style={{ width: '28px', height: '28px', backgroundColor: '#171717', color: '#FFFFFF', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 'bold', fontSize: '0.85rem', borderRadius: '9999px' }}>3</div>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--zen-text)', marginBottom: '4px' }}>Advanced OpenRouter Multiplexing</div>
-                  <div style={{ fontSize: '0.75rem', color: '#6b7280', fontFamily: 'sans-serif' }}>Route queries dynamically to save costs and avoid rate limits.</div>
+                  <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--zen-text)', marginBottom: '2px' }}>Advanced OpenRouter Multiplexing</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--zen-text-secondary)' }}>Route queries dynamically to save costs and avoid rate limits.</div>
                 </div>
               </div>
             </div>
@@ -2708,13 +3203,13 @@ function AppContent() {
       {/* Markdown Guide Modal */}
       {activeGuide && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 2000, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setActiveGuide(null)}>
-          <div onClick={e => e.stopPropagation()} style={{ width: '700px', maxHeight: '80vh', backgroundColor: '#ffffff', border: '4px solid #111827', boxShadow: '0 24px 48px rgba(0, 0, 0, 0.1)', overflow: 'hidden', display: 'flex', flexDirection: 'column', fontFamily: 'sans-serif' }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: '700px', maxHeight: '80vh', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '20px', boxShadow: 'var(--zen-shadow-modal)', overflow: 'hidden', display: 'flex', flexDirection: 'column', fontFamily: 'inherit' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', borderBottom: '1px solid var(--zen-border)' }}>
               <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700,  fontFamily: 'inherit' }}>FRUGALLM // GUIDE</h2>
-              <button onClick={() => setActiveGuide(null)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#9ca3af', fontWeight: 'bold' }}>✕</button>
+              <button onClick={() => setActiveGuide(null)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: 'var(--zen-text-secondary)', fontWeight: 'bold' }}>✕</button>
             </div>
             
-            <div style={{ padding: '30px', overflowY: 'auto', lineHeight: 1.6, color: '#374151' }}>
+            <div style={{ padding: '30px', overflowY: 'auto', lineHeight: 1.6, color: 'var(--zen-text)' }}>
               <ReactMarkdown 
                 components={{
                   a: ({node, ...props}) => (

@@ -41,7 +41,7 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete
       if (heading) {
         let parent = heading.parentElement;
         while (parent) {
-          if (parent.style.position === 'absolute' || parent.classList.contains('react-flow__node')) {
+          if (parent.classList.contains('retro-node') || parent.hasAttribute('data-node-id') || parent.style.position === 'absolute' || parent.classList.contains('react-flow__node')) {
             foundElement = parent;
             break;
           }
@@ -240,7 +240,7 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete
 
           {/* Highlight Ring around the crisp, unblurred cutout */}
           <div
-            className="fixed z-[9998] pointer-events-none rounded-2xl ring-2 ring-zen-border shadow-[0_0_30px_rgba(0,0,0,0.25)]"
+            className="fixed z-[9998] pointer-events-none rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.25)]"
             style={{
               top: `${cutoutTop}px`,
               left: `${cutoutLeft}px`,
@@ -263,7 +263,7 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete
             maxWidth: `calc(100vw - ${EDGE_PADDING * 2}px)`,
             zIndex: 9999,
           }}
-          className="pointer-events-auto bg-zen-surface rounded-2xl p-6 shadow-glass transform transition-all duration-150 border border-zen-border"
+          className="pointer-events-auto bg-zen-surface rounded-2xl p-6 shadow-glass transform transition-all duration-150 border-none"
         >
           {/* Arrow pointing UP when tooltip is below target */}
           {placement === 'bottom' && (
@@ -328,7 +328,7 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({ onComplete
           <div className="flex justify-end">
             <button
               onClick={onComplete}
-              className="px-5 py-2.5 bg-zen-surface-hover border border-zen-border hover:border-zen-text text-zen-text text-sm font-medium rounded-xl transition-all hover:shadow-sm active:scale-[0.98]"
+              className="px-6 py-2.5 bg-zen-text text-white hover:bg-neutral-800 text-sm font-medium rounded-full transition-all hover:shadow-sm active:scale-[0.98]"
             >
               {en.onboarding?.finishTour ?? 'Finish Tour'}
             </button>

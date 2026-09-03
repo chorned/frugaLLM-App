@@ -5,27 +5,13 @@ import { listen } from '@tauri-apps/api/event';
 import en from '../locales/en.json';
 import { MemoryPipelineWidget } from './MemoryPipelineWidget';
 import { useMemory } from '../context/MemoryContext';
+import { OllamaIcon } from './icons/ProviderIcons';
 
 const InfoIconSVG = (props: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="-50 -50 590 590" fill="currentColor" {...props}>
     <path d="M245.148,0C109.967,0,0.009,109.98,0.009,245.162c0,135.182,109.958,245.156,245.139,245.156 c135.186,0,245.162-109.978,245.162-245.156C490.31,109.98,380.333,0,245.148,0z M245.148,438.415 c-106.555,0-193.234-86.698-193.234-193.253c0-106.555,86.68-193.258,193.234-193.258c106.559,0,193.258,86.703,193.258,193.258 C438.406,351.717,351.706,438.415,245.148,438.415z"/>
     <path d="M270.036,221.352h-49.771c-8.351,0-15.131,6.78-15.131,15.118v147.566c0,8.352,6.78,15.119,15.131,15.119h49.771 c8.351,0,15.131-6.77,15.131-15.119V236.471C285.167,228.133,278.387,221.352,270.036,221.352z"/>
     <path d="M245.148,91.168c-24.48,0-44.336,19.855-44.336,44.336c0,24.484,19.855,44.34,44.336,44.34 c24.485,0,44.342-19.855,44.342-44.34C289.489,111.023,269.634,91.168,245.148,91.168z"/>
-  </svg>
-);
-
-const CpuIconSVG = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-    <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
-    <rect x="9" y="9" width="6" height="6"></rect>
-    <line x1="9" y1="1" x2="9" y2="4"></line>
-    <line x1="15" y1="1" x2="15" y2="4"></line>
-    <line x1="9" y1="20" x2="9" y2="23"></line>
-    <line x1="15" y1="20" x2="15" y2="23"></line>
-    <line x1="20" y1="9" x2="23" y2="9"></line>
-    <line x1="20" y1="14" x2="23" y2="14"></line>
-    <line x1="1" y1="9" x2="4" y2="9"></line>
-    <line x1="1" y1="14" x2="4" y2="14"></line>
   </svg>
 );
 
@@ -62,7 +48,7 @@ export const StatusLight = ({ status, text }: { status: NodeStatus; text?: strin
       label = text || 'READY';
       break;
     case 'active':
-      color = 'var(--zen-success)'; // Green
+      color = '#10B981'; // Emerald Green
       label = text || 'ACTIVE';
       animate = true;
       break;
@@ -75,7 +61,7 @@ export const StatusLight = ({ status, text }: { status: NodeStatus; text?: strin
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-      <div style={{ position: 'relative', display: 'flex', width: '10px', height: '10px' }}>
+      <div style={{ position: 'relative', display: 'flex', width: '8px', height: '8px' }}>
         {animate && (
           <span
             className="animate-ping"
@@ -94,8 +80,8 @@ export const StatusLight = ({ status, text }: { status: NodeStatus; text?: strin
           style={{
             position: 'relative',
             display: 'inline-flex',
-            width: '10px',
-            height: '10px',
+            width: '8px',
+            height: '8px',
             borderRadius: '50%',
             backgroundColor: color,
           }}
@@ -103,7 +89,7 @@ export const StatusLight = ({ status, text }: { status: NodeStatus; text?: strin
       </div>
       <span
         style={{
-          fontSize: '0.75rem',
+          fontSize: '0.72rem',
           fontWeight: 500,
           color: color,
         }}
@@ -139,22 +125,26 @@ export const CopyableField = ({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', width: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', width: '100%' }}>
       <span
         style={{
-          fontSize: '0.6rem',
-          fontWeight: 800,
-          color: '#6b7280',
-          }}
+          fontSize: '0.65rem',
+          fontWeight: 600,
+          color: 'var(--zen-text-secondary)',
+          letterSpacing: '0.02em',
+        }}
       >
         {label}
       </span>
       <div
         style={{
           display: 'flex',
-          backgroundColor: 'var(--zen-surface)',
-          border: '1px solid var(--zen-border)', borderRadius: '8px',
+          backgroundColor: 'var(--zen-surface-hover)',
+          border: '1px solid var(--zen-border-input)', 
+          borderRadius: '12px',
           overflow: 'hidden',
+          padding: '2px 4px 2px 8px',
+          alignItems: 'center'
         }}
       >
         <input
@@ -164,9 +154,9 @@ export const CopyableField = ({
           style={{
             backgroundColor: 'transparent',
             color: 'var(--zen-text)',
-            padding: '6px 10px',
-            fontSize: '0.75rem',
-            fontWeight: 400,
+            padding: '6px 4px',
+            fontSize: '0.78rem',
+            fontWeight: 450,
             fontFamily: 'inherit',
             outline: 'none',
             border: 'none',
@@ -180,28 +170,26 @@ export const CopyableField = ({
             handleCopy();
           }}
           style={{
-            backgroundColor: copied ? 'var(--zen-success)' : 'var(--zen-surface-hover)',
-            color: copied ? 'white' : 'var(--zen-text-secondary)',
-            padding: '6px 12px',
-            fontSize: '0.6rem',
-            fontWeight: 500,
+            backgroundColor: copied ? '#10B981' : 'var(--zen-surface)',
+            color: copied ? '#FFFFFF' : 'var(--zen-text)',
+            padding: '4px 10px',
+            fontSize: '0.65rem',
+            fontWeight: 600,
             fontFamily: 'inherit',
             border: 'none',
-            borderLeft: '1px solid var(--zen-border)',
+            borderRadius: '9999px',
             cursor: 'pointer',
-            transition: 'all 0.15s',
+            transition: 'all 0.15s ease',
             whiteSpace: 'nowrap',
           }}
           onMouseEnter={(e) => {
             if (!copied) {
-              e.currentTarget.style.backgroundColor = 'var(--zen-border)';
-              e.currentTarget.style.color = 'var(--zen-text)';
+              e.currentTarget.style.backgroundColor = 'var(--zen-surface-secondary)';
             }
           }}
           onMouseLeave={(e) => {
             if (!copied) {
-              e.currentTarget.style.backgroundColor = 'var(--zen-surface-hover)';
-              e.currentTarget.style.color = 'var(--zen-text-secondary)';
+              e.currentTarget.style.backgroundColor = 'var(--zen-surface)';
             }
           }}
         >
@@ -223,30 +211,32 @@ export const InfoField = ({
   value: string;
 }) => {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', width: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', width: '100%' }}>
       <span
         style={{
-          fontSize: '0.6rem',
-          fontWeight: 800,
-          color: '#6b7280',
-          }}
+          fontSize: '0.65rem',
+          fontWeight: 600,
+          color: 'var(--zen-text-secondary)',
+          letterSpacing: '0.02em',
+        }}
       >
         {label}
       </span>
       <div
         style={{
           display: 'flex',
-          backgroundColor: 'var(--zen-surface)',
-          border: '1px solid var(--zen-border)', borderRadius: '8px',
+          backgroundColor: 'var(--zen-surface-hover)',
+          border: '1px solid var(--zen-border-input)', 
+          borderRadius: '12px',
           overflow: 'hidden',
-          padding: '6px 10px',
+          padding: '8px 12px',
         }}
       >
         <span
           style={{
             color: 'var(--zen-text)',
-            fontSize: '0.75rem',
-            fontWeight: 400,
+            fontSize: '0.78rem',
+            fontWeight: 450,
             fontFamily: 'inherit',
             whiteSpace: 'nowrap',
             overflow: 'hidden',
@@ -332,11 +322,15 @@ export const SettingsToggle = ({
 export const HardwareNode = ({ 
   isGenerating = false,
   label = en.routingGraph.nodes.ollamaLocal.label || 'Ollama',
-  subheader = (en.routingGraph.nodes.ollamaLocal as any).subheader || 'Open source'
+  subheader = (en.routingGraph.nodes.ollamaLocal as any).subheader || 'Open source',
+  icon,
+  isSelected = false
 }: { 
   isGenerating?: boolean;
   label?: string;
   subheader?: string;
+  icon?: React.ReactNode;
+  isSelected?: boolean;
 }) => {
   const memory = useMemory();
   const memoryRef = useRef(memory);
@@ -474,43 +468,43 @@ export const HardwareNode = ({
 
   return (
     <>
-      <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', boxSizing: 'border-box' }}>
         {/* Header */}
         <div 
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--zen-border)', padding: '8px 12px', backgroundColor: 'var(--zen-surface-hover)' }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: 'none', padding: '10px 14px', backgroundColor: isSelected ? 'var(--zen-surface-header-active)' : 'var(--zen-surface-header)' }}
         >
           <div id="local-hardware-heading" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <CpuIconSVG />
+            {icon ?? <OllamaIcon size={18} />}
             <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
-              <span style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--zen-text)', letterSpacing: '0.5px' }}>
+              <span style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--zen-text)', letterSpacing: '0.02em' }}>
                 {label}
               </span>
               {subheader && (
-                <span style={{ fontWeight: 500, fontSize: '0.62rem', color: 'var(--zen-text-secondary)', opacity: 0.9 }}>
+                <span style={{ fontWeight: 450, fontSize: '0.65rem', color: 'var(--zen-text-secondary)' }}>
                   {subheader}
                 </span>
               )}
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {isStatusActive && (
               <StatusLight status="active" text={headerStatusText} />
             )}
             <div 
               data-testid="hardware-info-btn"
+              onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
-                setShowPanel(true);
+                setShowPanel(prev => !prev);
               }}
               title="View Hardware Telemetry"
               style={{
                 cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: 'var(--zen-accent)', transition: 'all 0.2s', opacity: 0.85,
-                padding: '4px', borderRadius: '4px'
+                color: 'var(--zen-text)',
+                padding: '4px', borderRadius: '9999px',
+                opacity: 0.8
               }}
-              onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-              onMouseLeave={(e) => e.currentTarget.style.opacity = '0.85'}
             >
               <InfoIconSVG width="14" height="14" style={{ display: 'block' }} />
             </div>
@@ -518,22 +512,22 @@ export const HardwareNode = ({
         </div>
 
         {/* Body */}
-        <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: 'var(--zen-surface)', color: 'var(--zen-text)' }}>
+        <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: '8px', backgroundColor: 'var(--zen-surface)', color: 'var(--zen-text)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>Active Model</span>
+            <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>Active Model</span>
             {(() => {
               const rawName = isLoaded ? (telemetry?.ollama?.model_name || memory.activeModelName) : 'None';
               const displayName = rawName.replace(/^library\//, '').replace(/frugallm-active.*/, 'gemma4').replace(/:latest$/, '');
               return (
-                <span data-testid="active-model-name" style={{ fontSize: '0.75rem', fontWeight: 700, color: isLoaded ? 'var(--zen-text)' : 'var(--zen-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }} title={isLoaded ? displayName : 'None'}>
+                <span data-testid="active-model-name" style={{ fontSize: '0.78rem', fontWeight: 600, color: isLoaded ? 'var(--zen-text)' : 'var(--zen-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }} title={isLoaded ? displayName : 'None'}>
                   {isLoaded ? displayName : 'None'}
                 </span>
               );
             })()}
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>Allocation</span>
-            <span data-testid="hardware-node-allocation" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>
+            <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>Allocation</span>
+            <span data-testid="hardware-node-allocation" style={{ fontSize: '0.78rem', fontWeight: 500, color: 'var(--zen-text-secondary)' }}>
               {memUsed} / {memTotal} GB
             </span>
           </div>
@@ -542,69 +536,33 @@ export const HardwareNode = ({
 
       {showPanel && createPortal(
         <div 
-          style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(249,249,248,0.5)', backdropFilter: 'blur(16px)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'default' }} 
+          style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.3)', backdropFilter: 'blur(8px)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'default' }} 
+          onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => { e.stopPropagation(); setShowPanel(false); }}
         >
           <div 
             data-testid="hardware-telemetry-panel"
-            style={{ width: '420px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '16px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)', maxHeight: '90vh', overflowY: 'auto' }} 
+            style={{ width: '440px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '20px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: 'var(--zen-shadow-modal)', maxHeight: '90vh', overflowY: 'auto' }} 
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--zen-border)', paddingBottom: '8px' }}>
-              <span style={{ fontWeight: 800, color: 'var(--zen-text)', fontSize: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: 'none', paddingBottom: '12px' }}>
+              <span style={{ fontWeight: 700, color: 'var(--zen-text)', fontSize: '1rem', letterSpacing: '-0.01em' }}>
                 {en.routingGraph.hardwareTelemetryWidget.title}
               </span>
-              <span onClick={() => setShowPanel(false)} style={{ color: '#9ca3af', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem', padding: '2px 6px' }}>✕</span>
-            </div>
-
-            {/* Memory Pipeline Stacked Bar Visualization */}
-            <MemoryPipelineWidget segments={telemetry?.segments} hardwareProfile={effectiveProfile} />
-            
-            {/* Utilization Bar (Load) */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>
-                <span data-testid="telemetry-load-label">{isCpuMode ? en.routingGraph.hardwareTelemetryWidget.cpuLoad : en.routingGraph.hardwareTelemetryWidget.gpuLoad}</span>
-                <span data-testid="telemetry-load-value">{loadPercent.toFixed(1)}%</span>
-              </div>
-              <div style={{ width: '100%', height: '10px', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '5px', overflow: 'hidden' }}>
-                <div 
-                  style={{ 
-                    height: '100%', 
-                    backgroundColor: 'var(--zen-accent)', 
-                    transition: 'width 0.3s ease-out', 
-                    width: `${Math.min(100, Math.max(0, loadPercent))}%` 
-                  }} 
-                />
-              </div>
-            </div>
-
-            {/* Utilization Bar (Memory) */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>
-                <span data-testid="telemetry-memory-label">{isCpuMode ? en.routingGraph.hardwareTelemetryWidget.ramAllocation : en.routingGraph.hardwareTelemetryWidget.vramAllocation}</span>
-                <span data-testid="telemetry-memory-value">{memUsed} / {memTotal} GB</span>
-              </div>
-              <div style={{ width: '100%', height: '10px', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '5px', overflow: 'hidden' }}>
-                <div 
-                  style={{ 
-                    height: '100%', 
-                    backgroundColor: 'var(--zen-accent)', 
-                    transition: 'width 0.3s ease-out', 
-                    width: `${memPercent}%` 
-                  }} 
-                />
-              </div>
+              <button onClick={() => setShowPanel(false)} style={{ background: 'none', border: 'none', color: 'var(--zen-text-secondary)', cursor: 'pointer', fontWeight: 'bold', fontSize: '1.1rem', padding: '4px 8px', borderRadius: '9999px' }}>✕</button>
             </div>
 
             {/* Average Throughput Metric Card */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--zen-surface-hover)', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--zen-border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--zen-surface-secondary)', padding: '12px 16px', borderRadius: '14px', border: 'none' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--zen-text)' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--zen-text)' }}>
                     {en.routingGraph.hardwareTelemetryWidget.avgThroughput}
                   </span>
                   <div
                     data-testid="benchmark-info-btn"
+                    onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => {
                       e.stopPropagation();
                       setShowBenchmarks(prev => !prev);
@@ -615,9 +573,9 @@ export const HardwareNode = ({
                       display: 'inline-flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: showBenchmarks ? 'var(--zen-accent)' : 'var(--zen-text-secondary)',
+                      color: showBenchmarks ? 'var(--zen-text)' : 'var(--zen-text-secondary)',
                       opacity: showBenchmarks ? 1 : 0.75,
-                      transition: 'all 0.2s',
+                      transition: 'all 0.15s ease',
                       padding: '2px',
                       borderRadius: '4px'
                     }}
@@ -630,8 +588,8 @@ export const HardwareNode = ({
                   {liveThroughput > 0 && (
                     <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10b981' }} />
                   )}
-                  <span data-testid="live-throughput-stat" style={{ fontSize: '0.9rem', fontWeight: 800, color: (liveThroughput > 0 || avgThroughput > 0) ? 'var(--zen-text)' : 'var(--zen-text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
-                    {(liveThroughput > 0 ? liveThroughput : avgThroughput).toFixed(1)} <span style={{ fontSize: '0.65rem', color: '#9ca3af', fontWeight: 600 }}>t/s</span>
+                  <span data-testid="live-throughput-stat" style={{ fontSize: '0.95rem', fontWeight: 700, color: (liveThroughput > 0 || avgThroughput > 0) ? 'var(--zen-text)' : 'var(--zen-text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
+                    {(liveThroughput > 0 ? liveThroughput : avgThroughput).toFixed(1)} <span style={{ fontSize: '0.7rem', color: 'var(--zen-text-secondary)', fontWeight: 500 }}>t/s</span>
                   </span>
                 </div>
               </div>
@@ -642,10 +600,10 @@ export const HardwareNode = ({
               <div 
                 data-testid="benchmark-panel"
                 style={{
-                  backgroundColor: 'var(--zen-surface-hover)',
-                  border: '1px solid var(--zen-border)',
-                  borderRadius: '10px',
-                  padding: '12px',
+                  backgroundColor: 'var(--zen-surface-secondary)',
+                  border: 'none',
+                  borderRadius: '14px',
+                  padding: '14px',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '8px',
@@ -653,63 +611,104 @@ export const HardwareNode = ({
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontWeight: 800, color: 'var(--zen-text)', fontSize: '0.75rem' }}>
+                  <span style={{ fontWeight: 700, color: 'var(--zen-text)', fontSize: '0.78rem' }}>
                     {en.routingGraph.hardwareTelemetryWidget.benchmarkTitle}
                   </span>
-                  <span style={{ fontSize: '0.65rem', color: '#9ca3af', fontWeight: 600 }}>tokens / sec</span>
+                  <span style={{ fontSize: '0.68rem', color: 'var(--zen-text-secondary)', fontWeight: 500 }}>tokens / sec</span>
                 </div>
-                <p style={{ margin: 0, fontSize: '0.68rem', color: 'var(--zen-text-secondary)', lineHeight: '1.3' }}>
+                <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--zen-text-secondary)', lineHeight: 1.4 }}>
                   {en.routingGraph.hardwareTelemetryWidget.benchmarkSubtitle}
                 </p>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '2px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', backgroundColor: 'var(--zen-surface)', borderRadius: '6px', border: '1px solid var(--zen-border)' }}>
-                    <span style={{ fontWeight: 600, color: 'var(--zen-text)', fontSize: '0.72rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--zen-surface)', borderRadius: '10px', border: 'none' }}>
+                    <span style={{ fontWeight: 500, color: 'var(--zen-text)', fontSize: '0.75rem' }}>
                       {en.routingGraph.hardwareTelemetryWidget.benchmarkSonnet}
                     </span>
-                    <span style={{ fontWeight: 800, color: '#2563eb', fontSize: '0.72rem', fontVariantNumeric: 'tabular-nums' }}>
+                    <span style={{ fontWeight: 700, color: 'var(--zen-text)', fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums' }}>
                       {en.routingGraph.hardwareTelemetryWidget.benchmarkSonnetSpeed}
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', backgroundColor: 'var(--zen-surface)', borderRadius: '6px', border: '1px solid var(--zen-border)' }}>
-                    <span style={{ fontWeight: 600, color: 'var(--zen-text)', fontSize: '0.72rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--zen-surface)', borderRadius: '10px', border: 'none' }}>
+                    <span style={{ fontWeight: 500, color: 'var(--zen-text)', fontSize: '0.75rem' }}>
                       {en.routingGraph.hardwareTelemetryWidget.benchmarkGeminiFlash}
                     </span>
-                    <span style={{ fontWeight: 800, color: '#16a34a', fontSize: '0.72rem', fontVariantNumeric: 'tabular-nums' }}>
+                    <span style={{ fontWeight: 700, color: 'var(--zen-text)', fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums' }}>
                       {en.routingGraph.hardwareTelemetryWidget.benchmarkGeminiFlashSpeed}
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', backgroundColor: 'var(--zen-surface)', borderRadius: '6px', border: '1px solid var(--zen-border)' }}>
-                    <span style={{ fontWeight: 600, color: 'var(--zen-text)', fontSize: '0.72rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--zen-surface)', borderRadius: '10px', border: 'none' }}>
+                    <span style={{ fontWeight: 500, color: 'var(--zen-text)', fontSize: '0.75rem' }}>
                       {en.routingGraph.hardwareTelemetryWidget.benchmarkHaiku}
                     </span>
-                    <span style={{ fontWeight: 800, color: '#0891b2', fontSize: '0.72rem', fontVariantNumeric: 'tabular-nums' }}>
+                    <span style={{ fontWeight: 700, color: 'var(--zen-text)', fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums' }}>
                       {en.routingGraph.hardwareTelemetryWidget.benchmarkHaikuSpeed}
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', backgroundColor: 'var(--zen-surface)', borderRadius: '6px', border: '1px solid var(--zen-border)' }}>
-                    <span style={{ fontWeight: 600, color: 'var(--zen-text)', fontSize: '0.72rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--zen-surface)', borderRadius: '10px', border: 'none' }}>
+                    <span style={{ fontWeight: 500, color: 'var(--zen-text)', fontSize: '0.75rem' }}>
                       {en.routingGraph.hardwareTelemetryWidget.benchmarkLocalGpu}
                     </span>
-                    <span style={{ fontWeight: 800, color: '#9333ea', fontSize: '0.72rem', fontVariantNumeric: 'tabular-nums' }}>
+                    <span style={{ fontWeight: 700, color: 'var(--zen-text)', fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums' }}>
                       {en.routingGraph.hardwareTelemetryWidget.benchmarkLocalGpuSpeed}
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', backgroundColor: 'var(--zen-surface)', borderRadius: '6px', border: '1px solid var(--zen-border)' }}>
-                    <span style={{ fontWeight: 600, color: 'var(--zen-text)', fontSize: '0.72rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--zen-surface)', borderRadius: '10px', border: 'none' }}>
+                    <span style={{ fontWeight: 500, color: 'var(--zen-text)', fontSize: '0.75rem' }}>
                       {en.routingGraph.hardwareTelemetryWidget.benchmarkLocalCpu}
                     </span>
-                    <span style={{ fontWeight: 800, color: '#d97706', fontSize: '0.72rem', fontVariantNumeric: 'tabular-nums' }}>
+                    <span style={{ fontWeight: 700, color: 'var(--zen-text)', fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums' }}>
                       {en.routingGraph.hardwareTelemetryWidget.benchmarkLocalCpuSpeed}
                     </span>
                   </div>
                 </div>
               </div>
             )}
+
+            {/* Utilization Bar (Memory) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>
+                <span data-testid="telemetry-memory-label">{isCpuMode ? en.routingGraph.hardwareTelemetryWidget.ramAllocation : en.routingGraph.hardwareTelemetryWidget.vramAllocation}</span>
+                <span data-testid="telemetry-memory-value">{memUsed} / {memTotal} GB</span>
+              </div>
+              <div style={{ width: '100%', height: '8px', backgroundColor: 'var(--zen-pill-bg)', borderRadius: '9999px', overflow: 'hidden' }}>
+                <div 
+                  style={{ 
+                    height: '100%', 
+                    backgroundColor: 'var(--zen-accent)', 
+                    borderRadius: '9999px',
+                    transition: 'width 0.3s ease-out', 
+                    width: `${memPercent}%` 
+                  }} 
+                />
+              </div>
+            </div>
+
+            {/* Utilization Bar (Load) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>
+                <span data-testid="telemetry-load-label">{isCpuMode ? en.routingGraph.hardwareTelemetryWidget.cpuLoad : en.routingGraph.hardwareTelemetryWidget.gpuLoad}</span>
+                <span data-testid="telemetry-load-value">{loadPercent.toFixed(1)}%</span>
+              </div>
+              <div style={{ width: '100%', height: '8px', backgroundColor: 'var(--zen-pill-bg)', borderRadius: '9999px', overflow: 'hidden' }}>
+                <div 
+                  style={{ 
+                    height: '100%', 
+                    backgroundColor: 'var(--zen-accent)', 
+                    borderRadius: '9999px',
+                    transition: 'width 0.3s ease-out', 
+                    width: `${Math.min(100, Math.max(0, loadPercent))}%` 
+                  }} 
+                />
+              </div>
+            </div>
+
+            {/* Memory Pipeline Stacked Bar Visualization */}
+            <MemoryPipelineWidget segments={telemetry?.segments} hardwareProfile={effectiveProfile} />
           </div>
         </div>,
         document.body
@@ -723,13 +722,15 @@ interface CloudConnectNodeProps {
   isActive?: boolean;
   label?: string;
   targetHost?: string;
+  icon?: React.ReactNode;
 }
-export const CloudConnectNode = ({ isActive = false, label = 'External Cloud', targetHost = 'None' }: CloudConnectNodeProps) => {
+export const CloudConnectNode = ({ isActive = false, label = 'External Cloud', targetHost = 'None', icon }: CloudConnectNodeProps) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--zen-border)', padding: '8px 12px', backgroundColor: 'var(--zen-surface)' }}>
-        <div style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--zen-text)', display: 'flex', gap: '8px', alignItems: 'center' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: 'none', padding: '10px 14px', backgroundColor: 'var(--zen-surface)' }}>
+        <div style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--zen-text)', display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {icon}
           {label.toUpperCase()}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -739,12 +740,10 @@ export const CloudConnectNode = ({ isActive = false, label = 'External Cloud', t
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'var(--zen-accent)',
-              transition: 'opacity 0.2s',
-              opacity: 0.8
+              color: 'var(--zen-text-secondary)',
+              padding: '4px',
+              borderRadius: '9999px'
             }}
-            onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-            onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
           >
             <InfoIconSVG width="14" height="14" style={{ display: 'block' }} />
           </div>
@@ -752,11 +751,11 @@ export const CloudConnectNode = ({ isActive = false, label = 'External Cloud', t
       </div>
 
       {/* Body */}
-      <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: 'var(--zen-surface)', color: 'var(--zen-text)' }}>
+      <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: '8px', backgroundColor: 'var(--zen-surface)', color: 'var(--zen-text)' }}>
         {/* Connection Target Indicator */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#9ca3af' }}>Current Target</span>
-          <span style={{ fontSize: '0.75rem', fontWeight: 800, color: isActive ? 'var(--zen-text)' : 'var(--zen-text-secondary)' }}>
+          <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>Current Target</span>
+          <span style={{ fontSize: '0.78rem', fontWeight: 600, color: isActive ? 'var(--zen-text)' : 'var(--zen-text-secondary)' }}>
             {isActive ? targetHost : 'None'}
           </span>
         </div>
