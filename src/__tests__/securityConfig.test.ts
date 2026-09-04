@@ -84,4 +84,38 @@ describe('DevSecOps & Repository Security Compliance (CHO-85)', () => {
     expect(content).toMatch(/actions\/workflows\/security\.yml\/badge\.svg\?branch=main&job=dependency-audit/);
     expect(content).toMatch(/img\.shields\.io\/badge\/Dependabot-active/);
   });
+
+  it('verifies CI concurrency controls and trigger isolation across all workflows', () => {
+    // 1. PR Gatekeeper
+    const prChecksPath = path.join(rootDir, '.github/workflows/pr-checks.yml');
+    expect(fs.existsSync(prChecksPath)).toBe(true);
+    const prChecksContent = fs.readFileSync(prChecksPath, 'utf-8');
+    expect(prChecksContent).toMatch(/concurrency:\s*\n\s*group:\s*\${{\s*github\.workflow\s*}}-\${{\s*github\.event\.pull_request\.number\s*\|\|\s*github\.ref\s*}}\s*\n\s*cancel-in-progress:\s*true/);
+    expect(prChecksContent).toMatch(/tags-ignore:\s*\n\s*-\s*['"]v\*['"]/);
+
+    // 2. Security Analysis & Audit
+    const securityWorkflowPath = path.join(rootDir, '.github/workflows/security.yml');
+    const securityContent = fs.readFileSync(securityWorkflowPath, 'utf-8');
+    expect(securityContent).toMatch(/concurrency:\s*\n\s*group:\s*\${{\s*github\.workflow\s*}}-\${{\s*github\.event\.pull_request\.number\s*\|\|\s*github\.ref\s*}}\s*\n\s*cancel-in-progress:\s*true/);
+    expect(securityContent).toMatch(/tags-ignore:\s*\n\s*-\s*['"]v\*['"]/);
+
+    // 3. Release workflow
+    const releasePath = path.join(rootDir, '.github/workflows/release.yml');
+    expect(fs.existsSync(releasePath)).toBe(true);
+    const releaseContent = fs.readFileSync(releasePath, 'utf-8');
+    expect(releaseContent).toMatch(/concurrency:\s*\n\s*group:\s*\${{\s*github\.workflow\s*}}-\${{\s*github\.ref\s*}}\s*\n\s*cancel-in-progress:\s*false/);
+    // Ensure release triggers strictly on tags and supports workflow_dispatch
+    expect(releaseContent).toMatch(/push:\s*\n\s*tags:\s*\n\s*-\s*['"]v\*['"]/);
+    expect(releaseContent).toMatch(/workflow_dispatch:/);
+    expect(releaseContent).not.toMatch(/branches:/);
+  });
+
+  it('verifies .github/dependabot.yml has consolidated PR groups and rate-limiting limits', () => {
+    const dependabotPath = path.join(rootDir, '.github/dependabot.yml');
+    const content = fs.readFileSync(dependabotPath, 'utf-8');
+    expect(content).toMatch(/open-pull-requests-limit:\s*5/);
+    expect(content).toMatch(/groups:\s*\n\s*npm-dependencies:\s*\n\s*patterns:\s*\n\s*-\s*["']\*["']/);
+    expect(content).toMatch(/groups:\s*\n\s*cargo-dependencies:\s*\n\s*patterns:\s*\n\s*-\s*["']\*["']/);
+    expect(content).toMatch(/groups:\s*\n\s*actions-dependencies:\s*\n\s*patterns:\s*\n\s*-\s*["']\*["']/);
+  });
 });

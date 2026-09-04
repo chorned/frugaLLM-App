@@ -5,33 +5,45 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
     commit-message:
       prefix: "deps(frontend)"
     labels:
       - "dependencies"
       - "frontend"
+    groups:
+      npm-dependencies:
+        patterns:
+          - "*"
 
   # Maintain backend Rust/Cargo dependencies
   - package-ecosystem: "cargo"
     directory: "/src-tauri"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
     commit-message:
       prefix: "deps(backend)"
     labels:
       - "dependencies"
       - "backend"
+    groups:
+      cargo-dependencies:
+        patterns:
+          - "*"
 
   # Maintain GitHub Actions dependencies
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
     commit-message:
       prefix: "ci(actions)"
     labels:
       - "dependencies"
       - "ci"
+    groups:
+      actions-dependencies:
+        patterns:
+          - "*"

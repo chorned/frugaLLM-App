@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
-import { createPortal } from 'react-dom';
 import { TerminalLoader } from './components/TerminalLoader';
 import { useCanvasLogic } from './hooks/useCanvasLogic';
 import { enable as enableAutostart, disable as disableAutostart, isEnabled as isAutostartEnabled } from '@tauri-apps/plugin-autostart';
@@ -229,6 +228,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
     opencode_workspace: frugalConfig?.opencode_workspace || '',
     start_on_login: false,
     start_minimized: frugalConfig?.start_minimized || false,
+    global_cli_enabled: false,
     manual_model_overrides: frugalConfig?.manual_model_overrides || []
   });
 
@@ -276,6 +276,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
         opencode_workspace: frugalConfig?.opencode_workspace || '~/Opencode',
         start_on_login: false,
         start_minimized: frugalConfig?.start_minimized || false,
+        global_cli_enabled: false,
         manual_model_overrides: []
       };
       setFormData(initOther);
