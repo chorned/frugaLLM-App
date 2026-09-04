@@ -1,6 +1,10 @@
 # FrugaLLM
 
 [![Release](https://github.com/chorned/frugallm-app/actions/workflows/release.yml/badge.svg)](https://github.com/chorned/frugallm-app/actions/workflows/release.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/chorned/frugaLLM-App/badge)](https://scorecard.dev/viewer/?uri=github.com/chorned/frugaLLM-App)
+[![CodeQL](https://github.com/chorned/frugaLLM-App/actions/workflows/security.yml/badge.svg?branch=main&job=codeql-analysis)](https://github.com/chorned/frugaLLM-App/actions/workflows/security.yml)
+[![Security Audit](https://github.com/chorned/frugaLLM-App/actions/workflows/security.yml/badge.svg?branch=main&job=dependency-audit)](https://github.com/chorned/frugaLLM-App/actions/workflows/security.yml)
+[![Dependabot](https://img.shields.io/badge/Dependabot-active-025E8C?logo=dependabot&logoColor=white)](https://github.com/chorned/frugaLLM-App/network/updates)
 
 FrugaLLM is a sophisticated, local-first proxy application and AI router built on the Tauri framework (Rust backend + React/Vite frontend). It features a visual, node-based UI (Hub, Hardware, Cloud, OpenCode, Hermes, Ollama nodes) that allows users to route LLM requests efficiently.
 

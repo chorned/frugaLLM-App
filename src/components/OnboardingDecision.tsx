@@ -20,7 +20,7 @@ export const OnboardingDecision: React.FC<OnboardingDecisionProps> = ({ onSelect
         <div className="flex flex-col gap-3">
           <button
             onClick={() => onSelect('learning')}
-            className="group relative flex items-center justify-between p-4 bg-zen-surface-hover hover:bg-zen-surface-secondary border-none rounded-2xl transition-all duration-200"
+            className="btn-cta group relative flex items-center justify-between p-4 bg-zen-surface-hover hover:bg-zen-surface-secondary border-none rounded-2xl transition-all duration-200"
           >
             <div className="flex flex-col text-left">
               <span className="text-base font-semibold text-zen-text transition-colors">
@@ -37,7 +37,7 @@ export const OnboardingDecision: React.FC<OnboardingDecisionProps> = ({ onSelect
 
           <button
             onClick={() => onSelect('completed')}
-            className="group relative flex items-center justify-between p-4 bg-zen-surface-hover hover:bg-zen-surface-secondary border-none rounded-2xl transition-all duration-200"
+            className="btn-cta group relative flex items-center justify-between p-4 bg-zen-surface-hover hover:bg-zen-surface-secondary border-none rounded-2xl transition-all duration-200"
           >
             <div className="flex flex-col text-left">
               <span className="text-base font-semibold text-zen-text transition-colors">

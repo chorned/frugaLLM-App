@@ -35,6 +35,8 @@ import { OnboardingDecision } from './components/OnboardingDecision';
 import { OnboardingOverlay } from './components/OnboardingOverlay';
 import { PortConflictBanner } from './components/PortConflictBanner';
 import { ExitConfirmationModal } from './components/ExitConfirmationModal';
+import { UpdateNotification } from './components/UpdateNotification';
+import { Tooltip, InfoIconSVG } from './components/Tooltip';
 import en from './locales/en.json';
 import { Eye, EyeOff, Copy, Check, Sun, Moon } from 'lucide-react';
 import { loadOnnxClassifier, clearOnnxCache } from './services/onnxGateway';
@@ -179,115 +181,12 @@ const Icons = {
   workflow: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="6" height="6" rx="1"></rect><rect x="15" y="3" width="6" height="6" rx="1"></rect><rect x="9" y="15" width="6" height="6" rx="1"></rect><path d="M6 9v2a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9"></path><path d="M12 13v2"></path></svg>,
   agent: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a5 5 0 0 1 5 5v2a5 5 0 0 1-10 0V7a5 5 0 0 1 5-5z"></path><path d="M19 15v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v1"></path><path d="M5 22v-3a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3"></path></svg>,
   settings: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>,
-  info: <svg viewBox="-50 -50 590 590" width="14" height="14" style={{ display: 'block' }} fill="currentColor"><path d="M245.148,0C109.967,0,0.009,109.98,0.009,245.162c0,135.182,109.958,245.156,245.139,245.156 c135.186,0,245.162-109.978,245.162-245.156C490.31,109.98,380.333,0,245.148,0z M245.148,438.415 c-106.555,0-193.234-86.698-193.234-193.253c0-106.555,86.68-193.258,193.234-193.258c106.559,0,193.258,86.703,193.258,193.258 C438.406,351.717,351.706,438.415,245.148,438.415z"/><path d="M270.036,221.352h-49.771c-8.351,0-15.131,6.78-15.131,15.118v147.566c0,8.352,6.78,15.119,15.131,15.119h49.771 c8.351,0,15.131-6.77,15.131-15.119V236.471C285.167,228.133,278.387,221.352,270.036,221.352z"/><path d="M245.148,91.168c-24.48,0-44.336,19.855-44.336,44.336c0,24.484,19.855,44.34,44.336,44.34 c24.485,0,44.342-19.855,44.342-44.34C289.489,111.023,269.634,91.168,245.148,91.168z"/></svg>,
+  info: <InfoIconSVG width="14" height="14" style={{ display: 'block' }} />,
   openrouter: <OpenRouterIcon size={14} />,
   ollama: <OllamaIcon size={14} />,
   gemini: <GeminiIcon size={14} />,
   hermes: <HermesIcon size={14} />,
   opencode: <OpenCodeIcon size={14} />,
-};
-
-const Tooltip = ({ text }: { text: string }) => {
-  const [visible, setVisible] = useState(false);
-  const [coords, setCoords] = useState({ top: 0, left: 0, isAbove: true });
-  const triggerRef = useRef<HTMLSpanElement>(null);
-
-  const updatePosition = () => {
-    if (triggerRef.current) {
-      const rect = triggerRef.current.getBoundingClientRect();
-      const isAbove = rect.top > 90;
-      setCoords({
-        top: isAbove ? rect.top - 8 : rect.bottom + 8,
-        left: rect.left + rect.width / 2,
-        isAbove
-      });
-    }
-  };
-
-  const handleMouseEnter = () => {
-    updatePosition();
-    setVisible(true);
-  };
-
-  const handleMouseLeave = () => {
-    setVisible(false);
-  };
-
-  useEffect(() => {
-    if (!visible) return;
-    const handleScrollOrResize = () => {
-      updatePosition();
-    };
-    window.addEventListener('scroll', handleScrollOrResize, true);
-    window.addEventListener('resize', handleScrollOrResize);
-    return () => {
-      window.removeEventListener('scroll', handleScrollOrResize, true);
-      window.removeEventListener('resize', handleScrollOrResize);
-    };
-  }, [visible]);
-
-  return (
-    <>
-      <span 
-        ref={triggerRef}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-        style={{ 
-          display: 'inline-flex', 
-          alignItems: 'center', 
-          justifyContent: 'center', 
-          width: '14px', 
-          height: '14px', 
-          color: '#9ca3af', 
-          marginLeft: '6px', 
-          cursor: 'help' 
-        }}
-      >
-        {Icons.info}
-      </span>
-      {visible && createPortal(
-        <div 
-          style={{
-            position: 'fixed',
-            top: coords.top,
-            left: coords.left,
-            transform: coords.isAbove ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
-            zIndex: 999999,
-            pointerEvents: 'none',
-            width: 'max-content',
-            maxWidth: '260px',
-            backgroundColor: '#111827',
-            color: '#ffffff',
-            textAlign: 'center',
-            borderRadius: '6px',
-            padding: '8px 12px',
-            fontSize: '0.75rem',
-            fontFamily: 'sans-serif',
-            fontWeight: 'normal',
-            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.2)',
-            lineHeight: 1.35,
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            textTransform: 'none'
-          }}
-        >
-          {text}
-          <div 
-            style={{
-              position: 'absolute',
-              ...(coords.isAbove 
-                ? { top: '100%', borderColor: '#111827 transparent transparent transparent' } 
-                : { bottom: '100%', borderColor: 'transparent transparent #111827 transparent' }),
-              left: '50%',
-              transform: 'translateX(-50%)',
-              borderWidth: '5px',
-              borderStyle: 'solid',
-            }}
-          />
-        </div>,
-        document.body
-      )}
-    </>
-  );
 };
 
 const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeInstalled, isOllamaInstalled, isToolGatewayInstalled, detectedVram, setDetectedVram, hasActiveBackend, handleInitializeHermes, handleOpenHermes, handleUninstallHermes, handleInitializeOpenCode, handleOpenOpenCode, handleUninstallOpenCode, handleInitializeOllama, handleOpenOllama, handleUninstallOllama, handleInstallToolGateway, handleUninstallToolGateway, handleDisconnectOpenRouter, handleDisconnectGoogle, frugalConfig, handleOpenHermesGateway, handleOpenHermesDesktop, handleOpenHermesWeb, handleOpenOpenCodeWeb, activeProcesses, handleKillProcess, setFrugalConfig, latestTelemetry, hardwareProfile, portConflict }: any) => {
@@ -496,6 +395,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
         <button 
           onClick={onClose} 
           data-testid="node-config-close-btn"
+          className="btn-cta btn-cta-icon"
           style={{ 
             background: 'none', 
             border: 'none', 
@@ -726,6 +626,8 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
                     onStartOnLoginChange={(enabled) => setFormData(prev => ({ ...prev, start_on_login: enabled }))}
                     startMinimized={formData.start_minimized}
                     onStartMinimizedChange={(minimized) => setFormData(prev => ({ ...prev, start_minimized: minimized }))}
+                    globalCliEnabled={formData.global_cli_enabled}
+                    onGlobalCliEnabledChange={(enabled) => setFormData(prev => ({ ...prev, global_cli_enabled: enabled }))}
                   />
                 </div>
               </div>
@@ -1248,6 +1150,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
           onClick={handleSave} 
           disabled={!hasChanges}
           data-testid="save-node-config-button"
+          className={`btn-cta ${hasChanges ? 'btn-cta-primary' : 'btn-cta-secondary'}`}
           style={{ 
             flex: 1, 
             padding: '11px 20px', 
@@ -1261,7 +1164,6 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
             opacity: 1,
             fontFamily: 'inherit', 
             boxShadow: hasChanges ? 'var(--zen-active-glow)' : 'none', 
-            transition: 'all 0.15s ease'
           }}
           onMouseDown={e => { 
             if (hasChanges) {
@@ -1594,21 +1496,24 @@ const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, 
         if (!isMounted) return;
         if (onProcessStart) onProcessStart();
         const frugalEnv = `export OPENAI_API_BASE="http://${frugalConfig?.ip || '127.0.0.1'}:${frugalConfig?.port || '61721'}/v1" && export OPENAI_API_KEY="${frugalConfig?.api_password || 'frugallm'}"`;
+        const cliPathEnv = 'export PATH="$HOME/.local/bin:$HOME/.hermes/bin:$HOME/.opencode/bin:$HOME/.cargo/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$PATH"';
+        const resolveHermesBin = 'HERMES_BIN="$(command -v hermes 2>/dev/null || ([ -x "$HOME/.local/bin/hermes" ] && echo "$HOME/.local/bin/hermes") || ([ -x "$HOME/.hermes/bin/hermes" ] && echo "$HOME/.hermes/bin/hermes") || ([ -x "$HOME/.cargo/bin/hermes" ] && echo "$HOME/.cargo/bin/hermes") || echo "hermes")"';
+        const resolveOpenCodeBin = 'OPENCODE_BIN="$(command -v opencode 2>/dev/null || ([ -x "$HOME/.local/bin/opencode" ] && echo "$HOME/.local/bin/opencode") || ([ -x "$HOME/.opencode/bin/opencode" ] && echo "$HOME/.opencode/bin/opencode") || ([ -x "$HOME/.cargo/bin/opencode" ] && echo "$HOME/.cargo/bin/opencode") || echo "opencode")"';
         
         if (mode === 'run-opencode') {
-          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && export PATH="$HOME/.opencode/bin:$PATH" && ${frugalEnv} && opencode -m litellm/frugallm`] });
+          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && ${cliPathEnv} && ${resolveOpenCodeBin} && ${frugalEnv} && "$OPENCODE_BIN" -m litellm/frugallm`] });
         } else if (mode === 'run-opencode-web') {
-          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && export PATH="$HOME/.opencode/bin:$PATH" && ${frugalEnv} && opencode web`] });
+          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && ${cliPathEnv} && ${resolveOpenCodeBin} && ${frugalEnv} && "$OPENCODE_BIN" web`] });
         } else if (mode === 'run-ollama') {
-          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && export PATH="/usr/local/bin:/opt/homebrew/bin:/Applications/Ollama.app/Contents/Resources:$PATH" && ${frugalEnv} && ollama run frugallm-active`] });
+          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && export PATH="/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/Applications/Ollama.app/Contents/Resources:$PATH" && ${frugalEnv} && ollama run frugallm-active`] });
         } else if (mode === 'run-hermes-web') {
-          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && export PATH="$HOME/.hermes/bin:$PATH" && ${frugalEnv} && hermes dashboard --host 127.0.0.1`] });
+          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && ${cliPathEnv} && ${resolveHermesBin} && ${frugalEnv} && "$HERMES_BIN" dashboard --host 127.0.0.1`] });
         } else if (mode === 'run-hermes-desktop') {
-          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && export PATH="$HOME/.hermes/bin:$PATH" && ${frugalEnv} && hermes desktop`] });
+          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && ${cliPathEnv} && ${resolveHermesBin} && ${frugalEnv} && "$HERMES_BIN" desktop`] });
         } else if (mode === 'run-hermes-gateway') {
-          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && export PATH="$HOME/.hermes/bin:$PATH" && ${frugalEnv} && hermes gateway --host 127.0.0.1`] });
+          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && ${cliPathEnv} && ${resolveHermesBin} && ${frugalEnv} && "$HERMES_BIN" gateway --host 127.0.0.1`] });
         } else {
-          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && export PATH="$HOME/.hermes/bin:$PATH" && ${frugalEnv} && hermes`] });
+          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && ${cliPathEnv} && ${resolveHermesBin} && ${frugalEnv} && "$HERMES_BIN"`] });
         }
         invoke('resize_pty', { sessionId, cols: term.cols, rows: term.rows }).catch(console.error);
         
@@ -1664,18 +1569,71 @@ const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, 
             <button onClick={() => setShowConfirmClose(false)} style={{ padding: '6px 12px', backgroundColor: 'transparent', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', fontWeight: 600, cursor: 'pointer', borderRadius: '8px' }}>{en.routingGraph.terminal.cancel}</button>
           </div>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <button 
               onClick={() => onExit()}
               title="Hide terminal and keep process running in background"
-              style={{ background: 'none', border: '1px solid var(--zen-border)', borderRadius: '4px', padding: '3px 8px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600, color: 'var(--zen-text)', display: 'flex', alignItems: 'center', gap: '4px' }}
+              aria-label="Hide terminal"
+              style={{ 
+                background: 'none', 
+                border: '1px solid var(--zen-border)', 
+                borderRadius: '6px', 
+                padding: 0,
+                width: '26px',
+                height: '26px',
+                cursor: 'pointer', 
+                fontSize: '0.85rem', 
+                fontWeight: 700, 
+                color: 'var(--zen-text)', 
+                display: 'inline-flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                boxSizing: 'border-box',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'var(--zen-surface-hover)';
+                e.currentTarget.style.borderColor = 'var(--zen-border-input)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.borderColor = 'var(--zen-border)';
+              }}
             >
-              <span>_</span> HIDE
+              <span style={{ display: 'inline-block', transform: 'translateY(-2px)' }}>_</span>
+              <span style={{ position: 'absolute', width: '1px', height: '1px', padding: 0, margin: '-1px', overflow: 'hidden', clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', border: 0 }}>HIDE</span>
             </button>
             <button 
               onClick={() => setShowConfirmClose(true)}
               title="Close process"
-              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              aria-label="✕"
+              style={{ 
+                background: 'none', 
+                border: '1px solid var(--zen-border)', 
+                borderRadius: '6px', 
+                padding: 0,
+                width: '26px',
+                height: '26px',
+                cursor: 'pointer', 
+                fontSize: '0.8rem', 
+                fontWeight: 600, 
+                color: 'var(--zen-text)', 
+                display: 'inline-flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                boxSizing: 'border-box',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'var(--zen-surface-hover)';
+                e.currentTarget.style.color = '#ef4444';
+                e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.color = 'var(--zen-text)';
+                e.currentTarget.style.borderColor = 'var(--zen-border)';
+              }}
             >
               ✕
             </button>
@@ -2566,7 +2524,7 @@ function AppContent() {
           id={node.id}
           data-node-id={node.id}
           ref={setNodeRef}
-          className="retro-node"
+          className={`retro-node ${isSelected ? 'selected' : ''}`.trim()}
           style={{ 
             position: 'relative',
             width: NODE_WIDTH, 
@@ -2596,7 +2554,7 @@ function AppContent() {
         id={node.id}
         data-node-id={node.id}
         ref={setNodeRef}
-        className="retro-node"
+        className={`retro-node ${isSelected ? 'selected' : ''}`.trim()}
         style={{
           position: 'relative',
           width: NODE_WIDTH,
@@ -2795,7 +2753,7 @@ function AppContent() {
 
   if (!isLoaded) return null;
 
-  return !isAppLoaded ? <TerminalLoader logs={initLogs} /> : (
+  return !isAppLoaded ? <TerminalLoader logs={initLogs} theme={theme} /> : (
     <div 
       style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100vh', fontFamily: 'inherit', backgroundColor: 'var(--zen-canvas)', backgroundImage: 'var(--zen-canvas-texture)', overflow: 'hidden', overscrollBehavior: 'none' }}
     >
@@ -2824,11 +2782,16 @@ function AppContent() {
             animation: flowAnimation 0.8s linear infinite;
           }
           .retro-node {
-            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s;
+            transition: box-shadow 0.2s ease, border-color 0.2s ease;
+            --node-card-shadow: var(--zen-shadow-diffused);
           }
           .retro-node:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.05);
+            --node-card-shadow: var(--zen-shadow-card-hover);
+            box-shadow: var(--zen-shadow-card-hover) !important;
+          }
+          .retro-node.selected:hover {
+            --node-card-shadow: var(--zen-shadow-card-selected-hover);
+            box-shadow: var(--zen-shadow-card-selected-hover) !important;
           }
           .terminal-drawer {
             transition: transform 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
@@ -2869,6 +2832,7 @@ function AppContent() {
           <button
             onClick={handleToggleTheme}
             data-testid="header-theme-toggle-btn"
+            className="btn-cta btn-cta-icon"
             aria-label={en.header?.toggleTheme || "Toggle theme"}
             role="button"
             title={isDark ? (en.header?.themeLight || "Switch to light theme") : (en.header?.themeDark || "Switch to dark theme")}
@@ -2883,34 +2847,26 @@ function AppContent() {
               border: '1px solid var(--zen-pill-border)',
               borderRadius: '9999px',
               color: 'var(--zen-text)',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease'
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--zen-pill-hover)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--zen-pill-bg)'; }}
           >
             {isDark ? <Sun size={15} /> : <Moon size={15} />}
           </button>
           <button
             onClick={() => setGuidesOpen(true)}
             data-testid="header-guides-btn"
+            className="btn-cta btn-cta-secondary"
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
               padding: '6px 14px',
-              backgroundColor: 'var(--zen-surface-hover)',
               border: '1px solid var(--zen-border-subtle)',
               borderRadius: '9999px',
               fontSize: '0.75rem',
               fontWeight: 500,
               color: 'var(--zen-text)',
-              cursor: 'pointer',
               fontFamily: 'inherit',
-              transition: 'all 0.15s ease'
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--zen-surface-secondary)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--zen-surface-hover)'; }}
           >
             {en.footer?.guides || 'Quickstart Guides'}
           </button>
@@ -3147,20 +3103,21 @@ function AppContent() {
           </a>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <UpdateNotification />
           <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981' }} />
           <span style={{ fontWeight: 500, color: 'var(--zen-text-secondary)' }}>{en.footer?.status || 'System Ready'}</span>
         </div>
       </footer>
       {/* Settings Modal */}
       {selectedNode && !terminalMode && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.3)', backdropFilter: 'blur(8px)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setSelectedNodeId(null)}>
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.3)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setSelectedNodeId(null)}>
           <NodeConfigPanel node={selectedNode} onClose={() => setSelectedNodeId(null)} onSave={handleSaveNodeConfig} onOpenGuide={setActiveGuide} isHermesInstalled={isHermesInstalled} isOpenCodeInstalled={isOpenCodeInstalled} isOllamaInstalled={isOllamaInstalled} isToolGatewayInstalled={isToolGatewayInstalled} detectedVram={detectedVram} setDetectedVram={setDetectedVram} hasActiveBackend={hasActiveBackend} handleInitializeHermes={handleInitializeHermes} handleOpenHermes={handleOpenHermes} handleUninstallHermes={handleUninstallHermes} handleInitializeOpenCode={handleInitializeOpenCode} handleOpenOpenCode={handleOpenOpenCode} handleUninstallOpenCode={handleUninstallOpenCode} handleInitializeOllama={handleInitializeOllama} handleOpenOllama={handleOpenOllama} handleUninstallOllama={handleUninstallOllama} handleInstallToolGateway={handleInstallToolGateway} handleUninstallToolGateway={handleUninstallToolGateway} handleDisconnectOpenRouter={handleDisconnectOpenRouter} handleDisconnectGoogle={handleDisconnectGoogle} frugalConfig={frugalConfig} setFrugalConfig={setFrugalConfig} handleOpenHermesGateway={handleOpenHermesGateway} handleOpenHermesDesktop={handleOpenHermesDesktop} handleOpenHermesWeb={handleOpenHermesWeb} handleOpenOpenCodeWeb={handleOpenOpenCodeWeb} activeProcesses={activeProcesses} handleKillProcess={handleKillProcess} latestTelemetry={latestTelemetry} hardwareProfile={hardwareProfile} portConflict={portConflict} />
         </div>
       )}
 
       {/* Guides Modal */}
       {guidesOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.3)', backdropFilter: 'blur(8px)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setGuidesOpen(false)}>
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.3)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setGuidesOpen(false)}>
           <div onClick={e => e.stopPropagation()} style={{ width: '520px', backgroundColor: 'var(--zen-surface)', border: 'none', borderRadius: '20px', boxShadow: 'var(--zen-shadow-modal)', overflow: 'hidden', padding: '28px', display: 'flex', flexDirection: 'column', fontFamily: 'inherit' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: 'none', paddingBottom: '12px' }}>
               <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, letterSpacing: '-0.01em', color: 'var(--zen-text)' }}>FRUGALLM // QUICKSTART GUIDES</h2>

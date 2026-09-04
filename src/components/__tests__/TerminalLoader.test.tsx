@@ -3,13 +3,26 @@ import { render, screen } from '@testing-library/react';
 import { TerminalLoader } from '../TerminalLoader';
 
 describe('TerminalLoader Component', () => {
-  it('renders branding header, logo, and empty terminal console when no logs provided', () => {
+  it('renders branding header, SVG logo, and empty terminal console when no logs provided', () => {
     // Arrange & Act
     render(<TerminalLoader logs={[]} />);
 
     // Assert
     expect(screen.getByRole('heading', { name: /Starting FrugaLLM\.\.\./i })).toBeInTheDocument();
-    expect(screen.getByAltText('FrugaLLM Logo')).toBeInTheDocument();
+    const logo = screen.getByRole('img', { name: /FrugaLLM Logo/i });
+    expect(logo).toBeInTheDocument();
+    expect(logo.tagName.toLowerCase()).toBe('svg');
+    expect(screen.getByTestId('boot-screen-logo')).toBeInTheDocument();
+  });
+
+  it('matches dark mode and light mode themes via theme prop', () => {
+    const { rerender } = render(<TerminalLoader logs={[]} theme="dark" />);
+    const darkConsole = screen.getByTestId('terminal-loader-console');
+    expect(darkConsole).toHaveStyle({ backgroundColor: '#14110E' });
+
+    rerender(<TerminalLoader logs={[]} theme="light" />);
+    const lightConsole = screen.getByTestId('terminal-loader-console');
+    expect(lightConsole).toHaveStyle({ backgroundColor: '#FFFFFF' });
   });
 
   it('renders streamed boot logs with timestamp prefixes in chronological order', () => {
@@ -29,3 +42,4 @@ describe('TerminalLoader Component', () => {
     expect(screen.getByText(/Ready for local inference requests\./)).toBeInTheDocument();
   });
 });
+

@@ -95,6 +95,7 @@ describe('App Component Integration', () => {
 
     (invoke as any).mockImplementation((cmd: string) => {
       if (cmd === 'is_wipe_mode') return Promise.resolve(false);
+      if (cmd === 'is_mock_update_mode') return Promise.resolve(false);
       if (cmd === 'get_frugallm_config') {
         return Promise.resolve({
           port: 61721,
@@ -205,11 +206,13 @@ describe('App Component Integration', () => {
     expect(frugalNode).not.toBeNull();
     fireEvent.click(frugalNode!);
 
-    // Assert: Config panel opens with FrugaLLM settings
+    // Assert: Config panel opens with FrugaLLM settings and 4px reduced blur backdrop
     await waitFor(
       () => {
         expect(screen.getByText('COPY IP & PORT')).toBeInTheDocument();
         expect(screen.getByTestId('api-password-checkbox')).toBeInTheDocument();
+        const backdrop = document.querySelector('div[style*="blur(4px)"]');
+        expect(backdrop).toBeInTheDocument();
       },
       { timeout: 10000 }
     );
@@ -220,6 +223,7 @@ describe('App Component Integration', () => {
     localStorage.setItem('onboardingState', 'completed');
     (invoke as any).mockImplementation((cmd: string) => {
       if (cmd === 'is_wipe_mode') return Promise.resolve(false);
+      if (cmd === 'is_mock_update_mode') return Promise.resolve(false);
       if (cmd === 'get_frugallm_config') {
         return Promise.resolve({
           port: 5050,
@@ -345,6 +349,7 @@ describe('App Component Integration', () => {
     localStorage.setItem('onboardingState', 'completed');
     (invoke as any).mockImplementation((cmd: string) => {
       if (cmd === 'is_wipe_mode') return Promise.resolve(false);
+      if (cmd === 'is_mock_update_mode') return Promise.resolve(false);
       if (cmd === 'get_frugallm_config') {
         return Promise.resolve({
           port: 61721,
@@ -545,6 +550,65 @@ describe('App Component Integration', () => {
     });
     expect(invoke).toHaveBeenCalledWith('kill_pty', { sessionId: 'run-hermes-gateway' });
     expect(invoke).toHaveBeenCalledWith('stop_hermes_service', { service: 'run-hermes-gateway' });
+  }, 15000);
+
+  it('launches Hermes CLI from CTA with robust PATH including ~/.local/bin and executes properly', async () => {
+    const baseInvoke = (invoke as any).getMockImplementation();
+    let spawnedCommands: any[] = [];
+    (invoke as any).mockImplementation((cmd: string, args: any) => {
+      if (cmd === 'check_hermes_status') return Promise.resolve(true);
+      if (cmd === 'check_hermes_ready') return Promise.resolve(true);
+      if (cmd === 'get_active_services') return Promise.resolve([]);
+      if (cmd === 'spawn_pty') {
+        spawnedCommands.push(args);
+        return Promise.resolve();
+      }
+      if (cmd === 'kill_pty') return Promise.resolve();
+      return baseInvoke(cmd, args);
+    });
+
+    const { container } = render(<App />);
+
+    await waitFor(
+      () => {
+        expect(screen.getByText('Hermes')).toBeInTheDocument();
+      },
+      { timeout: 10000 }
+    );
+
+    // Open Hermes Node Config Panel
+    const hermesNode = container.querySelector('[data-node-id="node-hermes"]');
+    expect(hermesNode).not.toBeNull();
+    fireEvent.click(hermesNode!);
+
+    await waitFor(() => {
+      expect(screen.getByText('LAUNCH HERMES')).toBeInTheDocument();
+    });
+
+    // Click Launch Hermes CTA
+    const launchHermesBtn = screen.getByText('LAUNCH HERMES');
+    await act(async () => {
+      fireEvent.click(launchHermesBtn);
+    });
+
+    // Verify Terminal View opened with Hermes Terminal title
+    await waitFor(() => {
+      expect(screen.getByText('Hermes Terminal')).toBeInTheDocument();
+    });
+
+    // Verify spawn_pty was called with sessionId 'run-hermes' and includes $HOME/.local/bin in PATH
+    expect(spawnedCommands).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sessionId: 'run-hermes',
+          command: 'bash',
+          args: [
+            '-c',
+            expect.stringMatching(/\$HOME\/\.local\/bin.*HERMES_BIN.*"\$HERMES_BIN"/),
+          ],
+        }),
+      ])
+    );
   }, 15000);
 
   it('handles TerminalView close confirmation, cancellation, and termination', async () => {

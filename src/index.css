@@ -93,6 +93,8 @@
     --zen-pill-border: #302821;
     --zen-shadow-diffused: 0 12px 32px rgba(0, 0, 0, 0.7);
     --zen-shadow-card: 0 12px 32px rgba(0, 0, 0, 0.7);
+    --zen-shadow-card-hover: 0 16px 36px rgba(0, 0, 0, 0.85);
+    --zen-shadow-card-selected-hover: 0 0 0 2px var(--zen-active-border), 0 0 28px rgba(79, 191, 103, 0.32), 0 16px 36px rgba(0, 0, 0, 0.85);
     --zen-shadow-modal: 0 20px 50px rgba(0, 0, 0, 0.85);
     --tw-shadow-glass: 0 12px 32px rgba(0, 0, 0, 0.7);
     --tw-shadow-glass-sm: 0 4px 16px rgba(0, 0, 0, 0.5);
@@ -132,6 +134,8 @@
     --zen-pill-border: #ECE5DD;
     --zen-shadow-diffused: 0 12px 32px rgba(0, 0, 0, 0.16), 0 4px 12px rgba(0, 0, 0, 0.06);
     --zen-shadow-card: 0 12px 32px rgba(0, 0, 0, 0.16), 0 4px 12px rgba(0, 0, 0, 0.06);
+    --zen-shadow-card-hover: 0 16px 36px rgba(0, 0, 0, 0.22), 0 6px 16px rgba(0, 0, 0, 0.08);
+    --zen-shadow-card-selected-hover: 0 0 0 2px var(--zen-active-border), 0 8px 24px rgba(46, 139, 87, 0.28), 0 16px 36px rgba(0, 0, 0, 0.22);
     --zen-shadow-modal: 0 20px 50px rgba(0, 0, 0, 0.18), 0 8px 20px rgba(0, 0, 0, 0.08);
     --tw-shadow-glass: 0 12px 32px rgba(0, 0, 0, 0.16);
     --tw-shadow-glass-sm: 0 4px 16px rgba(0, 0, 0, 0.10);
@@ -246,5 +250,98 @@
 }
 .routing-pool-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #A1A1AA;
+}
+
+/* Canvas Node Hover Elevation (Strictly stationary in X/Y space) */
+.retro-node {
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+  will-change: box-shadow;
+}
+
+.retro-node:hover {
+  box-shadow: var(--zen-shadow-card-hover) !important;
+}
+
+.retro-node.selected:hover {
+  box-shadow: var(--zen-shadow-card-selected-hover) !important;
+}
+
+/* Call to Action (CTA) Universal Design System */
+.btn-cta {
+  cursor: pointer;
+  user-select: none;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+  outline: none;
+}
+
+.btn-cta:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Primary CTA */
+.btn-cta-primary {
+  background-color: var(--zen-accent);
+  color: #FFFFFF;
+  border: 1px solid transparent;
+}
+
+.btn-cta-primary:hover:not(:disabled) {
+  background-color: var(--zen-accent-hover);
+  box-shadow: 0 4px 14px rgba(79, 191, 103, 0.3);
+}
+
+.btn-cta-primary:active:not(:disabled) {
+  opacity: 0.92;
+}
+
+/* Secondary / Neutral CTA */
+.btn-cta-secondary {
+  background-color: var(--zen-surface-hover);
+  color: var(--zen-text);
+  border: 1px solid var(--zen-border);
+}
+
+.btn-cta-secondary:hover:not(:disabled) {
+  background-color: var(--zen-surface-secondary);
+  border-color: var(--zen-border-input);
+  color: var(--zen-text);
+}
+
+.btn-cta-secondary:active:not(:disabled) {
+  background-color: var(--zen-surface-header);
+}
+
+/* Danger / Destructive CTA */
+.btn-cta-danger {
+  background-color: #EF4444;
+  color: #FFFFFF;
+  border: 1px solid transparent;
+}
+
+.btn-cta-danger:hover:not(:disabled) {
+  background-color: #DC2626;
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3);
+}
+
+.btn-cta-danger:active:not(:disabled) {
+  background-color: #B91C1C;
+}
+
+/* Icon / Header Action CTA */
+.btn-cta-icon {
+  background-color: transparent;
+  color: var(--zen-text-secondary);
+  border: 1px solid transparent;
+}
+
+.btn-cta-icon:hover:not(:disabled) {
+  background-color: var(--zen-surface-hover);
+  color: var(--zen-text);
 }
 

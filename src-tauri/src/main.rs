@@ -422,13 +422,32 @@ fn wipe_credentials() -> Result<(), String> {
     }
 }
 
-fn is_hermes_installed(home: &std::path::Path) -> bool {
-    let local_bin_hermes = home.join(".local").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" });
-    if local_bin_hermes.exists() {
-        return true;
+fn get_hermes_source_path(home: &std::path::Path) -> Option<std::path::PathBuf> {
+    let p1 = home.join(".local").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" });
+    if p1.exists() {
+        return Some(p1);
     }
-    let hermes_path = home.join(".hermes").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" });
-    return hermes_path.exists();
+    let p2 = home.join(".hermes").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" });
+    if p2.exists() {
+        return Some(p2);
+    }
+    let p3 = home.join(".cargo").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" });
+    if p3.exists() {
+        return Some(p3);
+    }
+    let brew_hermes = std::path::PathBuf::from("/opt/homebrew/bin/hermes");
+    if brew_hermes.exists() {
+        return Some(brew_hermes);
+    }
+    let usr_local_hermes = std::path::PathBuf::from("/usr/local/bin/hermes");
+    if usr_local_hermes.exists() {
+        return Some(usr_local_hermes);
+    }
+    None
+}
+
+fn is_hermes_installed(home: &std::path::Path) -> bool {
+    get_hermes_source_path(home).is_some()
 }
 
 #[tauri::command]
@@ -439,13 +458,32 @@ fn check_hermes_status(app: tauri::AppHandle) -> bool {
     false
 }
 
-fn is_opencode_installed(home: &std::path::Path) -> bool {
-    let local_bin_opencode = home.join(".local").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
-    if local_bin_opencode.exists() {
-        return true;
+fn get_opencode_source_path(home: &std::path::Path) -> Option<std::path::PathBuf> {
+    let p1 = home.join(".local").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
+    if p1.exists() {
+        return Some(p1);
     }
-    let opencode_path = home.join(".opencode").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
-    return opencode_path.exists();
+    let p2 = home.join(".opencode").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
+    if p2.exists() {
+        return Some(p2);
+    }
+    let p3 = home.join(".cargo").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
+    if p3.exists() {
+        return Some(p3);
+    }
+    let brew_opencode = std::path::PathBuf::from("/opt/homebrew/bin/opencode");
+    if brew_opencode.exists() {
+        return Some(brew_opencode);
+    }
+    let usr_local_opencode = std::path::PathBuf::from("/usr/local/bin/opencode");
+    if usr_local_opencode.exists() {
+        return Some(usr_local_opencode);
+    }
+    None
+}
+
+fn is_opencode_installed(home: &std::path::Path) -> bool {
+    get_opencode_source_path(home).is_some()
 }
 
 #[tauri::command]
@@ -517,8 +555,7 @@ async fn check_ollama_status() -> bool {
 #[tauri::command(async)]
 async fn get_hermes_version(app: tauri::AppHandle) -> String {
     if let Ok(home) = app.path().home_dir() {
-        if is_hermes_installed(&home) {
-            let hermes_bin = home.join(".hermes").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" });
+        if let Some(hermes_bin) = get_hermes_source_path(&home) {
             if let Ok(output) = tokio::process::Command::new(&hermes_bin).arg("--version").output().await {
                 if output.status.success() {
                     let v = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -536,18 +573,8 @@ async fn get_hermes_version(app: tauri::AppHandle) -> String {
 #[tauri::command(async)]
 async fn get_opencode_version(app: tauri::AppHandle) -> String {
     if let Ok(home) = app.path().home_dir() {
-        if is_opencode_installed(&home) {
-            let opencode_bin = home.join(".opencode").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
+        if let Some(opencode_bin) = get_opencode_source_path(&home) {
             if let Ok(output) = tokio::process::Command::new(&opencode_bin).arg("--version").output().await {
-                if output.status.success() {
-                    let v = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                    if !v.is_empty() {
-                        return v;
-                    }
-                }
-            }
-            let local_bin = home.join(".local").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
-            if let Ok(output) = tokio::process::Command::new(&local_bin).arg("--version").output().await {
                 if output.status.success() {
                     let v = String::from_utf8_lossy(&output.stdout).trim().to_string();
                     if !v.is_empty() {
@@ -786,6 +813,39 @@ fn spawn_pty(
         CommandBuilder::new("bash")
     };
 
+    if let Ok(home) = app.path().home_dir() {
+        let local_bin = home.join(".local").join("bin");
+        let hermes_bin = home.join(".hermes").join("bin");
+        let opencode_bin = home.join(".opencode").join("bin");
+        let cargo_bin = home.join(".cargo").join("bin");
+        let current_path = std::env::var("PATH").unwrap_or_default();
+        let sep = if cfg!(windows) { ";" } else { ":" };
+        let augmented_path = if cfg!(windows) {
+            format!(
+                "{}{}{}{}{}{}{}{}{}",
+                local_bin.display(),
+                sep,
+                hermes_bin.display(),
+                sep,
+                opencode_bin.display(),
+                sep,
+                cargo_bin.display(),
+                sep,
+                current_path
+            )
+        } else {
+            format!(
+                "{}:{}:{}:{}:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:{}",
+                local_bin.display(),
+                hermes_bin.display(),
+                opencode_bin.display(),
+                cargo_bin.display(),
+                current_path
+            )
+        };
+        cmd.env("PATH", augmented_path);
+    }
+
     if let Some(a) = args {
         cmd.args(&a);
     }
@@ -891,13 +951,9 @@ async fn spawn_hermes_child(
     service: &str,
 ) -> Result<u32, String> {
     let home = app.path().home_dir().map_err(|e| e.to_string())?;
-    let hermes_bin = if home.join(".hermes").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" }).exists() {
-        home.join(".hermes").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" })
-    } else if home.join(".local").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" }).exists() {
-        home.join(".local").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" })
-    } else {
+    let hermes_bin = get_hermes_source_path(&home).unwrap_or_else(|| {
         std::path::PathBuf::from(if cfg!(windows) { "hermes.exe" } else { "hermes" })
-    };
+    });
 
     let subcmd = match service {
         "gateway" | "hermes-gateway" | "desktop" | "hermes-desktop" => "gateway",
@@ -912,12 +968,32 @@ async fn spawn_hermes_child(
     cmd.env("OPENAI_API_BASE", format!("http://127.0.0.1:{}/v1", port));
     cmd.env("OPENAI_API_KEY", api_pwd.unwrap_or_else(|| "frugallm".to_string()));
 
-    if let Ok(current_path) = std::env::var("PATH") {
-        let hermes_bin_dir = home.join(".hermes").join("bin");
-        let local_bin_dir = home.join(".local").join("bin");
-        let new_path = format!("{}:{}:{}", hermes_bin_dir.display(), local_bin_dir.display(), current_path);
-        cmd.env("PATH", new_path);
-    }
+    let hermes_bin_dir = home.join(".hermes").join("bin");
+    let local_bin_dir = home.join(".local").join("bin");
+    let cargo_bin_dir = home.join(".cargo").join("bin");
+    let current_path = std::env::var("PATH").unwrap_or_default();
+    let sep = if cfg!(windows) { ";" } else { ":" };
+    let new_path = if cfg!(windows) {
+        format!(
+            "{}{}{}{}{}{}{}",
+            local_bin_dir.display(),
+            sep,
+            hermes_bin_dir.display(),
+            sep,
+            cargo_bin_dir.display(),
+            sep,
+            current_path
+        )
+    } else {
+        format!(
+            "{}:{}:{}:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:{}",
+            local_bin_dir.display(),
+            hermes_bin_dir.display(),
+            cargo_bin_dir.display(),
+            current_path
+        )
+    };
+    cmd.env("PATH", new_path);
 
     cmd.stdout(std::process::Stdio::null());
     cmd.stderr(std::process::Stdio::null());
@@ -1630,6 +1706,12 @@ async fn set_model_override(
 
 
 
+pub fn is_openrouter_free_alias(id: &str) -> bool {
+    let lower = id.to_lowercase();
+    let trimmed = lower.trim();
+    trimmed == "openrouter/free" || trimmed == "openrouter:free"
+}
+
 struct RankedModel {
     model: CloudModel,
     priority: f32,
@@ -1730,6 +1812,11 @@ async fn fetch_live_routing_chain(app: &tauri::AppHandle) -> Vec<CloudModel> {
                 if let Some(models) = json.get("data").and_then(|m| m.as_array()) {
                     for m in models {
                         if let Some(id) = m.get("id").and_then(|i| i.as_str()) {
+                            // Filter out openrouter:free / openrouter/free router model alias
+                            if is_openrouter_free_alias(id) {
+                                continue;
+                            }
+
                             let mut is_free = false;
                             
                             // Check if model explicitly ends in :free
@@ -1957,6 +2044,209 @@ fn edit_hermes_soul(app: tauri::AppHandle) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+
+fn get_ollama_source_path() -> Option<std::path::PathBuf> {
+    let bin = get_ollama_binary();
+    if bin != std::path::PathBuf::from("ollama") && bin.exists() {
+        return Some(bin);
+    }
+    None
+}
+
+const FRUGALLM_PATH_BLOCK_START: &str = "# >>> FrugaLLM CLI PATH >>>";
+const FRUGALLM_PATH_BLOCK_END: &str = "# <<< FrugaLLM CLI PATH <<<";
+
+fn remove_path_block(content: &str) -> String {
+    let mut result = String::new();
+    let mut inside_block = false;
+    for line in content.lines() {
+        if line.trim() == FRUGALLM_PATH_BLOCK_START {
+            inside_block = true;
+            continue;
+        }
+        if line.trim() == FRUGALLM_PATH_BLOCK_END {
+            inside_block = false;
+            continue;
+        }
+        if !inside_block {
+            result.push_str(line);
+            result.push('\n');
+        }
+    }
+    result
+}
+
+fn update_shell_config_path(home: &std::path::Path, enable: bool) -> Result<(), String> {
+    let rc_files = [".zshrc", ".bashrc", ".profile"];
+    for rc_name in rc_files {
+        let rc_path = home.join(rc_name);
+        if enable {
+            let should_create = cfg!(target_os = "macos") && rc_name == ".zshrc";
+            if rc_path.exists() || should_create {
+                let content = if rc_path.exists() {
+                    std::fs::read_to_string(&rc_path).unwrap_or_default()
+                } else {
+                    String::new()
+                };
+
+                if !content.contains(FRUGALLM_PATH_BLOCK_START) {
+                    let addition = format!(
+                        "\n{}\nexport PATH=\"$HOME/.local/bin:$HOME/.hermes/bin:$PATH\"\n{}\n",
+                        FRUGALLM_PATH_BLOCK_START, FRUGALLM_PATH_BLOCK_END
+                    );
+                    let mut new_content = content;
+                    new_content.push_str(&addition);
+                    let _ = std::fs::write(&rc_path, new_content);
+                }
+            }
+        } else if rc_path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&rc_path) {
+                if content.contains(FRUGALLM_PATH_BLOCK_START) {
+                    let cleaned = remove_path_block(&content);
+                    let _ = std::fs::write(&rc_path, cleaned);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn sync_unix_symlinks(home: &std::path::Path, enable: bool) -> Result<(), String> {
+    let local_bin = home.join(".local").join("bin");
+    if enable {
+        let _ = std::fs::create_dir_all(&local_bin);
+    }
+
+    let tools = [
+        ("hermes", get_hermes_source_path(home)),
+        ("opencode", get_opencode_source_path(home)),
+        ("ollama", get_ollama_source_path()),
+    ];
+
+    for (name, maybe_source) in tools {
+        let target = local_bin.join(name);
+        if enable {
+            if let Some(source) = maybe_source {
+                if target.exists() || target.symlink_metadata().is_ok() {
+                    let _ = std::fs::remove_file(&target);
+                }
+                let _ = std::os::unix::fs::symlink(&source, &target);
+
+                let usr_local_bin = std::path::Path::new("/usr/local/bin").join(name);
+                if usr_local_bin.symlink_metadata().is_ok() {
+                    let _ = std::fs::remove_file(&usr_local_bin);
+                }
+                let _ = std::os::unix::fs::symlink(&source, &usr_local_bin);
+            }
+        } else {
+            if target.symlink_metadata().is_ok() {
+                let _ = std::fs::remove_file(&target);
+            }
+            let usr_local_bin = std::path::Path::new("/usr/local/bin").join(name);
+            if let Ok(meta) = usr_local_bin.symlink_metadata() {
+                if meta.file_type().is_symlink() {
+                    let _ = std::fs::remove_file(&usr_local_bin);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn sync_windows_path(home: &std::path::Path, enable: bool) -> Result<(), String> {
+    let hermes_bin = home.join(".hermes").join("bin");
+    let local_bin = home.join(".local").join("bin");
+    
+    let hermes_str = hermes_bin.to_string_lossy();
+    let local_str = local_bin.to_string_lossy();
+
+    let script = if enable {
+        format!(
+            "$p = [Environment]::GetEnvironmentVariable('Path', 'User'); \
+            $paths = $p -split ';' | Where-Object {{ $_ }}; \
+            $added = @(); \
+            if ($paths -notcontains '{0}') {{ $added += '{0}' }}; \
+            if ($paths -notcontains '{1}') {{ $added += '{1}' }}; \
+            if ($added.Count -gt 0) {{ \
+                $newP = ($paths + $added) -join ';'; \
+                [Environment]::SetEnvironmentVariable('Path', $newP, 'User'); \
+            }}",
+            hermes_str, local_str
+        )
+    } else {
+        format!(
+            "$p = [Environment]::GetEnvironmentVariable('Path', 'User'); \
+            $paths = $p -split ';' | Where-Object {{ $_ -and $_ -ne '{0}' -and $_ -ne '{1}' }}; \
+            $newP = $paths -join ';'; \
+            [Environment]::SetEnvironmentVariable('Path', $newP, 'User');",
+            hermes_str, local_str
+        )
+    };
+
+    let _ = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+        .output();
+
+    Ok(())
+}
+
+#[tauri::command]
+fn set_global_cli_commands(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    let home = app.path().home_dir().map_err(|e| e.to_string())?;
+
+    #[cfg(unix)]
+    {
+        sync_unix_symlinks(&home, enabled)?;
+        update_shell_config_path(&home, enabled)?;
+    }
+
+    #[cfg(windows)]
+    {
+        sync_windows_path(&home, enabled)?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn get_global_cli_commands_status(app: tauri::AppHandle) -> Result<bool, String> {
+    let home = app.path().home_dir().map_err(|e| e.to_string())?;
+
+    #[cfg(unix)]
+    {
+        let local_bin_hermes = home.join(".local").join("bin").join("hermes");
+        if local_bin_hermes.exists() || local_bin_hermes.symlink_metadata().is_ok() {
+            return Ok(true);
+        }
+        for rc_name in [".zshrc", ".bashrc", ".profile"] {
+            let rc_path = home.join(rc_name);
+            if let Ok(content) = std::fs::read_to_string(&rc_path) {
+                if content.contains(FRUGALLM_PATH_BLOCK_START) {
+                    return Ok(true);
+                }
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        let script = "[Environment]::GetEnvironmentVariable('Path', 'User')";
+        if let Ok(output) = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", script])
+            .output()
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if stdout.contains(".hermes\\bin") || stdout.contains(".local\\bin") {
+                return Ok(true);
+            }
+        }
+    }
+
+    Ok(false)
 }
 
 
@@ -2392,6 +2682,20 @@ fn is_wipe_mode() -> bool {
     std::env::args().any(|arg| arg == "--wipe")
 }
 
+fn check_mock_update_arg(mut args: impl Iterator<Item = String>) -> bool {
+    if std::env::var("MOCK_UPDATE").map(|v| v == "1" || v == "true").unwrap_or(false)
+        || std::env::var("FRUGALLM_MOCK_UPDATE").map(|v| v == "1" || v == "true").unwrap_or(false)
+    {
+        return true;
+    }
+    args.any(|arg| arg == "--mockUpdate" || arg == "--mock-update")
+}
+
+#[tauri::command]
+fn is_mock_update_mode() -> bool {
+    check_mock_update_arg(std::env::args())
+}
+
 #[tauri::command]
 fn get_local_ips() -> Vec<String> {
     let mut ips = vec!["127.0.0.1".to_string()];
@@ -2719,6 +3023,7 @@ fn main() {
             get_frugallm_server_status,
             edit_hermes_soul,
             is_wipe_mode,
+            is_mock_update_mode,
             get_local_ips,
             restart_app,
             get_routing_chain,
@@ -2732,7 +3037,9 @@ fn main() {
             has_active_services,
             get_active_services,
             confirm_exit_app,
-            check_hermes_ready
+            check_hermes_ready,
+            set_global_cli_commands,
+            get_global_cli_commands_status
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
@@ -2838,6 +3145,27 @@ mod tests {
         fs::File::create(&hermes_exe).unwrap();
         
         assert_eq!(is_hermes_installed(home), true);
+        assert_eq!(get_hermes_source_path(home), Some(hermes_exe));
+    }
+
+    #[test]
+    fn test_is_hermes_installed_local_bin() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let home = temp_dir.path();
+        
+        assert_eq!(is_hermes_installed(home), false);
+        assert_eq!(get_hermes_source_path(home), None);
+        
+        // Mock installation in .local/bin (standard install script path)
+        let bin_dir = home.join(".local").join("bin");
+        fs::create_dir_all(&bin_dir).unwrap();
+        
+        let exe_name = if cfg!(windows) { "hermes.exe" } else { "hermes" };
+        let hermes_exe = bin_dir.join(exe_name);
+        fs::File::create(&hermes_exe).unwrap();
+        
+        assert_eq!(is_hermes_installed(home), true);
+        assert_eq!(get_hermes_source_path(home), Some(hermes_exe));
     }
 
     #[test]
@@ -3077,6 +3405,67 @@ mod tests {
 
         pm.unregister("hermes-dashboard");
         assert!(!pm.has_active_services());
+    }
+
+    #[test]
+    fn test_mock_update_arg_detection() {
+        let args_camel = vec!["frugallm".to_string(), "--mockUpdate".to_string()];
+        assert!(check_mock_update_arg(args_camel.into_iter()));
+
+        let args_kebab = vec!["frugallm".to_string(), "--mock-update".to_string()];
+        assert!(check_mock_update_arg(args_kebab.into_iter()));
+
+        let args_none = vec!["frugallm".to_string(), "--verbose".to_string()];
+        assert!(!check_mock_update_arg(args_none.into_iter()));
+
+        std::env::set_var("MOCK_UPDATE", "1");
+        let empty_args = vec!["frugallm".to_string()];
+        assert!(check_mock_update_arg(empty_args.into_iter()));
+        std::env::remove_var("MOCK_UPDATE");
+    }
+
+    #[test]
+    fn test_remove_path_block() {
+        let original = "export FOO=1\n# >>> FrugaLLM CLI PATH >>>\nexport PATH=\"$HOME/.local/bin:$PATH\"\n# <<< FrugaLLM CLI PATH <<<\nexport BAR=2\n";
+        let cleaned = remove_path_block(original);
+        assert_eq!(cleaned, "export FOO=1\nexport BAR=2\n");
+    }
+
+    #[test]
+    fn test_update_shell_config_idempotency() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let home = temp_dir.path();
+        let zshrc = home.join(".zshrc");
+        std::fs::write(&zshrc, "export EXISTING=1\n").unwrap();
+
+        // Enable
+        update_shell_config_path(home, true).unwrap();
+        let c1 = std::fs::read_to_string(&zshrc).unwrap();
+        assert!(c1.contains(FRUGALLM_PATH_BLOCK_START));
+        assert!(c1.contains("export EXISTING=1"));
+
+        // Enable again (idempotent)
+        update_shell_config_path(home, true).unwrap();
+        let c2 = std::fs::read_to_string(&zshrc).unwrap();
+        assert_eq!(c1, c2);
+
+        // Disable
+        update_shell_config_path(home, false).unwrap();
+        let c3 = std::fs::read_to_string(&zshrc).unwrap();
+        assert!(!c3.contains(FRUGALLM_PATH_BLOCK_START));
+        assert!(c3.contains("export EXISTING=1"));
+    }
+
+    #[test]
+    fn test_is_openrouter_free_alias() {
+        assert!(is_openrouter_free_alias("openrouter/free"));
+        assert!(is_openrouter_free_alias("openrouter:free"));
+        assert!(is_openrouter_free_alias("OpenRouter/Free"));
+        assert!(is_openrouter_free_alias("OPENROUTER:FREE"));
+        assert!(is_openrouter_free_alias("  openrouter/free  "));
+        assert!(!is_openrouter_free_alias("openrouter/auto"));
+        assert!(!is_openrouter_free_alias("google/gemma-4-31b-it:free"));
+        assert!(!is_openrouter_free_alias("meta-llama/llama-3.3-70b-instruct:free"));
     }
 }
 

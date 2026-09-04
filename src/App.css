@@ -162,3 +162,66 @@ button {
   background-color: var(--zen-text-secondary) !important;
   color: var(--zen-surface) !important;
 }
+
+/* Unified Call to Action (CTA) button classes */
+.btn-cta {
+  cursor: pointer;
+  user-select: none;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+  outline: none;
+}
+
+.btn-cta:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.btn-cta-primary {
+  background-color: var(--zen-accent);
+  color: #FFFFFF;
+  border: 1px solid transparent;
+}
+
+.btn-cta-primary:hover:not(:disabled) {
+  background-color: var(--zen-accent-hover);
+  box-shadow: 0 4px 14px rgba(79, 191, 103, 0.3);
+}
+
+.btn-cta-secondary {
+  background-color: var(--zen-surface-hover);
+  color: var(--zen-text);
+  border: 1px solid var(--zen-border);
+}
+
+.btn-cta-secondary:hover:not(:disabled) {
+  background-color: var(--zen-surface-secondary);
+  border-color: var(--zen-border-input);
+  color: var(--zen-text);
+}
+
+.btn-cta-danger {
+  background-color: #EF4444;
+  color: #FFFFFF;
+  border: 1px solid transparent;
+}
+
+.btn-cta-danger:hover:not(:disabled) {
+  background-color: #DC2626;
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3);
+}
+
+.btn-cta-icon {
+  background-color: transparent;
+  color: var(--zen-text-secondary);
+  border: 1px solid transparent;
+}
+
+.btn-cta-icon:hover:not(:disabled) {
+  background-color: var(--zen-surface-hover);
+  color: var(--zen-text);
+}

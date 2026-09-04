@@ -18,6 +18,17 @@ describe('ProviderIcons', () => {
     expect(screen.getByTitle('FrugaLLM')).toBeInTheDocument();
     expect(icon).toHaveAttribute('width', '14');
     expect(icon).toHaveAttribute('height', '14');
+    expect(icon).toHaveAttribute('viewBox', '55 55 402 402');
+  });
+
+  it('renders FrugaLLMIcon with custom stroke color and handles fill="none"', () => {
+    const { rerender } = render(<FrugaLLMIcon stroke="#ff0000" data-testid="frugallm-stroke-icon" />);
+    let group = screen.getByTestId('frugallm-stroke-icon').querySelector('g');
+    expect(group).toHaveAttribute('stroke', '#ff0000');
+
+    rerender(<FrugaLLMIcon fill="none" data-testid="frugallm-stroke-icon" />);
+    group = screen.getByTestId('frugallm-stroke-icon').querySelector('g');
+    expect(group).toHaveAttribute('stroke', 'currentColor');
   });
 
   it('renders OpenRouterIcon with accessible title and default size', () => {

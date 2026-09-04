@@ -5,6 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import en from '../locales/en.json';
 import { getProviderIcon } from './icons/ProviderIcons';
+import { isOpenRouterFreeAlias } from '../router';
 
 export interface CloudModel {
   model: string;
@@ -35,7 +36,7 @@ export const CloudRoutingPanel = ({ overrides: propOverrides, onOverridesChange 
         setInternalOverrides(configRes?.manual_model_overrides || []);
       }
       const res: any = await invoke('refresh_routing_chain');
-      const filteredRes = (res || []).filter((m: CloudModel) => !m?.model?.includes('computer-use'));
+      const filteredRes = (res || []).filter((m: CloudModel) => !m?.model?.includes('computer-use') && !isOpenRouterFreeAlias(m?.model));
       setChain(filteredRes);
     } catch (err) {
       console.error('Failed to refresh routing chain:', err);
@@ -62,7 +63,7 @@ export const CloudRoutingPanel = ({ overrides: propOverrides, onOverridesChange 
         }
         const cRes: any = await invoke('get_routing_chain');
         if (Array.isArray(cRes) && cRes.length > 0) {
-          const filteredCRes = cRes.filter((m: CloudModel) => !m?.model?.includes('computer-use'));
+          const filteredCRes = cRes.filter((m: CloudModel) => !m?.model?.includes('computer-use') && !isOpenRouterFreeAlias(m?.model));
           setChain(filteredCRes);
         }
         refreshChain();
@@ -148,6 +149,7 @@ export const CloudRoutingPanel = ({ overrides: propOverrides, onOverridesChange 
           {t?.title || 'GLOBAL ROUTING POOL'}
         </div>
         <button 
+          className="btn-cta btn-cta-secondary"
           onClick={refreshChain} 
           disabled={loading}
           style={{ 
@@ -278,6 +280,7 @@ export const CloudRoutingPanel = ({ overrides: propOverrides, onOverridesChange 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 {isPinned && (
                   <button 
+                    className="btn-cta btn-cta-secondary"
                     onClick={(e) => unpinModel(e, item.model)}
                     title={t?.resetRankTitle || "Reset Rank (Drop to Dynamic)"}
                     style={{ 
@@ -286,17 +289,10 @@ export const CloudRoutingPanel = ({ overrides: propOverrides, onOverridesChange 
                       gap: '4px',
                       fontSize: '0.68rem', 
                       fontWeight: 500, 
-                      color: 'var(--zen-text)', 
-                      backgroundColor: 'var(--zen-surface-hover)', 
                       padding: '4px 10px', 
                       borderRadius: '9999px',
-                      cursor: 'pointer',
-                      border: 'none',
                       letterSpacing: '0.02em',
-                      transition: 'all 0.15s ease'
                     }}
-                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--zen-surface-secondary)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--zen-surface-hover)'; }}
                   >
                     <X size={12} color="var(--zen-text)" />
                     {t?.resetButton || "Reset"}

@@ -22,6 +22,8 @@ describe('CloudRoutingPanel Component', () => {
     { model: 'openrouter/anthropic-claude-3.5-sonnet', provider: 'openrouter', iq: 95 },
     { model: 'google/gemini-2.5-flash', provider: 'google', iq: 88 },
     { model: 'openrouter/claude-3.5-sonnet:computer-use', provider: 'openrouter', iq: 90 }, // should be filtered out
+    { model: 'openrouter/free', provider: 'openrouter', iq: 0 }, // should be filtered out
+    { model: 'openrouter:free', provider: 'openrouter', iq: 0 }, // should be filtered out
   ];
 
   beforeEach(() => {
@@ -48,7 +50,7 @@ describe('CloudRoutingPanel Component', () => {
     });
   });
 
-  it('renders global routing pool with models, filtering out computer-use models', async () => {
+  it('renders global routing pool with models, filtering out computer-use and openrouter free alias models', async () => {
     // Arrange & Act
     render(<CloudRoutingPanel />);
 
@@ -59,8 +61,10 @@ describe('CloudRoutingPanel Component', () => {
       expect(screen.getByText('google/gemini-2.5-flash')).toBeInTheDocument();
     });
 
-    // Ensure computer-use model is filtered
+    // Ensure computer-use model and openrouter free aliases are filtered
     expect(screen.queryByText('openrouter/claude-3.5-sonnet:computer-use')).not.toBeInTheDocument();
+    expect(screen.queryByText('openrouter/free')).not.toBeInTheDocument();
+    expect(screen.queryByText('openrouter:free')).not.toBeInTheDocument();
     expect(screen.getByText('ACTIVE')).toBeInTheDocument();
   });
 

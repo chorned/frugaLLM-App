@@ -165,6 +165,7 @@ export const CopyableField = ({
           }}
         />
         <button
+          className="btn-cta btn-cta-secondary"
           onClick={(e) => {
             e.stopPropagation();
             handleCopy();
@@ -536,7 +537,7 @@ export const HardwareNode = ({
 
       {showPanel && createPortal(
         <div 
-          style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.3)', backdropFilter: 'blur(8px)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'default' }} 
+          style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.3)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'default' }} 
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => { e.stopPropagation(); setShowPanel(false); }}
         >
@@ -550,7 +551,13 @@ export const HardwareNode = ({
               <span style={{ fontWeight: 700, color: 'var(--zen-text)', fontSize: '1rem', letterSpacing: '-0.01em' }}>
                 {en.routingGraph.hardwareTelemetryWidget.title}
               </span>
-              <button onClick={() => setShowPanel(false)} style={{ background: 'none', border: 'none', color: 'var(--zen-text-secondary)', cursor: 'pointer', fontWeight: 'bold', fontSize: '1.1rem', padding: '4px 8px', borderRadius: '9999px' }}>✕</button>
+              <button 
+                className="btn-cta btn-cta-icon"
+                onClick={() => setShowPanel(false)} 
+                style={{ background: 'none', border: 'none', color: 'var(--zen-text-secondary)', fontWeight: 'bold', fontSize: '1.1rem', padding: '4px 8px', borderRadius: '9999px' }}
+              >
+                ✕
+              </button>
             </div>
 
             {/* Average Throughput Metric Card */}

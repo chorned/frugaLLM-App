@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fetchFreeOpenRouterModels } from '../router';
+import { fetchFreeOpenRouterModels, isOpenRouterFreeAlias } from '../router';
 
 describe('router module', () => {
   const originalFetch = globalThis.fetch;
@@ -10,6 +10,24 @@ describe('router module', () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+  });
+
+  describe('isOpenRouterFreeAlias', () => {
+    it('returns true for openrouter:free and openrouter/free aliases in any casing or whitespace', () => {
+      expect(isOpenRouterFreeAlias('openrouter/free')).toBe(true);
+      expect(isOpenRouterFreeAlias('openrouter:free')).toBe(true);
+      expect(isOpenRouterFreeAlias('OpenRouter/Free')).toBe(true);
+      expect(isOpenRouterFreeAlias('OPENROUTER:FREE')).toBe(true);
+      expect(isOpenRouterFreeAlias('  openrouter/free  ')).toBe(true);
+    });
+
+    it('returns false for non-alias model IDs, empty strings, and undefined', () => {
+      expect(isOpenRouterFreeAlias('google/gemma-4-31b-it:free')).toBe(false);
+      expect(isOpenRouterFreeAlias('openrouter/auto')).toBe(false);
+      expect(isOpenRouterFreeAlias('meta-llama/llama-3.3-70b-instruct:free')).toBe(false);
+      expect(isOpenRouterFreeAlias('')).toBe(false);
+      expect(isOpenRouterFreeAlias(undefined)).toBe(false);
+    });
   });
 
   it('sends Authorization header when apiKey is valid (> 5 characters)', async () => {
@@ -80,6 +98,20 @@ describe('router module', () => {
         pricing: { prompt: '0', completion: '0.0005' },
         context_length: 32000,
         created: 100,
+      },
+      {
+        id: 'openrouter/free',
+        supported_parameters: ['tools'],
+        pricing: { prompt: '0', completion: '0' },
+        context_length: 200000,
+        created: 200,
+      },
+      {
+        id: 'openrouter:free',
+        supported_parameters: ['tools'],
+        pricing: { prompt: '0', completion: '0' },
+        context_length: 200000,
+        created: 200,
       },
     ];
 

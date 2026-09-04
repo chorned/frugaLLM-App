@@ -1,3 +1,13 @@
+/**
+ * Checks whether a given model identifier is an OpenRouter free router model alias
+ * (e.g. 'openrouter/free' or 'openrouter:free') that should be hidden from model lists.
+ */
+export function isOpenRouterFreeAlias(id?: string): boolean {
+  if (!id) return false;
+  const lower = id.toLowerCase().trim();
+  return lower === 'openrouter/free' || lower === 'openrouter:free';
+}
+
 export async function fetchFreeOpenRouterModels(apiKey?: string): Promise<string[]> {
   try {
     const headers: Record<string, string> = {};
@@ -15,6 +25,9 @@ export async function fetchFreeOpenRouterModels(apiKey?: string): Promise<string
     const models = data.data || [];
     
     const freeModels = models.filter((m: any) => {
+      // Hide the openrouter:free / openrouter/free router model alias
+      if (isOpenRouterFreeAlias(m?.id)) return false;
+
       // Must support tools for our gatekeeper
       const params = m.supported_parameters || [];
       if (!params.includes("tools")) return false;

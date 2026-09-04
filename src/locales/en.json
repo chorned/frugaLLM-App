@@ -82,6 +82,11 @@
         "startMinimized": {
           "label": "Start Minimized"
         },
+        "globalCli": {
+          "label": "Register CLI commands in system terminal",
+          "helpText": "Allows calling hermes, opencode, and ollama directly from any terminal window.",
+          "tooltip": "Creates shell PATH links for Hermes, OpenCode, and Ollama so you can call them from your external terminal without opening FrugaLLM."
+        },
         "apiPassword": {
           "label": "API PASSWORD",
           "checkboxLabel": "Require API Password",
@@ -325,6 +330,16 @@
     "guides": "Quickstart Guides",
     "privacy": "Privacy & Telemetry",
     "status": "System Ready"
+  },
+  "updateNotification": {
+    "updateAvailable": "Update Available: FrugaLLM v{{latestVersion}} is out (you have v{{currentVersion}}).",
+    "badgeText": "Update v{{latestVersion}} available",
+    "viewRelease": "View Release",
+    "dismiss": "Dismiss"
+  },
+  "bootScreen": {
+    "title": "Starting FrugaLLM...",
+    "logoAlt": "FrugaLLM Logo"
   }
 }
 

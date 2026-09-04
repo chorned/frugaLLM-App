@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { isEnabled as isAutostartEnabled, enable as enableAutostart, disable as disableAutostart } from '@tauri-apps/plugin-autostart';
 import { Store } from '@tauri-apps/plugin-store';
+import { invoke } from '@tauri-apps/api/core';
 import en from '../locales/en.json';
+import { Tooltip } from './Tooltip';
 
 export interface SettingsProps {
   startOnLogin?: boolean;
   onStartOnLoginChange?: (enabled: boolean) => void;
   startMinimized?: boolean;
   onStartMinimizedChange?: (minimized: boolean) => void;
+  globalCliEnabled?: boolean;
+  onGlobalCliEnabledChange?: (enabled: boolean) => void;
 }
 
 export const Settings: React.FC<SettingsProps> = ({
@@ -15,9 +19,12 @@ export const Settings: React.FC<SettingsProps> = ({
   onStartOnLoginChange,
   startMinimized,
   onStartMinimizedChange,
+  globalCliEnabled,
+  onGlobalCliEnabledChange,
 }) => {
   const [localStartOnLogin, setLocalStartOnLogin] = useState<boolean>(startOnLogin ?? false);
   const [localStartMinimized, setLocalStartMinimized] = useState<boolean>(startMinimized ?? false);
+  const [localGlobalCli, setLocalGlobalCli] = useState<boolean>(globalCliEnabled ?? false);
   const [isSyncing, setIsSyncing] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -44,6 +51,23 @@ export const Settings: React.FC<SettingsProps> = ({
         }
       } catch (err) {
         console.warn('Could not read start_minimized from store:', err);
+      }
+
+      try {
+        const store = await Store.load('store.json');
+        const storeCli = await store.get<boolean>('global_cli_enabled');
+        if (storeCli !== null && storeCli !== undefined && isMounted) {
+          setLocalGlobalCli(Boolean(storeCli));
+          onGlobalCliEnabledChange?.(Boolean(storeCli));
+        } else {
+          const backendCli = await invoke<boolean>('get_global_cli_commands_status').catch(() => false);
+          if (isMounted && backendCli !== undefined) {
+            setLocalGlobalCli(Boolean(backendCli));
+            onGlobalCliEnabledChange?.(Boolean(backendCli));
+          }
+        }
+      } catch (err) {
+        console.warn('Could not read global_cli_enabled:', err);
       } finally {
         if (isMounted) {
           setIsSyncing(false);
@@ -69,6 +93,12 @@ export const Settings: React.FC<SettingsProps> = ({
       setLocalStartMinimized(startMinimized);
     }
   }, [startMinimized]);
+
+  useEffect(() => {
+    if (globalCliEnabled !== undefined) {
+      setLocalGlobalCli(globalCliEnabled);
+    }
+  }, [globalCliEnabled]);
 
   const handleToggleAutostart = async (checked: boolean) => {
     setLocalStartOnLogin(checked);
@@ -100,6 +130,22 @@ export const Settings: React.FC<SettingsProps> = ({
       await store.save();
     } catch (err) {
       console.warn('Failed to persist start_minimized:', err);
+    }
+  };
+
+  const handleToggleGlobalCli = async (checked: boolean) => {
+    setLocalGlobalCli(checked);
+    setErrorMessage(null);
+    try {
+      await invoke('set_global_cli_commands', { enabled: checked });
+      const store = await Store.load('store.json');
+      await store.set('global_cli_enabled', checked);
+      await store.save();
+      onGlobalCliEnabledChange?.(checked);
+    } catch (err: any) {
+      console.error('Failed to toggle global CLI:', err);
+      setErrorMessage(String(err));
+      setLocalGlobalCli(!checked);
     }
   };
 
@@ -172,6 +218,39 @@ export const Settings: React.FC<SettingsProps> = ({
         </label>
       </div>
 
+      {/* Global CLI Commands Toggle with Hover Tooltip ( i ) */}
+      <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            cursor: 'pointer',
+            fontSize: '0.8rem',
+            fontWeight: 500,
+            color: 'var(--zen-text)',
+          }}
+        >
+          <input
+            type="checkbox"
+            name="global_cli"
+            data-testid="checkbox-global-cli"
+            aria-label={strings.globalCli.label}
+            checked={localGlobalCli}
+            disabled={isSyncing}
+            onChange={(e) => handleToggleGlobalCli(e.target.checked)}
+            style={{ borderRadius: '4px', cursor: 'pointer' }}
+          />
+          <span>{strings.globalCli.label}</span>
+          <Tooltip 
+            text={strings.globalCli.tooltip}
+            triggerTestId="btn-global-cli-info"
+            testId="global-cli-tooltip-box"
+            ariaLabel="Info about global CLI commands"
+          />
+        </label>
+      </div>
+
       {errorMessage && (
         <div
           data-testid="settings-error-message"
@@ -192,4 +271,5 @@ export const Settings: React.FC<SettingsProps> = ({
 };
 
 export default Settings;
+
 

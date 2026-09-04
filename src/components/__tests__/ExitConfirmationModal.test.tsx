@@ -70,4 +70,21 @@ describe('ExitConfirmationModal Component', () => {
     fireEvent.click(screen.getByTestId('exit-confirm-button'));
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
+
+  it('applies theme-aware styles with CSS variables for dark and light mode support', () => {
+    render(
+      <ExitConfirmationModal
+        isOpen={true}
+        onCancel={() => {}}
+        onConfirm={() => {}}
+        activeServices={['Hermes Gateway']}
+      />
+    );
+
+    const modalDialog = screen.getByRole('dialog');
+    const card = modalDialog.firstElementChild as HTMLElement;
+    expect(card).toBeInTheDocument();
+    expect(card.style.backgroundColor).toBe('var(--zen-surface)');
+    expect(card.style.border).toContain('var(--zen-border)');
+  });
 });
