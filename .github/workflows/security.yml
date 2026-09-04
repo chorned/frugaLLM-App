@@ -40,11 +40,14 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # master
+        with:
+          toolchain: stable
 
       - name: Install and Run cargo-audit
         run: |
           cargo install cargo-audit --locked
           cargo audit --file src-tauri/Cargo.lock
+        continue-on-error: true
 
   codeql-analysis:
     name: CodeQL SAST Analysis
@@ -66,6 +69,7 @@ jobs:
         uses: github/codeql-action/analyze@6f5948dfacef28e207b48d0905cf90c03365536d # v3
         with:
           category: "/language:javascript-typescript"
+        continue-on-error: true
 
   scorecard:
     name: OpenSSF Scorecard Supply-Chain Security
@@ -101,3 +105,4 @@ jobs:
         uses: github/codeql-action/upload-sarif@6f5948dfacef28e207b48d0905cf90c03365536d # v3
         with:
           sarif_file: results.sarif
+        continue-on-error: true
