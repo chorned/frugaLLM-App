@@ -14,18 +14,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@1e60f620b9541d16bce96c5465dc8ee9832be0b2 # v4.2.0
+        uses: actions/setup-node@v4
         with:
           node-version: '24'
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@3f241a457478e5814da570231a3745f14b624404 # stable
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust dependencies
-        uses: swatinem/rust-cache@400e7407cfd7a091e5fbb6afec01ec146c432b7c # v2.7.7
+        uses: swatinem/rust-cache@v2
 
       # CRITICAL: Cargo test requires Tauri's C-bindings on Linux
       - name: Install Ubuntu Dependencies
@@ -52,7 +52,7 @@ jobs:
         run: npx playwright test
 
       - name: Upload Playwright report
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb99ba841f # v4.6.1
+        uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: playwright-report
