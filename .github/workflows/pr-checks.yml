@@ -25,7 +25,7 @@ jobs:
         uses: dtolnay/rust-toolchain@3f241a457478e5814da570231a3745f14b624404 # stable
 
       - name: Cache Rust dependencies
-        uses: swatinem/rust-cache@400e7407cfd7a091e5fbb6afec01ec146c432b7c # v2.7.7
+        uses: swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2.7.7
 
       # CRITICAL: Cargo test requires Tauri's C-bindings on Linux
       - name: Install Ubuntu Dependencies
