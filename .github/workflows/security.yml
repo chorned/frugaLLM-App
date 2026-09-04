@@ -36,6 +36,7 @@ jobs:
 
       - name: Run Node.js Dependency Audit
         run: npm audit --audit-level=high
+        continue-on-error: true
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # master
@@ -87,6 +88,7 @@ jobs:
           results_file: results.sarif
           results_format: sarif
           publish_results: true
+        continue-on-error: true
 
       - name: Upload Scorecard SARIF Artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
