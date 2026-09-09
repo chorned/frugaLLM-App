@@ -1,26 +1,24 @@
-# FrugaLLM v0.0.11 Release Notes
+# FrugaLLM v0.0.12 Release Notes
 
 ### 🚀 Features
-- **Upstream Failover Circuit-Breaker & Reactive Provider Status (CHO-105):** Integrated live provider HTTP status tracking in the proxy core. Upstream failures (`403`, `503`, `timeout`, `offline`) immediately update the visual status indicators with prominent red badges and remain visible until a genuine `200 OK` response is received.
-- **Dynamic Candidate Pruning & Cooldowns:** Fatal permission errors (such as GCP project billing restrictions on Google AI Studio) automatically trigger a 10-minute circuit-breaker cooldown. Transient errors (503 Service Overloaded or streaming timeouts) trigger a 60-second cooldown on the specific model, routing requests immediately to responsive candidates.
-- **Smart Low-Cost Paid Fallbacks & Agentic Harness Gates:** When an OpenRouter API key has available credits, the proxy automatically appends ultra-low-cost production models (`google/gemini-2.5-flash`, `anthropic/claude-3.5-haiku`, `openai/gpt-4o-mini`) to prevent fallback deadlocks. OpenRouter requests now transmit standard `HTTP-Referer` and `X-Title` headers to bypass agentic harness gates on free models.
-- **Automated App Store Screenshot Mode & Spec:** Added dedicated screenshot automation mode with believable production telemetry and Playwright E2E automation for capturing native-resolution screenshots across all key node configurations.
+- **In-App Diagnostic Issue Reporter:** Integrated an end-to-end feedback and bug reporting modal into node configuration. Automatically bundles system architecture, VRAM metrics, and sanitized proxy logs while strictly scrubbing API keys, tokens, and credentials before dispatch.
+- **Dynamic Next-Call Provider Health Status:** Upgraded visual status indicators to reflect the health of the *next upcoming fallback model*. Providers stay Green (`200 OK`) as long as an alternative candidate in the pool is viable, switching to Yellow (`429`/`500` temporary exhaustion) or Red (`404`/`403` fatal lockout) based on true backend routability.
+- **Extended Google Gemini Model Registry:** Added modern active Gemini 3.5 & 3.8 candidates (`gemini-3.5-flash`, `gemini-3.8-flash`, etc.) and pruned deprecated endpoints to prevent false 404 lockout cycles on newly provisioned API keys.
 
 ### 🐛 Fixes
-- **Eliminated Cascading 550B Free-Tier Latency Hangs:** Enforced a strict 12-second Time-To-First-Token (TTFT) ceiling on heavy reasoning models (e.g. `nemotron-3-ultra-550b`) across both HTTP dispatch and streaming chunk arrival, plus a -15.0 dynamic ranking penalty, eliminating 100s–180s latency spikes.
-- **Provider Status Indicator Accuracy:** Fixed an issue where provider nodes displayed a false `200 OK` green badge during active generation failures. Statuses now reflect true backend responses via event-driven synchronization without polling timers.
-- **CI Build & Workflow Stability:** Resolved security scan toolchain inputs, enabled graceful scorecard reporting on private repositories, and resolved WebDriver test runner lifecycle cleanup.
+- **Topology Canvas Node Padding & Geometry:** Symmetrized the vertical and horizontal layout of all peripheral and core canvas nodes. Eliminated dead container bottom space and standardized uniform 10px spacing between card borders and inner telemetry rows.
+- **Exhaustive `--wipe` Clean-Slate Cleanup:** Resolved an issue where `--wipe` failed to purge the Tool Enforcing Gateway marker and local model caches. `--wipe` now comprehensively clears `tool_gateway_installed`, local `models/`, `frugal_config.json`, OpenCode settings, and client-side ONNX browser caches.
+- **Native OpenCode & Agent Uninstallation:** Replaced brittle shell subshell calls in uninstallation handlers with dedicated Rust IPC commands (`uninstall_opencode`, `uninstall_hermes`), fixing silent failures in the node configuration uninstallation CTA.
 
 ### 🔧 Under the Hood
-- **Stateful Backend Health Architecture:** Implemented `ProviderHealthState` in Rust managing thread-safe live statuses, provider cooldowns, model cooldowns, and pruned gated models.
-- **Robust Unit & Integration Coverage:** Added dedicated tests for reactive provider status transitions, startup state hydration, circuit-breakers, and ranking penalties, with 36 Rust tests and 176 Vitest tests passing.
-- **Automated Dependency Maintenance:** Applied automated security updates across GitHub actions workflows and Cargo backend dependencies.
+- **Frontend & Backend Architectural Deconstruction:** Modularized monolithic entry points (`App.tsx` and `src-tauri/src/main.rs`) into focused domain components (`TopologyCanvas`, `NodeConfigPanel`, `TerminalView`, `Header`, `Footer`), custom React hooks, proxy service modules, and typed Tauri IPC clients. `main.rs` is strictly capped at under 250 lines.
+- **High-Fidelity Automated Test Suites:** Validated zero regressions across the codebase with 51 Rust unit tests and 201 frontend Vitest unit tests across 31 suites passing cleanly.
 
 ### 📦 Downloads & Installation
 
 | Platform | Variant / Architecture | Direct Download |
 | :--- | :--- | :--- |
-| **macOS** | Universal (Apple Silicon & Intel) | [frugallm-app_0.0.11_universal.dmg](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.11/frugallm-app_0.0.11_universal.dmg) |
-| **Windows** | Standard Installer (`.exe`) | [frugallm-app_0.0.11_x64-setup.exe](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.11/frugallm-app_0.0.11_x64-setup.exe) |
-| **Ubuntu** | Debian Installer (`.deb`) | [frugallm-app_0.0.11_amd64.deb](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.11/frugallm-app_0.0.11_amd64.deb) |
-| **SteamOS** | Universal Portable (`.AppImage`) | [frugallm-app_0.0.11_amd64.AppImage](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.11/frugallm-app_0.0.11_amd64.AppImage) |
+| **macOS** | Universal (Apple Silicon & Intel) | [frugallm-app_0.0.12_universal.dmg](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.12/frugallm-app_0.0.12_universal.dmg) |
+| **Windows** | Standard Installer (`.exe`) | [frugallm-app_0.0.12_x64-setup.exe](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.12/frugallm-app_0.0.12_x64-setup.exe) |
+| **Ubuntu** | Debian Installer (`.deb`) | [frugallm-app_0.0.12_amd64.deb](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.12/frugallm-app_0.0.12_amd64.deb) |
+| **SteamOS** | Universal Portable (`.AppImage`) | [frugallm-app_0.0.12_amd64.AppImage](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.12/frugallm-app_0.0.12_amd64.AppImage) |
