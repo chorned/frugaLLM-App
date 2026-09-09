@@ -40,3 +40,15 @@ junit-report.xml
 
 # Secrets
 .env
+.env*.local
+.env.*.local
+
+# Scratch and Temporary Artifacts
+scratch*
+scratch_trace/
+output*.json
+stdout.txt
+stderr.txt
+update_app_init*.py
+src-tauri/test_child.rs
+*.code-workspace
