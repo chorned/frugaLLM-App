@@ -1,10 +1,10 @@
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 #[derive(Serialize, Deserialize)]
 struct ModelScore {
@@ -26,23 +26,33 @@ fn main() {
                 .build()
                 .unwrap();
 
-            if let Ok(resp) = client.get("https://openrouter.ai/api/v1/benchmarks?task_type=intelligence")
+            if let Ok(resp) = client
+                .get("https://openrouter.ai/api/v1/benchmarks?task_type=intelligence")
                 .header("Authorization", format!("Bearer {}", api_key))
-                .send() {
+                .send()
+            {
                 if let Ok(json) = resp.json::<Value>() {
                     if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
                         let mut temp_scores: HashMap<String, Vec<f32>> = HashMap::new();
 
                         for item in data {
-                            if let Some(slug) = item.get("model_permaslug").and_then(|s| s.as_str()) {
-                                if let Some(ii) = item.get("intelligence_index").and_then(|v| v.as_f64()) {
-                                    temp_scores.entry(slug.to_string()).or_default().push(ii as f32);
+                            if let Some(slug) = item.get("model_permaslug").and_then(|s| s.as_str())
+                            {
+                                if let Some(ii) =
+                                    item.get("intelligence_index").and_then(|v| v.as_f64())
+                                {
+                                    temp_scores
+                                        .entry(slug.to_string())
+                                        .or_default()
+                                        .push(ii as f32);
                                 }
                             }
                         }
 
                         for (slug, vals) in temp_scores {
-                            if vals.is_empty() { continue; }
+                            if vals.is_empty() {
+                                continue;
+                            }
                             let avg = vals.iter().sum::<f32>() / (vals.len() as f32);
                             if avg >= 30.0 {
                                 scores.insert(slug, ModelScore { score: avg });

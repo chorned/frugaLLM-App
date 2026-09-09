@@ -2,7 +2,6 @@ import React from 'react';
 import {
   killPty,
   stopHermesService,
-  spawnPty,
   uninstallOllama,
   uninstallOpenCode,
   uninstallHermes,

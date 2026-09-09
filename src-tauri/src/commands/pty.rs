@@ -1,8 +1,7 @@
-use std::sync::Arc;
-use tauri::{Manager, State, Emitter};
-use crate::state::*;
 use crate::proxy::ChildProcessManager;
-
+use crate::state::*;
+use std::sync::Arc;
+use tauri::{Emitter, Manager, State};
 
 #[tauri::command]
 pub fn spawn_pty(
@@ -19,12 +18,14 @@ pub fn spawn_pty(
     use std::io::Read;
 
     let pty_system = NativePtySystem::default();
-    let pair = pty_system.openpty(PtySize {
-        rows: rows.unwrap_or(24),
-        cols: cols.unwrap_or(80),
-        pixel_width: 0,
-        pixel_height: 0,
-    }).map_err(|e| e.to_string())?;
+    let pair = pty_system
+        .openpty(PtySize {
+            rows: rows.unwrap_or(24),
+            cols: cols.unwrap_or(80),
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(|e| e.to_string())?;
 
     let mut cmd = if let Some(c) = command {
         CommandBuilder::new(c)
@@ -70,7 +71,7 @@ pub fn spawn_pty(
     if let Some(a) = args {
         cmd.args(&a);
     }
-    
+
     let mut child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
     drop(pair.slave);
 
@@ -80,11 +81,11 @@ pub fn spawn_pty(
 
     let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
-    
+
     if let Ok(mut state_writer) = state.writer.lock() {
         state_writer.insert(session_id.clone(), writer);
     }
-    
+
     if let Ok(mut state_master) = state.master.lock() {
         state_master.insert(session_id.clone(), pair.master);
     }
@@ -101,21 +102,35 @@ pub fn spawn_pty(
                 session_id: String,
                 exit_code: u32,
             }
-            let _ = app_clone.emit("pty_exit", ExitPayload { session_id: session_id_clone, exit_code });
+            let _ = app_clone.emit(
+                "pty_exit",
+                ExitPayload {
+                    session_id: session_id_clone,
+                    exit_code,
+                },
+            );
         }
     });
 
     std::thread::spawn(move || {
         let mut buf = [0u8; 1024];
         while let Ok(n) = reader.read(&mut buf) {
-            if n == 0 { break; }
+            if n == 0 {
+                break;
+            }
             let s = String::from_utf8_lossy(&buf[..n]);
             #[derive(serde::Serialize, Clone)]
             struct OutputPayload {
                 session_id: String,
                 data: String,
             }
-            let _ = app.emit("pty_output", OutputPayload { session_id: session_id.clone(), data: s.into_owned() });
+            let _ = app.emit(
+                "pty_output",
+                OutputPayload {
+                    session_id: session_id.clone(),
+                    data: s.into_owned(),
+                },
+            );
         }
     });
 
@@ -123,10 +138,16 @@ pub fn spawn_pty(
 }
 
 #[tauri::command]
-pub fn write_pty(state: State<'_, PtyState>, session_id: String, data: String) -> Result<(), String> {
+pub fn write_pty(
+    state: State<'_, PtyState>,
+    session_id: String,
+    data: String,
+) -> Result<(), String> {
     if let Ok(mut writers) = state.writer.lock() {
         if let Some(writer) = writers.get_mut(&session_id) {
-            writer.write_all(data.as_bytes()).map_err(|e| e.to_string())?;
+            writer
+                .write_all(data.as_bytes())
+                .map_err(|e| e.to_string())?;
             writer.flush().map_err(|e| e.to_string())?;
         }
     }
@@ -137,7 +158,7 @@ pub fn write_pty(state: State<'_, PtyState>, session_id: String, data: String) -
 pub fn kill_pty(
     state: State<'_, PtyState>,
     process_state: State<'_, Arc<ChildProcessManager>>,
-    session_id: String
+    session_id: String,
 ) -> Result<(), String> {
     if let Ok(mut writers) = state.writer.lock() {
         writers.remove(&session_id);
@@ -150,18 +171,23 @@ pub fn kill_pty(
 }
 
 #[tauri::command]
-pub fn resize_pty(state: State<'_, PtyState>, session_id: String, rows: u16, cols: u16) -> Result<(), String> {
+pub fn resize_pty(
+    state: State<'_, PtyState>,
+    session_id: String,
+    rows: u16,
+    cols: u16,
+) -> Result<(), String> {
     if let Ok(mut masters) = state.master.lock() {
         if let Some(master) = masters.get_mut(&session_id) {
-            master.resize(portable_pty::PtySize {
-                rows,
-                cols,
-                pixel_width: 0,
-                pixel_height: 0,
-            }).map_err(|e| e.to_string())?;
+            master
+                .resize(portable_pty::PtySize {
+                    rows,
+                    cols,
+                    pixel_width: 0,
+                    pixel_height: 0,
+                })
+                .map_err(|e| e.to_string())?;
         }
     }
     Ok(())
 }
-
-

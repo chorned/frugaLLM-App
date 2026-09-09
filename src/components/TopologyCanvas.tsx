@@ -1,5 +1,5 @@
 import React from 'react';
-import { AppNode, Icons, NODE_WIDTH, NODE_HEIGHTS, PERIPHERAL_NODE_HEIGHT } from '../constants/canvas';
+import { AppNode, Icons, NODE_WIDTH } from '../constants/canvas';
 import { HardwareNode, InfoField, StatusLight } from './NodeWidgets';
 import { OllamaIcon, getProviderIcon } from './icons/ProviderIcons';
 import { PortConflictBanner } from './PortConflictBanner';
@@ -102,7 +102,6 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   const renderNode = (node: AppNode) => {
     const isSelected = selectedNodeId === node.id;
     const isCore = node.id === 'node-frugallm';
-    const nodeH = (isCore && portConflict) ? 176 : (NODE_HEIGHTS[node.id] || PERIPHERAL_NODE_HEIGHT);
 
     let stateColors = {
       border: isCore && portConflict ? '#ef4444' : 'transparent',

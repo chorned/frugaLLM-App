@@ -1,13 +1,13 @@
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tokio::time::{sleep, Duration};
-use reqwest::Client;
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct HardwareProfile {
     pub is_unified: bool,
-    pub dedicated_vram: u64, // bytes (0 on Apple Silicon unified)
-    pub system_ram: u64,     // bytes
+    pub dedicated_vram: u64,    // bytes (0 on Apple Silicon unified)
+    pub system_ram: u64,        // bytes
     pub execution_ceiling: u64, // bytes (unified available or dedicated_vram)
     pub os_architecture: String,
 }
@@ -78,11 +78,12 @@ pub fn compute_memory_segments(
     let is_live = ollama.status == "active" && ollama.total_size > 0;
     let phase = if is_live { "live" } else { "preflight" };
 
-    let effective_tag = if is_live && !ollama.model_name.is_empty() && ollama.model_name != "Unknown" {
-        ollama.model_name.as_str()
-    } else {
-        target_model_tag
-    };
+    let effective_tag =
+        if is_live && !ollama.model_name.is_empty() && ollama.model_name != "Unknown" {
+            ollama.model_name.as_str()
+        } else {
+            target_model_tag
+        };
 
     // Pre-flight weights & 128k Q8 context based on Gemma 4 5:1 interleaved architecture
     let (preflight_weights, preflight_context_128k) = match effective_tag {
@@ -115,7 +116,9 @@ pub fn compute_memory_segments(
     };
 
     let context_128k_bytes = preflight_context_128k;
-    let total_projected_bytes = weights_bytes.saturating_add(context_128k_bytes).saturating_add(overhead_bytes);
+    let total_projected_bytes = weights_bytes
+        .saturating_add(context_128k_bytes)
+        .saturating_add(overhead_bytes);
 
     let mut spillover_bytes: u64 = 0;
     let mut spillover_type = "none".to_string();
@@ -194,7 +197,7 @@ pub fn start_telemetry_loop(app: AppHandle) {
             .timeout(Duration::from_millis(1500))
             .build()
             .unwrap_or_default();
-            
+
         #[cfg(not(target_os = "macos"))]
         let mut nvml = nvml_wrapper::Nvml::init().ok();
 
@@ -209,7 +212,7 @@ pub fn start_telemetry_loop(app: AppHandle) {
         loop {
             // Hardware polling (every 1 second)
             let mut hw_state = HardwareState::default();
-            
+
             sys.refresh_cpu_usage();
             hw_state.cpu_utilization = sys.global_cpu_usage() as f64;
             hw_state.vram_total = profile.execution_ceiling;
@@ -238,30 +241,40 @@ pub fn start_telemetry_loop(app: AppHandle) {
             // Ollama polling (every 2 seconds)
             if tick_counter % 2 == 0 {
                 let mut new_ollama_state = OllamaState::default();
-                
+
                 if let Ok(resp) = client.get("http://127.0.0.1:11434/api/ps").send().await {
                     if let Ok(json) = resp.json::<serde_json::Value>().await {
                         new_ollama_state.status = "idle".into();
                         if let Some(models) = json.get("models").and_then(|m| m.as_array()) {
                             // Find the first model that isn't the proxy dummy model
-                            let active_model = models.iter().find(|m| {
-                                let name = m.get("name").and_then(|n| n.as_str()).unwrap_or("");
-                                !name.contains("frugallm-active")
-                            }).or_else(|| models.first());
+                            let active_model = models
+                                .iter()
+                                .find(|m| {
+                                    let name = m.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                                    !name.contains("frugallm-active")
+                                })
+                                .or_else(|| models.first());
 
                             if let Some(model) = active_model {
                                 new_ollama_state.status = "active".into();
-                                let raw_name = model.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown");
+                                let raw_name = model
+                                    .get("name")
+                                    .and_then(|n| n.as_str())
+                                    .unwrap_or("Unknown");
                                 let clean_name = if raw_name.contains("frugallm-active") {
                                     "gemma4".to_string()
                                 } else {
-                                    raw_name.trim_start_matches("library/").trim_end_matches(":latest").to_string()
+                                    raw_name
+                                        .trim_start_matches("library/")
+                                        .trim_end_matches(":latest")
+                                        .to_string()
                                 };
                                 new_ollama_state.model_name = clean_name;
-                                
+
                                 let size = model.get("size").and_then(|s| s.as_u64()).unwrap_or(0);
-                                let size_vram = model.get("size_vram").and_then(|s| s.as_u64()).unwrap_or(0);
-                                
+                                let size_vram =
+                                    model.get("size_vram").and_then(|s| s.as_u64()).unwrap_or(0);
+
                                 new_ollama_state.total_size = size;
                                 new_ollama_state.vram_size = size_vram;
 
@@ -271,7 +284,8 @@ pub fn start_telemetry_loop(app: AppHandle) {
                                     new_ollama_state.location_state = "gpu".into();
                                 } else if size_vram > 0 && size_vram < size {
                                     new_ollama_state.location_state = "hybrid".into();
-                                    new_ollama_state.hybrid_percent = (size_vram as f64 / size as f64) * 100.0;
+                                    new_ollama_state.hybrid_percent =
+                                        (size_vram as f64 / size as f64) * 100.0;
                                 } else {
                                     new_ollama_state.location_state = "cpu".into();
                                 }
@@ -283,7 +297,7 @@ pub fn start_telemetry_loop(app: AppHandle) {
                 } else {
                     new_ollama_state.status = "offline".into();
                 }
-                
+
                 last_ollama_state = new_ollama_state;
             }
 
@@ -293,7 +307,8 @@ pub fn start_telemetry_loop(app: AppHandle) {
             let recommended_tag = {
                 let mut tag = "gemma4:e2b";
                 for model in crate::AVAILABLE_MODELS {
-                    let total_footprint = model.weights_gb + model.kv_cache_gb + crate::GRAPH_OVERHEAD_GB;
+                    let total_footprint =
+                        model.weights_gb + model.kv_cache_gb + crate::GRAPH_OVERHEAD_GB;
                     if total_footprint <= vram_gb {
                         tag = model.tag;
                         break;
@@ -397,4 +412,3 @@ mod tests {
         assert!(segments.warning_message.contains("Unified Memory"));
     }
 }
-

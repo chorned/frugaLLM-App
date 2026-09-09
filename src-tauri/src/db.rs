@@ -1,7 +1,7 @@
+use crate::state::ProviderHealthState;
 #[cfg(not(debug_assertions))]
 use keyring::Entry;
 use tauri::Manager;
-use crate::state::ProviderHealthState;
 
 #[tauri::command]
 pub fn set_credential(app: tauri::AppHandle, service: &str, secret: &str) -> Result<(), String> {
@@ -27,13 +27,13 @@ pub fn set_credential(app: tauri::AppHandle, service: &str, secret: &str) -> Res
         } else {
             current_dir.join(".env")
         };
-        
+
         let contents = if env_path.exists() {
             std::fs::read_to_string(&env_path).unwrap_or_default()
         } else {
             String::new()
         };
-        
+
         let mut updated = false;
         let mut new_contents = String::new();
         for line in contents.lines() {
@@ -45,11 +45,11 @@ pub fn set_credential(app: tauri::AppHandle, service: &str, secret: &str) -> Res
                 new_contents.push('\n');
             }
         }
-        
+
         if !updated {
             new_contents.push_str(&format!("{}={}\n", key, secret));
         }
-        
+
         std::fs::write(&env_path, new_contents).map_err(|e| e.to_string())?;
         std::env::set_var(key, secret);
         return Ok(());
@@ -78,8 +78,15 @@ pub fn get_credential(service: &str) -> Result<String, String> {
         let env_candidates = [
             current_dir.join(".env"),
             current_dir.join("src-tauri").join(".env"),
-            current_dir.parent().unwrap_or(&std::path::PathBuf::new()).join(".env"),
-            current_dir.parent().unwrap_or(&std::path::PathBuf::new()).join("src-tauri").join(".env"),
+            current_dir
+                .parent()
+                .unwrap_or(&std::path::PathBuf::new())
+                .join(".env"),
+            current_dir
+                .parent()
+                .unwrap_or(&std::path::PathBuf::new())
+                .join("src-tauri")
+                .join(".env"),
         ];
 
         for env_path in &env_candidates {
@@ -120,8 +127,15 @@ pub fn delete_credential(service: &str) -> Result<(), String> {
         let env_candidates = [
             current_dir.join(".env"),
             current_dir.join("src-tauri").join(".env"),
-            current_dir.parent().unwrap_or(&std::path::PathBuf::new()).join(".env"),
-            current_dir.parent().unwrap_or(&std::path::PathBuf::new()).join("src-tauri").join(".env"),
+            current_dir
+                .parent()
+                .unwrap_or(&std::path::PathBuf::new())
+                .join(".env"),
+            current_dir
+                .parent()
+                .unwrap_or(&std::path::PathBuf::new())
+                .join("src-tauri")
+                .join(".env"),
         ];
 
         for env_path in &env_candidates {
@@ -182,4 +196,3 @@ pub fn wipe_credentials() -> Result<(), String> {
         return Ok(());
     }
 }
-

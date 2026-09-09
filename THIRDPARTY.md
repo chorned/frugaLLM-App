@@ -42,7 +42,6 @@ The following third-party npm packages are utilized in the FrugaLLM frontend app
 | `@csstools/css-tokenizer` | 4.0.0 | MIT | [https://github.com/csstools/postcss-plugins](https://github.com/csstools/postcss-plugins) |
 | `@esbuild/darwin-x64` | 0.28.1 | MIT | [https://github.com/evanw/esbuild](https://github.com/evanw/esbuild) |
 | `@exodus/bytes` | 1.15.1 | MIT | [https://github.com/ExodusOSS/bytes](https://github.com/ExodusOSS/bytes) |
-| `@formkit/auto-animate` | 0.10.0 | MIT | [https://github.com/formkit/auto-animate](https://github.com/formkit/auto-animate) |
 | `@huggingface/jinja` | 0.5.9 | MIT | [https://github.com/huggingface/huggingface.js](https://github.com/huggingface/huggingface.js) |
 | `@huggingface/tokenizers` | 0.1.3 | Apache-2.0 | [https://github.com/huggingface/tokenizers.js](https://github.com/huggingface/tokenizers.js) |
 | `@huggingface/transformers` | 4.2.0 | Apache-2.0 | [https://github.com/huggingface/transformers.js](https://github.com/huggingface/transformers.js) |
@@ -112,7 +111,6 @@ The following third-party npm packages are utilized in the FrugaLLM frontend app
 | `@testing-library/dom` | 10.4.1 | MIT | [https://github.com/testing-library/dom-testing-library](https://github.com/testing-library/dom-testing-library) |
 | `@testing-library/jest-dom` | 7.0.1 | MIT | [https://github.com/testing-library/jest-dom](https://github.com/testing-library/jest-dom) |
 | `@testing-library/react` | 16.3.3 | MIT | [https://github.com/testing-library/react-testing-library](https://github.com/testing-library/react-testing-library) |
-| `@testing-library/user-event` | 14.6.6 | MIT | [https://github.com/testing-library/user-event](https://github.com/testing-library/user-event) |
 | `@tootallnate/quickjs-emscripten` | 0.23.0 | MIT | [https://github.com/justjake/quickjs-emscripten](https://github.com/justjake/quickjs-emscripten) |
 | `@types/aria-query` | 5.0.4 | MIT | [https://github.com/DefinitelyTyped/DefinitelyTyped](https://github.com/DefinitelyTyped/DefinitelyTyped) |
 | `@types/babel__core` | 7.20.5 | MIT | [https://github.com/DefinitelyTyped/DefinitelyTyped](https://github.com/DefinitelyTyped/DefinitelyTyped) |

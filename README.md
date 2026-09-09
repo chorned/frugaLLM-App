@@ -47,7 +47,7 @@ The application orchestrates local model downloads via Ollama. All models downlo
 - **[nvml-wrapper](https://github.com/cmyr/nvml-wrapper)**: Powering low-level NVIDIA GPU VRAM and compute telemetry polling.
 
 ### UI Animation, Interaction & Visual Primitives
-- **[Framer Motion](https://www.framer.com/motion/)** & **[@formkit/auto-animate](https://auto-animate.formkit.com/)**: Orchestrating fluid spring physics, canvas layout transitions, and interactive node animations.
+- **[Framer Motion](https://www.framer.com/motion/)**: Orchestrating fluid spring physics, canvas layout transitions, and interactive node animations.
 - **[Tailwind CSS](https://tailwindcss.com/)** & **[Lucide Icons](https://lucide.dev/)**: Delivering our streamlined visual aesthetics, design system, and iconography.
 - **[React Markdown](https://github.com/remarkjs/react-markdown)**: Rendering rich Markdown formatting for model responses and guides.
 - **[canvas-confetti](https://github.com/catdad/canvas-confetti)**: Micro-interaction animations on successful configuration saves.

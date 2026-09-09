@@ -23,4 +23,3 @@ mod tests {
         assert_eq!(result, "Hello, Developer! You've been greeted from Rust!");
     }
 }
-
