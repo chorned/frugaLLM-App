@@ -5600,6 +5600,24 @@ mod tests {
             email: "test@frugallm.internal".to_string(),
             message: "Automated test verifying Rust dispatch to Web3Forms".to_string(),
         };
+
+        // Always verify local payload serialization & validation offline
+        let serialized = serde_json::to_string(&payload);
+        assert!(serialized.is_ok(), "Payload serialization failed");
+
+        // Gate live network submission strictly to CI / GitHub Actions or explicit opt-in
+        let is_github_actions = std::env::var("GITHUB_ACTIONS")
+            .map(|v| v == "true" || v == "1")
+            .unwrap_or(false);
+        let is_explicit = std::env::var("RUN_LIVE_ISSUE_TEST")
+            .map(|v| v == "true" || v == "1")
+            .unwrap_or(false);
+
+        if !is_github_actions && !is_explicit {
+            println!("Skipping live Web3Forms issue submission during local test run (runs in GitHub Actions or with RUN_LIVE_ISSUE_TEST=1)");
+            return;
+        }
+
         let res = submit_issue_report(payload).await;
         assert!(res.is_ok(), "submit_issue_report failed: {:?}", res);
     }
