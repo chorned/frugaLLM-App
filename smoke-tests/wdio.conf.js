@@ -58,7 +58,7 @@ export const config = {
     ui: 'bdd',
     timeout: 60000,
   },
-  beforeSession: async () => {
+  onPrepare: async () => {
     if (isWin) {
       try {
         const { download } = await import('edgedriver');
@@ -84,7 +84,8 @@ export const config = {
 
     try {
       tauriDriver = spawn(driverCmd, [], {
-        stdio: [null, process.stdout, process.stderr],
+        stdio: 'ignore',
+        detached: !isWin,
       });
       tauriDriver.on('error', (err) => {
         console.warn('[Smoke Test] tauri-driver spawn notice:', err.message);
@@ -92,13 +93,19 @@ export const config = {
       // Allow tauri-driver to bind to port 4444
       await new Promise((resolve) => setTimeout(resolve, 2000));
     } catch (e) {
-      console.warn('[Smoke Test] Could not spawn tauri-driver automatically in beforeSession:', e);
+      console.warn('[Smoke Test] Could not spawn tauri-driver automatically in onPrepare:', e);
     }
   },
-  afterSession: () => {
-    if (tauriDriver && !tauriDriver.killed) {
+  onComplete: () => {
+    if (tauriDriver) {
       try {
-        tauriDriver.kill();
+        if (isWin && tauriDriver.pid) {
+          try {
+            spawn('taskkill', ['/pid', tauriDriver.pid.toString(), '/f', '/t'], { stdio: 'ignore' });
+          } catch (_) {}
+        } else if (!tauriDriver.killed) {
+          tauriDriver.kill();
+        }
       } catch (err) {
         console.error('[Smoke Test] Error stopping tauri-driver:', err);
       }
