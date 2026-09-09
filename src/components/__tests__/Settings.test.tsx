@@ -247,4 +247,12 @@ describe('Settings Component', () => {
       expect(screen.getByText(/Failed to create symlink: Permission denied/i)).toBeInTheDocument();
     });
   });
+
+  it('renders View Logs button and triggers open_app_logs on click', async () => {
+    render(<Settings />);
+    const btn = await screen.findByTestId('btn-view-logs');
+    expect(btn).toBeInTheDocument();
+    fireEvent.click(btn);
+    expect(mockInvoke).toHaveBeenCalledWith('open_app_logs', undefined);
+  });
 });

@@ -7,6 +7,15 @@ import {
   computeMemorySegmentsForModel,
 } from '../services/memoryCalculator';
 
+let isScreenshotMode = () => false;
+let APPSTORE_TELEMETRY: any = null;
+
+if (import.meta.env.DEV) {
+  const mod = await import('../dev/screenshotMode');
+  isScreenshotMode = mod.isScreenshotMode;
+  APPSTORE_TELEMETRY = mod.APPSTORE_TELEMETRY;
+}
+
 export interface MemoryContextType {
   activeModelName: string;
   defaultRecommendedModel: string;
@@ -32,10 +41,22 @@ export interface MemoryContextType {
 const MemoryContext = createContext<MemoryContextType | null>(null);
 
 export const MemoryProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [detectedVramGb, setDetectedVramGbState] = useState<number>(8);
-  const [hardwareProfile, setHardwareProfileState] = useState<HardwareProfile | null>(null);
-  const [latestTelemetry, setLatestTelemetryState] = useState<any>(null);
-  const [customModelName, setCustomModelName] = useState<string>('');
+  const [detectedVramGb, setDetectedVramGbState] = useState<number>(() => {
+    if (import.meta.env.DEV && isScreenshotMode()) return 16;
+    return 8;
+  });
+  const [hardwareProfile, setHardwareProfileState] = useState<HardwareProfile | null>(() => {
+    if (import.meta.env.DEV && isScreenshotMode()) return (APPSTORE_TELEMETRY as any)?.hardware_profile;
+    return null;
+  });
+  const [latestTelemetry, setLatestTelemetryState] = useState<any>(() => {
+    if (import.meta.env.DEV && isScreenshotMode()) return APPSTORE_TELEMETRY;
+    return null;
+  });
+  const [customModelName, setCustomModelName] = useState<string>(() => {
+    if (import.meta.env.DEV && isScreenshotMode()) return 'llama3.3:70b-instruct';
+    return '';
+  });
 
   const defaultRecommendedModel = useMemo(() => {
     return getRecommendedModelForVram(detectedVramGb);

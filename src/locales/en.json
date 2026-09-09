@@ -87,6 +87,10 @@
           "helpText": "Allows calling hermes, opencode, and ollama directly from any terminal window.",
           "tooltip": "Creates shell PATH links for Hermes, OpenCode, and Ollama so you can call them from your external terminal without opening FrugaLLM."
         },
+        "viewLogs": {
+          "label": "VIEW LOGS",
+          "helpText": "Open the FrugaLLM application log file in your system's default text editor."
+        },
         "apiPassword": {
           "label": "API PASSWORD",
           "checkboxLabel": "Require API Password",

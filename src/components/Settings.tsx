@@ -251,6 +251,39 @@ export const Settings: React.FC<SettingsProps> = ({
         </label>
       </div>
 
+      {/* View Logs Action */}
+      <div style={{ marginTop: '4px', paddingTop: '8px', borderTop: '1px solid var(--zen-border)' }}>
+        <button
+          type="button"
+          data-testid="btn-view-logs"
+          onClick={() => {
+            invoke('open_app_logs').catch((err) => {
+              console.error('Failed to open app logs:', err);
+              setErrorMessage(String(err));
+            });
+          }}
+          style={{
+            width: '100%',
+            padding: '8px 12px',
+            backgroundColor: 'var(--zen-surface-hover)',
+            borderRadius: '9999px',
+            color: 'var(--zen-text)',
+            border: '1px solid var(--zen-border)',
+            fontWeight: 600,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            fontSize: '0.75rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          {strings.viewLogs?.label || 'VIEW LOGS'}
+        </button>
+      </div>
+
       {errorMessage && (
         <div
           data-testid="settings-error-message"

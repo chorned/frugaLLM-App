@@ -143,7 +143,7 @@ export const CloudRoutingPanel = ({ overrides: propOverrides, onOverridesChange 
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+    <div data-testid="cloud-routing-panel" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
         <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--zen-text)', letterSpacing: '0.02em' }}>
           {t?.title || 'GLOBAL ROUTING POOL'}

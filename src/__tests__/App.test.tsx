@@ -775,6 +775,116 @@ describe('App Component Integration', () => {
     expect(bottomRow.querySelector('[data-node-id="node-opencode"]')).toBeInTheDocument();
     expect(bottomRow.querySelector('[data-node-id="node-hermes"]')).toBeInTheDocument();
   }, 15000);
+
+  it('reactively updates provider status indicators on failure and maintains error status until 200 OK', async () => {
+    render(<App />);
+
+    // Wait for canvas to load
+    await waitFor(() => {
+      expect(screen.getByTestId('node-google-status')).toBeInTheDocument();
+      expect(screen.getByTestId('node-openrouter-status')).toBeInTheDocument();
+    }, { timeout: 10000 });
+
+    // 1. Emit 403 Forbidden for Google
+    act(() => {
+      eventListeners['provider_status']?.forEach(cb => cb({ payload: { provider: 'google', status: '403' } }));
+    });
+
+    const googleStatus = screen.getByTestId('node-google-status');
+    expect(googleStatus).toHaveTextContent('403');
+    expect(googleStatus).toHaveStyle({ color: 'rgb(239, 68, 68)' }); // #ef4444
+
+    // 2. Emit 503 Overloaded for OpenRouter
+    act(() => {
+      eventListeners['provider_status']?.forEach(cb => cb({ payload: { provider: 'openrouter', status: '503' } }));
+    });
+
+    const openrouterStatus = screen.getByTestId('node-openrouter-status');
+    expect(openrouterStatus).toHaveTextContent('503');
+    expect(openrouterStatus).toHaveStyle({ color: 'rgb(239, 68, 68)' });
+
+    // Verify Google status stayed at 403
+    expect(screen.getByTestId('node-google-status')).toHaveTextContent('403');
+    expect(screen.getByTestId('node-google-status')).toHaveStyle({ color: 'rgb(239, 68, 68)' });
+
+    // 3. Emit 200 OK for Google — Google turns green, OpenRouter remains 503
+    act(() => {
+      eventListeners['provider_status']?.forEach(cb => cb({ payload: { provider: 'google', status: '200 OK' } }));
+    });
+
+    expect(screen.getByTestId('node-google-status')).toHaveTextContent('200 OK');
+    expect(screen.getByTestId('node-google-status')).toHaveStyle({ color: 'rgb(16, 185, 129)' }); // #10B981
+    expect(screen.getByTestId('node-openrouter-status')).toHaveTextContent('503');
+    expect(screen.getByTestId('node-openrouter-status')).toHaveStyle({ color: 'rgb(239, 68, 68)' });
+
+    // 4. Emit 503 for Ollama
+    act(() => {
+      eventListeners['provider_status']?.forEach(cb => cb({ payload: { provider: 'ollama', status: '503' } }));
+    });
+
+    const ollamaStatus = screen.getByTestId('node-ollama-status');
+    expect(ollamaStatus).toBeInTheDocument();
+    expect(ollamaStatus).toHaveTextContent('503');
+  }, 15000);
+
+  it('initializes provider statuses from backend on startup', async () => {
+    (invoke as any).mockImplementation((cmd: string) => {
+      if (cmd === 'get_provider_statuses') {
+        return Promise.resolve({
+          google: '403',
+          openrouter: '503',
+        });
+      }
+      if (cmd === 'is_wipe_mode') return Promise.resolve(false);
+      if (cmd === 'is_mock_update_mode') return Promise.resolve(false);
+      if (cmd === 'get_frugallm_config') {
+        return Promise.resolve({
+          port: 61721,
+          bind_all_interfaces: false,
+          api_password: '',
+          input_tokens_session: 0,
+          output_tokens_session: 0,
+          input_tokens_lifetime: 0,
+          output_tokens_lifetime: 0,
+          opencode_workspace: '~/OpenCode',
+          hermes_workspace: '~/Hermes',
+          start_minimized: false,
+          manual_model_overrides: [],
+          tool_enforcing_gateway: false,
+        });
+      }
+      if (cmd === 'get_routing_chain') return Promise.resolve([]);
+      if (cmd === 'check_ollama_status') return Promise.resolve(true);
+      if (cmd === 'check_hermes_status') return Promise.resolve(true);
+      if (cmd === 'check_opencode_status') return Promise.resolve(true);
+      if (cmd === 'check_tool_gateway_status') return Promise.resolve(false);
+      if (cmd === 'detect_vram') return Promise.resolve(16384);
+      if (cmd === 'get_model_tag_for_vram') return Promise.resolve('gemma4:12b');
+      if (cmd === 'get_credential') return Promise.resolve('mock-key');
+      if (cmd === 'detect_hardware_profile') {
+        return Promise.resolve({
+          is_unified: false,
+          dedicated_vram: 16 * 1024 * 1024 * 1024,
+          system_ram: 32 * 1024 * 1024 * 1024,
+          execution_ceiling: 16 * 1024 * 1024 * 1024,
+          os_architecture: 'macos-x86_64',
+        });
+      }
+      return Promise.resolve();
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      const googleStatus = screen.getByTestId('node-google-status');
+      expect(googleStatus).toHaveTextContent('403');
+      expect(googleStatus).toHaveStyle({ color: 'rgb(239, 68, 68)' });
+
+      const openrouterStatus = screen.getByTestId('node-openrouter-status');
+      expect(openrouterStatus).toHaveTextContent('503');
+      expect(openrouterStatus).toHaveStyle({ color: 'rgb(239, 68, 68)' });
+    }, { timeout: 10000 });
+  }, 15000);
 });
 
 

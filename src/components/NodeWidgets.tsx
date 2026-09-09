@@ -7,6 +7,15 @@ import { MemoryPipelineWidget } from './MemoryPipelineWidget';
 import { useMemory } from '../context/MemoryContext';
 import { OllamaIcon } from './icons/ProviderIcons';
 
+let isScreenshotMode = () => false;
+let APPSTORE_TELEMETRY: any = null;
+
+if (import.meta.env.DEV) {
+  const mod = await import('../dev/screenshotMode');
+  isScreenshotMode = mod.isScreenshotMode;
+  APPSTORE_TELEMETRY = mod.APPSTORE_TELEMETRY;
+}
+
 const InfoIconSVG = (props: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="-50 -50 590 590" fill="currentColor" {...props}>
     <path d="M245.148,0C109.967,0,0.009,109.98,0.009,245.162c0,135.182,109.958,245.156,245.139,245.156 c135.186,0,245.162-109.978,245.162-245.156C490.31,109.98,380.333,0,245.148,0z M245.148,438.415 c-106.555,0-193.234-86.698-193.234-193.253c0-106.555,86.68-193.258,193.234-193.258c106.559,0,193.258,86.703,193.258,193.258 C438.406,351.717,351.706,438.415,245.148,438.415z"/>
@@ -325,13 +334,15 @@ export const HardwareNode = ({
   label = en.routingGraph.nodes.ollamaLocal.label || 'Ollama',
   subheader = (en.routingGraph.nodes.ollamaLocal as any).subheader || 'Open source',
   icon,
-  isSelected = false
+  isSelected = false,
+  lastStatus
 }: { 
   isGenerating?: boolean;
   label?: string;
   subheader?: string;
   icon?: React.ReactNode;
   isSelected?: boolean;
+  lastStatus?: string;
 }) => {
   const memory = useMemory();
   const memoryRef = useRef(memory);
@@ -339,7 +350,10 @@ export const HardwareNode = ({
     memoryRef.current = memory;
   }, [memory]);
 
-  const [telemetry, setTelemetry] = useState<any>(null);
+  const [telemetry, setTelemetry] = useState<any>(() => {
+    if (import.meta.env.DEV && isScreenshotMode()) return APPSTORE_TELEMETRY;
+    return null;
+  });
   const [showPanel, setShowPanel] = useState(false);
   const [showBenchmarks, setShowBenchmarks] = useState(false);
   const [avgThroughput, setAvgThroughput] = useState<number>(() => {
@@ -460,12 +474,14 @@ export const HardwareNode = ({
   const isLoaded = telemetry?.ollama?.status === 'active';
   const isThinking = (isGenerating && isLoaded) || liveThroughput > 0;
   const isLoading = isGenerating && !isLoaded;
+  const isError = !!lastStatus && /4\d\d|5\d\d|error|timeout|offline/i.test(lastStatus);
 
   let headerStatusText = 'Standby';
-  if (isLoading) headerStatusText = 'Loading';
+  if (isError) headerStatusText = lastStatus!;
+  else if (isLoading) headerStatusText = 'Loading';
   else if (isThinking) headerStatusText = 'Thinking';
   else if (isLoaded) headerStatusText = 'Loaded';
-  const isStatusActive = isLoading || isThinking || isLoaded;
+  const isStatusActive = isError || isLoading || isThinking || isLoaded;
 
   return (
     <>
@@ -489,7 +505,9 @@ export const HardwareNode = ({
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {isStatusActive && (
-              <StatusLight status="active" text={headerStatusText} />
+              <span data-testid="node-ollama-status">
+                <StatusLight status={isError ? 'error' : 'active'} text={headerStatusText} />
+              </span>
             )}
             <div 
               data-testid="hardware-info-btn"

@@ -16,11 +16,52 @@ use keyring::Entry;
 use tauri::{Manager, State, Emitter};
 use tauri_plugin_store::StoreExt;
 use std::sync::{Arc, Mutex};
+use std::collections::{HashMap, HashSet};
+use futures_util::StreamExt;
 
 /// Holds the `ollama serve` child process for the lifetime of the application.
 /// Stored in Tauri managed state so the handle is never dropped or leaked.
 struct OllamaDaemonState {
     child: tokio::sync::Mutex<Option<tokio::process::Child>>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
+pub struct ProviderStatusPayload {
+    pub provider: String,
+    pub status: String,
+}
+
+pub struct ProviderHealthState {
+    pub live_statuses: Arc<tokio::sync::RwLock<HashMap<String, String>>>,
+    pub provider_cooldowns: Arc<tokio::sync::RwLock<HashMap<String, std::time::Instant>>>,
+    pub model_cooldowns: Arc<tokio::sync::RwLock<HashMap<String, std::time::Instant>>>,
+    pub gated_models: Arc<tokio::sync::RwLock<HashSet<String>>>,
+}
+
+impl Default for ProviderHealthState {
+    fn default() -> Self {
+        Self {
+            live_statuses: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+            provider_cooldowns: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+            model_cooldowns: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+            gated_models: Arc::new(tokio::sync::RwLock::new(HashSet::new())),
+        }
+    }
+}
+
+pub async fn update_provider_status(
+    app: &tauri::AppHandle,
+    provider: &str,
+    status: &str,
+) {
+    if let Some(health_state) = app.try_state::<ProviderHealthState>() {
+        let mut statuses = health_state.live_statuses.write().await;
+        statuses.insert(provider.to_string(), status.to_string());
+    }
+    let _ = app.emit("provider_status", ProviderStatusPayload {
+        provider: provider.to_string(),
+        status: status.to_string(),
+    });
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
@@ -33,6 +74,10 @@ pub struct CloudModel {
 
 struct DynamicRosterState {
     fallback_chain: Arc<tokio::sync::RwLock<Vec<CloudModel>>>,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -53,6 +98,8 @@ pub struct FrugalConfig {
     pub manual_model_overrides: Vec<String>,
     #[serde(default)]
     pub tool_enforcing_gateway: bool,
+    #[serde(default = "default_true")]
+    pub enable_paid_fallback: bool,
 }
 
 impl Default for FrugalConfig {
@@ -70,6 +117,7 @@ impl Default for FrugalConfig {
             start_minimized: false,
             manual_model_overrides: Vec::new(),
             tool_enforcing_gateway: false,
+            enable_paid_fallback: true,
         }
     }
 }
@@ -254,7 +302,18 @@ fn get_launch_options() -> LaunchOptions {
 }
 
 #[tauri::command]
-fn set_credential(service: &str, secret: &str) -> Result<(), String> {
+fn set_credential(app: tauri::AppHandle, service: &str, secret: &str) -> Result<(), String> {
+    if let Some(health_state) = app.try_state::<ProviderHealthState>() {
+        let s = service.to_string();
+        let cooldowns_arc = health_state.provider_cooldowns.clone();
+        let statuses_arc = health_state.live_statuses.clone();
+        tauri::async_runtime::spawn(async move {
+            let mut cooldowns = cooldowns_arc.write().await;
+            cooldowns.remove(&s);
+            let mut statuses = statuses_arc.write().await;
+            statuses.remove(&s);
+        });
+    }
     #[cfg(debug_assertions)]
     {
         let key = format!("{}_KEY", service.to_uppercase());
@@ -552,15 +611,64 @@ async fn check_ollama_status() -> bool {
     is_ollama_in_paths(&paths)
 }
 
+fn resolve_ollama_chat_model_from_tags(json: &serde_json::Value) -> String {
+    if let Some(models) = json.get("models").and_then(|m| m.as_array()) {
+        let names: Vec<&str> = models
+            .iter()
+            .filter_map(|m| m.get("name").and_then(|n| n.as_str()))
+            .collect();
+        // If frugallm-active is installed, prefer it
+        if let Some(&active) = names.iter().find(|&&n| n.starts_with("frugallm-active")) {
+            return active.strip_suffix(":latest").unwrap_or(active).to_string();
+        }
+        // Fallback to user's first existing installed model
+        if let Some(&first) = names.first() {
+            return first.to_string();
+        }
+    }
+    "frugallm-active".to_string()
+}
+
+#[tauri::command(async)]
+async fn get_ollama_chat_model() -> String {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+    if let Ok(res) = client.get("http://127.0.0.1:11434/api/tags").send().await {
+        if let Ok(json) = res.json::<serde_json::Value>().await {
+            return resolve_ollama_chat_model_from_tags(&json);
+        }
+    }
+    "frugallm-active".to_string()
+}
+
+pub fn parse_agent_version(raw: &str) -> Option<String> {
+    for line in raw.lines() {
+        for word in line.split_whitespace() {
+            let clean = word.trim_matches(|c: char| !c.is_alphanumeric() && c != '.' && c != '-');
+            if clean.starts_with('v') || clean.starts_with('V') {
+                let rest = &clean[1..];
+                if rest.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) && rest.contains('.') {
+                    return Some(format!("v{}", rest));
+                }
+            } else if clean.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) && clean.contains('.') {
+                return Some(format!("v{}", clean));
+            }
+        }
+    }
+    raw.lines().next().map(|l| l.trim().to_string()).filter(|s| !s.is_empty())
+}
+
 #[tauri::command(async)]
 async fn get_hermes_version(app: tauri::AppHandle) -> String {
     if let Ok(home) = app.path().home_dir() {
         if let Some(hermes_bin) = get_hermes_source_path(&home) {
             if let Ok(output) = tokio::process::Command::new(&hermes_bin).arg("--version").output().await {
                 if output.status.success() {
-                    let v = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                    if !v.is_empty() {
-                        return v;
+                    let v = String::from_utf8_lossy(&output.stdout);
+                    if let Some(parsed) = parse_agent_version(&v) {
+                        return parsed;
                     }
                 }
             }
@@ -576,9 +684,9 @@ async fn get_opencode_version(app: tauri::AppHandle) -> String {
         if let Some(opencode_bin) = get_opencode_source_path(&home) {
             if let Ok(output) = tokio::process::Command::new(&opencode_bin).arg("--version").output().await {
                 if output.status.success() {
-                    let v = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                    if !v.is_empty() {
-                        return v;
+                    let v = String::from_utf8_lossy(&output.stdout);
+                    if let Some(parsed) = parse_agent_version(&v) {
+                        return parsed;
                     }
                 }
             }
@@ -664,6 +772,12 @@ fn set_tool_gateway_installed(app: tauri::AppHandle, installed: bool) -> Result<
     } else if marker.exists() {
         let _ = std::fs::remove_file(&marker);
     }
+    log_event(
+        &app,
+        "INFO",
+        "GATEWAY",
+        &format!("Tool Enforcing Gateway status updated: installed={}", installed),
+    );
     Ok(())
 }
 
@@ -1265,7 +1379,27 @@ fn process_stream_chunk_for_tokens(
     }
 }
 
-use futures_util::StreamExt;
+const TOOL_ENFORCEMENT_DIRECTIVE: &str = 
+    "\n[TOOL ENFORCEMENT DIRECTIVE]: Strict tool calling is required. If you describe actions, plan tool execution, or state that you will read/edit files or run commands, you MUST execute the matching tool call immediately. Do not state conversational promises without invoking the tool.";
+
+fn sanitize_reprimand_chunk(bytes: &[u8], app: &tauri::AppHandle) -> axum::body::Bytes {
+    if let Ok(text) = std::str::from_utf8(bytes) {
+        if text.contains("[SYSTEM REPRIMAND:") {
+            log_event(
+                app,
+                "WARN",
+                "GATEWAY",
+                "Silently suppressed system reprimand from user-facing stream to maintain clean context",
+            );
+            let cleaned = text.replace(
+                "[SYSTEM REPRIMAND: You detailed a plan and informed the user you were taking action, but failed to output the corresponding JSON tool call. Do not apologize. Output the required tool call immediately.]",
+                "",
+            );
+            return axum::body::Bytes::from(cleaned);
+        }
+    }
+    axum::body::Bytes::copy_from_slice(bytes)
+}
 
 async fn try_ollama(
     app: &tauri::AppHandle,
@@ -1314,13 +1448,19 @@ async fn try_ollama(
         input_tokens_estimate: request_body_size,
     };
 
-    let res = client.post("http://127.0.0.1:11434/v1/chat/completions")
+    let res = match client.post("http://127.0.0.1:11434/v1/chat/completions")
         .json(&body)
         .send()
-        .await
-        .map_err(|e| format!("Network error: {}", e))?;
+        .await {
+        Ok(r) => r,
+        Err(e) => {
+            update_provider_status(app, "ollama", "offline").await;
+            return Err(format!("Network error: {}", e));
+        }
+    };
 
     if res.status().is_success() {
+        update_provider_status(app, "ollama", "200 OK").await;
         let mut builder = axum::response::Response::builder()
             .status(res.status())
             .header("Cache-Control", "no-cache")
@@ -1334,19 +1474,49 @@ async fn try_ollama(
         }
         let app_clone = app.clone();
         let source_clone = source.to_string();
-        let stream = res.bytes_stream().inspect(move |chunk| {
-            let _ = &drop_guard;
-            if let Ok(bytes) = chunk {
-                process_stream_chunk_for_tokens(bytes, &drop_guard);
+        let stream = res.bytes_stream().map(move |chunk| {
+            match chunk {
+                Ok(bytes) => {
+                    let _ = &drop_guard;
+                    process_stream_chunk_for_tokens(&bytes, &drop_guard);
+                    let _ = app_clone.emit("proxy_activity", ProxyActivityPayload {
+                        source: source_clone.clone(),
+                        target: "ollama".to_string(),
+                        is_active: true,
+                    });
+                    let sanitized = sanitize_reprimand_chunk(&bytes, &app_clone);
+                    Ok::<axum::body::Bytes, reqwest::Error>(sanitized)
+                }
+                Err(e) => Err(e),
             }
-            let _ = app_clone.emit("proxy_activity", ProxyActivityPayload {
-                source: source_clone.clone(),
-                target: "ollama".to_string(),
-                is_active: true,
-            });
         });
+        log_event(
+            app,
+            "INFO",
+            "OLLAMA",
+            &format!("Stream connected successfully for model '{}'", ollama_model),
+        );
         Ok(builder.body(axum::body::Body::from_stream(stream)).unwrap())
     } else {
+        let status = res.status();
+        let status_code_str = if status.as_u16() == 503 {
+            "503"
+        } else {
+            status.as_str()
+        };
+        update_provider_status(app, "ollama", status_code_str).await;
+        if status.as_u16() == 503 {
+            if let Some(health_state) = app.try_state::<ProviderHealthState>() {
+                let mut m_cooldowns = health_state.model_cooldowns.write().await;
+                m_cooldowns.insert(ollama_model.to_string(), std::time::Instant::now() + std::time::Duration::from_secs(60));
+            }
+        }
+        log_event(
+            app,
+            "ERROR",
+            "OLLAMA",
+            &format!("API error HTTP {} for model '{}'", res.status(), ollama_model),
+        );
         Err(format!("Ollama API error: HTTP {}", res.status()))
     }
 }
@@ -1359,13 +1529,21 @@ async fn try_cloud_provider(
     cloud_model: &CloudModel,
 ) -> Result<axum::response::Response, String> {
     let mut body = body.clone();
+    let is_streaming = body.get("stream").and_then(|v| v.as_bool()).unwrap_or(false);
     if let Some(obj) = body.as_object_mut() {
-        if obj.get("stream").and_then(|v| v.as_bool()).unwrap_or(false) {
+        if is_streaming {
             obj.insert("stream_options".to_string(), json!({ "include_usage": true }));
         }
     }
+
+    let is_heavy = cloud_model.model.contains("550b") || cloud_model.model.contains("405b") || cloud_model.model.contains("nemotron-3-ultra-550b");
+    let ttft_duration = if is_heavy {
+        std::time::Duration::from_secs(12)
+    } else {
+        std::time::Duration::from_secs(25)
+    };
     
-    let (url, auth_header) = match cloud_model.provider.as_str() {
+    let (url, auth_header, is_openrouter) = match cloud_model.provider.as_str() {
         "google" => {
             let key = crate::get_credential("google")
                 .map_err(|_| "Google AI Studio API key not found".to_string())?;
@@ -1374,7 +1552,7 @@ async fn try_cloud_provider(
             if let Some(obj) = body.as_object_mut() {
                 obj.insert("model".to_string(), json!(cloud_model.model));
             }
-            (url, auth)
+            (url, auth, false)
         },
         _ => {
             let key = crate::get_credential("openrouter")
@@ -1386,7 +1564,7 @@ async fn try_cloud_provider(
                 obj.remove("models");
                 obj.remove("reasoning_effort");
             }
-            (url, auth)
+            (url, auth, true)
         }
     };
 
@@ -1412,12 +1590,31 @@ async fn try_cloud_provider(
         input_tokens_estimate: request_body_size,
     };
 
-    let res = client.post(&url)
-        .header("Authorization", auth_header)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| format!("Network error: {}", e))?;
+    let mut req = client.post(&url)
+        .header("Authorization", auth_header);
+
+    if is_openrouter {
+        req = req
+            .header("HTTP-Referer", "https://github.com/chorned/frugaLLM")
+            .header("X-Title", "FrugaLLM");
+    }
+
+    let send_fut = req.json(&body).send();
+    let res = match tokio::time::timeout(ttft_duration, send_fut).await {
+        Ok(Ok(response)) => response,
+        Ok(Err(e)) => {
+            update_provider_status(app, &cloud_model.provider, "offline").await;
+            return Err(format!("Network error: {}", e));
+        }
+        Err(_) => {
+            update_provider_status(app, &cloud_model.provider, "timeout").await;
+            if let Some(health_state) = app.try_state::<ProviderHealthState>() {
+                let mut m_cooldowns = health_state.model_cooldowns.write().await;
+                m_cooldowns.insert(cloud_model.model.clone(), std::time::Instant::now() + std::time::Duration::from_secs(60));
+            }
+            return Err(format!("{} API error: HTTP timeout - TTFT connection timeout ({}s) on model '{}'", cloud_model.provider, ttft_duration.as_secs(), cloud_model.model));
+        }
+    };
 
     if res.status().is_success() {
         let mut builder = axum::response::Response::builder().status(res.status());
@@ -1428,24 +1625,133 @@ async fn try_cloud_provider(
         let source_clone = source.to_string();
         let provider_clone = cloud_model.provider.clone();
         
-        let stream = res.bytes_stream().inspect(move |chunk| {
+        if is_streaming {
+            let mut byte_stream = res.bytes_stream();
+            let first_chunk = match tokio::time::timeout(ttft_duration, byte_stream.next()).await {
+                Ok(Some(Ok(bytes))) => bytes,
+                Ok(Some(Err(e))) => {
+                    update_provider_status(app, &cloud_model.provider, "503").await;
+                    if let Some(health_state) = app.try_state::<ProviderHealthState>() {
+                        let mut m_cooldowns = health_state.model_cooldowns.write().await;
+                        m_cooldowns.insert(cloud_model.model.clone(), std::time::Instant::now() + std::time::Duration::from_secs(60));
+                    }
+                    return Err(format!("{} stream read error: {}", cloud_model.provider, e));
+                }
+                Ok(None) => {
+                    axum::body::Bytes::new()
+                }
+                Err(_) => {
+                    update_provider_status(app, &cloud_model.provider, "timeout").await;
+                    if let Some(health_state) = app.try_state::<ProviderHealthState>() {
+                        let mut m_cooldowns = health_state.model_cooldowns.write().await;
+                        m_cooldowns.insert(cloud_model.model.clone(), std::time::Instant::now() + std::time::Duration::from_secs(60));
+                    }
+                    return Err(format!("{} API error: HTTP timeout - Exceeded TTFT timeout ({}s) waiting for first token on model '{}'", cloud_model.provider, ttft_duration.as_secs(), cloud_model.model));
+                }
+            };
+
+            update_provider_status(app, &cloud_model.provider, "200 OK").await;
+
             let _ = &drop_guard;
-            if let Ok(bytes) = chunk {
-                process_stream_chunk_for_tokens(bytes, &drop_guard);
-            }
-            let _ = app_clone.emit("proxy_activity", ProxyActivityPayload {
-                source: source_clone.clone(),
-                target: provider_clone.clone(),
-                is_active: true,
-            });
-        });
-        Ok(builder.body(axum::body::Body::from_stream(stream)).unwrap())
+            process_stream_chunk_for_tokens(&first_chunk, &drop_guard);
+            let sanitized_first = sanitize_reprimand_chunk(&first_chunk, &app_clone);
+
+            let chained_stream = futures_util::stream::once(async move {
+                Ok::<axum::body::Bytes, reqwest::Error>(sanitized_first)
+            }).chain(byte_stream.map(move |chunk| {
+                match chunk {
+                    Ok(bytes) => {
+                        let _ = &drop_guard;
+                        process_stream_chunk_for_tokens(&bytes, &drop_guard);
+                        let _ = app_clone.emit("proxy_activity", ProxyActivityPayload {
+                            source: source_clone.clone(),
+                            target: provider_clone.clone(),
+                            is_active: true,
+                        });
+                        let sanitized = sanitize_reprimand_chunk(&bytes, &app_clone);
+                        Ok::<axum::body::Bytes, reqwest::Error>(sanitized)
+                    }
+                    Err(e) => Err(e),
+                }
+            }));
+
+            log_event(
+                app,
+                "INFO",
+                &cloud_model.provider.to_uppercase(),
+                &format!("Stream connected successfully for model '{}'", cloud_model.model),
+            );
+            Ok(builder.body(axum::body::Body::from_stream(chained_stream)).unwrap())
+        } else {
+            let bytes = res.bytes().await.map_err(|e| format!("Network read error: {}", e))?;
+            update_provider_status(app, &cloud_model.provider, "200 OK").await;
+            log_event(
+                app,
+                "INFO",
+                &cloud_model.provider.to_uppercase(),
+                &format!("Request succeeded for model '{}'", cloud_model.model),
+            );
+            Ok(builder.body(axum::body::Body::from(bytes)).unwrap())
+        }
     } else {
         let status = res.status();
         let error_body = res.text().await.unwrap_or_else(|_| "Could not read error body".to_string());
         
-        let debug_info = format!("Status: {}\nRequest Body: {}\nError Body: {}\n", status, serde_json::to_string_pretty(&body).unwrap_or_default(), error_body);
-        let _ = std::fs::write(format!("/tmp/frugallm_{}_error.txt", cloud_model.provider), debug_info);
+        let status_code_str = if status.as_u16() == 403 {
+            "403"
+        } else if status.as_u16() == 503 {
+            "503"
+        } else {
+            status.as_str()
+        };
+
+        update_provider_status(app, &cloud_model.provider, status_code_str).await;
+
+        if error_body.contains("Gate Free Endpoints by Agentic Harness") || error_body.contains("only available on agentic harnesses") {
+            if let Some(health_state) = app.try_state::<ProviderHealthState>() {
+                let mut gated = health_state.gated_models.write().await;
+                gated.insert(cloud_model.model.clone());
+                log_event(
+                    app,
+                    "WARN",
+                    "ROUTER",
+                    &format!("Model '{}' permanently gated by agentic harness requirement during session.", cloud_model.model),
+                );
+            }
+        }
+
+        if status.as_u16() == 403 || error_body.contains("PERMISSION_DENIED") || error_body.contains("denied access") {
+            if let Some(health_state) = app.try_state::<ProviderHealthState>() {
+                let mut p_cooldowns = health_state.provider_cooldowns.write().await;
+                p_cooldowns.insert(cloud_model.provider.clone(), std::time::Instant::now() + std::time::Duration::from_secs(600));
+                log_event(
+                    app,
+                    "WARN",
+                    "ROUTER",
+                    &format!("Provider '{}' circuit breaker engaged for 10 minutes due to 403 Forbidden.", cloud_model.provider),
+                );
+            }
+        }
+
+        if status.as_u16() == 503 || error_body.contains("503") || error_body.contains("temporarily overloaded") {
+            if let Some(health_state) = app.try_state::<ProviderHealthState>() {
+                let mut m_cooldowns = health_state.model_cooldowns.write().await;
+                m_cooldowns.insert(cloud_model.model.clone(), std::time::Instant::now() + std::time::Duration::from_secs(60));
+                log_event(
+                    app,
+                    "WARN",
+                    "ROUTER",
+                    &format!("Model '{}' placed on 60s cooldown due to 503 Service Overloaded.", cloud_model.model),
+                );
+            }
+        }
+
+        log_event(
+            app,
+            "ERROR",
+            &cloud_model.provider.to_uppercase(),
+            &format!("API error (HTTP {}): {} (model: {})", status, error_body, cloud_model.model),
+        );
         
         println!("{} API error ({}): {}", cloud_model.provider, status, error_body);
         Err(format!("{} API error: HTTP {} - {}", cloud_model.provider, status, error_body))
@@ -1455,7 +1761,7 @@ async fn try_cloud_provider(
 async fn chat_completions(
     axum::extract::State(app): axum::extract::State<std::sync::Arc<tauri::AppHandle>>,
     headers: axum::http::HeaderMap,
-    Json(body): Json<Value>
+    Json(mut body): Json<Value>
 ) -> axum::response::Response {
     let state = app.state::<FrugalConfigState>();
     let expected_password = {
@@ -1531,63 +1837,192 @@ async fn chat_completions(
         "hermes".to_string()
     };
 
-    let mut order = Vec::new();
-    if ollama_viable {
-        order.push("ollama");
-        order.push("cloud");
-    } else {
-        order.push("cloud");
-        if ollama_running {
-            order.push("ollama");
+    let (tool_gateway_config, _) = {
+        let config = state.config.lock().await;
+        (config.tool_enforcing_gateway, config.port)
+    };
+    let is_tool_gateway_active = tool_gateway_config || check_tool_gateway_status(app.as_ref().clone()).await;
+
+    let has_tools = body.get("tools").and_then(|t| t.as_array()).map(|a| !a.is_empty()).unwrap_or(false)
+        || body.get("functions").and_then(|f| f.as_array()).map(|a| !a.is_empty()).unwrap_or(false);
+
+    log_event(
+        &app,
+        "INFO",
+        "ROUTER",
+        &format!(
+            "Received request from '{}' (requested model: '{}') | Tool Enforcing Gateway: {} (tools in payload: {})",
+            source,
+            original_model,
+            if is_tool_gateway_active { "ACTIVE" } else { "DISABLED" },
+            has_tools
+        ),
+    );
+
+    if is_tool_gateway_active && has_tools {
+        log_event(
+            &app,
+            "INFO",
+            "GATEWAY",
+            "Tool Enforcing Gateway: Active with tools in payload. Applying silent upstream enforcement directive (isolated from user view).",
+        );
+        if let Some(messages) = body.get_mut("messages").and_then(|m| m.as_array_mut()) {
+            let mut found_system = false;
+            for msg in messages.iter_mut() {
+                if msg.get("role").and_then(|r| r.as_str()) == Some("system") {
+                    if let Some(content) = msg.get("content").and_then(|c| c.as_str()) {
+                        let updated = format!("{}\n{}", content, TOOL_ENFORCEMENT_DIRECTIVE);
+                        if let Some(obj) = msg.as_object_mut() {
+                            obj.insert("content".to_string(), json!(updated));
+                        }
+                        found_system = true;
+                        break;
+                    }
+                }
+            }
+            if !found_system {
+                messages.insert(0, json!({
+                    "role": "system",
+                    "content": TOOL_ENFORCEMENT_DIRECTIVE.trim()
+                }));
+            }
         }
     }
 
-    let mut errors = Vec::new();
+    let chain = {
+        let fallback_chain = app.state::<DynamicRosterState>().fallback_chain.clone();
+        let guard = fallback_chain.read().await;
+        guard.clone()
+    };
 
-    for provider in order {
-        match provider {
-            "ollama" => {
-                match try_ollama(&app, &client, &body, &source, &ollama_model).await {
-                    Ok(response) => return response,
-                    Err(e) => errors.push(format!("Ollama failed: {}", e)),
-                }
+    let mut errors = Vec::new();
+    let mut skip_google = false;
+
+    if !chain.is_empty() {
+        for target_model in chain {
+            if target_model.provider == "google" && skip_google {
+                continue;
             }
-            "cloud" => {
-                let chain = {
-                    let fallback_chain = app.state::<DynamicRosterState>().fallback_chain.clone();
-                    let guard = fallback_chain.read().await;
-                    guard.clone()
-                };
-                
-                let mut skip_google = false;
-                
-                for cloud_model in chain {
-                    if skip_google && cloud_model.provider == "google" {
+
+            if let Some(health_state) = app.try_state::<ProviderHealthState>() {
+                let now = std::time::Instant::now();
+                // 1. Check provider circuit breaker (e.g. 10 min cooldown on 403 Forbidden)
+                {
+                    let p_cooldowns = health_state.provider_cooldowns.read().await;
+                    if let Some(expiry) = p_cooldowns.get(&target_model.provider) {
+                        if *expiry > now {
+                            log_event(
+                                &app,
+                                "WARN",
+                                "ROUTER",
+                                &format!("Skipping provider '{}' (circuit breaker active for another {}s)", target_model.provider, (*expiry - now).as_secs()),
+                            );
+                            continue;
+                        }
+                    }
+                }
+                // 2. Check if model is permanently gated by agentic harness requirement
+                {
+                    let gated = health_state.gated_models.read().await;
+                    if gated.contains(&target_model.model) {
+                        log_event(
+                            &app,
+                            "WARN",
+                            "ROUTER",
+                            &format!("Skipping gated model '{}'", target_model.model),
+                        );
                         continue;
                     }
-                    match try_cloud_provider(&app, &client, &body, &source, &cloud_model).await {
-                        Ok(response) => return response,
-                        Err(e) => {
-                            let _ = app.emit("proxy_model_error", ProxyModelErrorPayload {
-                                model: cloud_model.model.clone(),
-                                provider: cloud_model.provider.clone(),
-                                error: e.clone(),
-                            });
-                            
-                            errors.push(format!("{} ({}) failed: {}", cloud_model.provider, cloud_model.model, e));
-                            if e.contains("HTTP 429") {
-                                if cloud_model.provider == "google" && (e.contains("quota metric") || e.contains("free_tier_requests") || e.contains("Quota exceeded")) {
-                                    skip_google = true;
-                                }
-                                continue;
-                            }
+                }
+                // 3. Check if specific model is on cooldown (e.g. 503 or TTFT timeout)
+                {
+                    let m_cooldowns = health_state.model_cooldowns.read().await;
+                    if let Some(expiry) = m_cooldowns.get(&target_model.model) {
+                        if *expiry > now {
+                            log_event(
+                                &app,
+                                "WARN",
+                                "ROUTER",
+                                &format!("Skipping model '{}' (temporary cooldown active for another {}s)", target_model.model, (*expiry - now).as_secs()),
+                            );
+                            continue;
                         }
                     }
                 }
             }
-            _ => {}
+
+            log_event(
+                &app,
+                "INFO",
+                "ROUTER",
+                &format!("Attempting route to [{}] via {}", target_model.model, target_model.provider),
+            );
+            if target_model.provider == "ollama" {
+                if !ollama_running {
+                    continue;
+                }
+                match try_ollama(&app, &client, &body, &source, &target_model.model).await {
+                    Ok(response) => return response,
+                    Err(e) => {
+                        let _ = app.emit("proxy_model_error", ProxyModelErrorPayload {
+                            model: target_model.model.clone(),
+                            provider: "ollama".to_string(),
+                            error: e.clone(),
+                        });
+                        log_event(
+                            &app,
+                            "WARN",
+                            "ROUTER",
+                            &format!("ollama ({}) failed: {}", target_model.model, e),
+                        );
+                        errors.push(format!("ollama ({}) failed: {}", target_model.model, e));
+                    }
+                }
+            } else {
+                match try_cloud_provider(&app, &client, &body, &source, &target_model).await {
+                    Ok(response) => return response,
+                    Err(e) => {
+                        let _ = app.emit("proxy_model_error", ProxyModelErrorPayload {
+                            model: target_model.model.clone(),
+                            provider: target_model.provider.clone(),
+                            error: e.clone(),
+                        });
+                        log_event(
+                            &app,
+                            "WARN",
+                            "ROUTER",
+                            &format!("{} ({}) failed: {}", target_model.provider, target_model.model, e),
+                        );
+                        errors.push(format!("{} ({}) failed: {}", target_model.provider, target_model.model, e));
+                        if e.contains("HTTP 403") && target_model.provider == "google" {
+                            skip_google = true;
+                        }
+                        if e.contains("HTTP 429") {
+                            if target_model.provider == "google" && (e.contains("quota metric") || e.contains("free_tier_requests") || e.contains("Quota exceeded")) {
+                                skip_google = true;
+                            }
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        // Fallback when dynamic roster chain is empty on cold start
+        if ollama_viable {
+            match try_ollama(&app, &client, &body, &source, &ollama_model).await {
+                Ok(response) => return response,
+                Err(e) => errors.push(format!("Ollama failed: {}", e)),
+            }
         }
     }
+
+    log_event(
+        &app,
+        "ERROR",
+        "ROUTER",
+        &format!("All upstream providers failed for request from '{}'", source),
+    );
 
     // If both fail, return an aggregated 500 error
     axum::response::Response::builder()
@@ -1712,16 +2147,30 @@ pub fn is_openrouter_free_alias(id: &str) -> bool {
     trimmed == "openrouter/free" || trimmed == "openrouter:free"
 }
 
+#[tauri::command]
+async fn get_provider_statuses(state: State<'_, ProviderHealthState>) -> Result<HashMap<String, String>, String> {
+    let statuses = state.live_statuses.read().await;
+    Ok(statuses.clone())
+}
+
+#[derive(Clone, Debug)]
 struct RankedModel {
     model: CloudModel,
     priority: f32,
 }
 
 async fn fetch_live_routing_chain(app: &tauri::AppHandle) -> Vec<CloudModel> {
-    let overrides = {
+    let (enable_paid_fallback, overrides) = {
         let state = app.state::<FrugalConfigState>();
         let config = state.config.lock().await;
-        config.manual_model_overrides.clone()
+        (config.enable_paid_fallback, config.manual_model_overrides.clone())
+    };
+
+    let gated_set: HashSet<String> = if let Some(health_state) = app.try_state::<ProviderHealthState>() {
+        let guard = health_state.gated_models.read().await;
+        guard.clone()
+    } else {
+        HashSet::new()
     };
     
     let mut ranked_chain: Vec<RankedModel> = Vec::new();
@@ -1738,12 +2187,14 @@ async fn fetch_live_routing_chain(app: &tauri::AppHandle) -> Vec<CloudModel> {
             if let Some(models) = json.get("models").and_then(|m| m.as_array()) {
                 for m in models {
                     if let Some(name) = m.get("name").and_then(|n| n.as_str()) {
-                        let priority = crate::model_db::MODEL_REGISTRY.get_score(name);
+                        let iq = crate::model_db::MODEL_REGISTRY.get_score(name);
+                        // Ollama models default below cloud models (-10.0 baseline) unless pinned
+                        let priority = -10.0 + (iq / 1000.0);
                         ranked_chain.push(RankedModel {
                             model: CloudModel {
                                 model: name.to_string(),
                                 provider: "ollama".to_string(),
-                                iq: priority,
+                                iq,
                             },
                             priority,
                         });
@@ -1804,9 +2255,12 @@ async fn fetch_live_routing_chain(app: &tauri::AppHandle) -> Vec<CloudModel> {
     }
 
     // 3. Fetch from OpenRouter
+    let mut openrouter_has_credits = false;
     if let Ok(key) = crate::get_credential("openrouter") {
         if let Ok(resp) = client.get("https://openrouter.ai/api/v1/models")
             .header("Authorization", format!("Bearer {}", key))
+            .header("HTTP-Referer", "https://github.com/chorned/frugaLLM")
+            .header("X-Title", "FrugaLLM")
             .send().await {
             if let Ok(json) = resp.json::<serde_json::Value>().await {
                 if let Some(models) = json.get("data").and_then(|m| m.as_array()) {
@@ -1814,6 +2268,11 @@ async fn fetch_live_routing_chain(app: &tauri::AppHandle) -> Vec<CloudModel> {
                         if let Some(id) = m.get("id").and_then(|i| i.as_str()) {
                             // Filter out openrouter:free / openrouter/free router model alias
                             if is_openrouter_free_alias(id) {
+                                continue;
+                            }
+
+                            // Filter out models permanently gated by agentic harness requirement
+                            if gated_set.contains(id) {
                                 continue;
                             }
 
@@ -1847,13 +2306,19 @@ async fn fetch_live_routing_chain(app: &tauri::AppHandle) -> Vec<CloudModel> {
                                     let _ctx = m.get("context_length").and_then(|c| c.as_u64()).unwrap_or(8192);
                                     let inference_id = id.to_string();
                                     let lookup_id = id.trim_end_matches(":free");
-                                    let priority = crate::model_db::MODEL_REGISTRY.get_score(lookup_id);
+                                    let is_heavy_550b = inference_id.contains("550b") || inference_id.contains("nemotron-3-ultra-550b");
+                                    let raw_score = crate::model_db::MODEL_REGISTRY.get_score(lookup_id);
+                                    let priority = if is_heavy_550b {
+                                        (raw_score - 15.0).max(1.0)
+                                    } else {
+                                        raw_score
+                                    };
                                     println!("Score for {} (lookup: {}) is {}", inference_id, lookup_id, priority);
                                     ranked_chain.push(RankedModel {
                                         model: CloudModel {
                                             model: inference_id,
                                             provider: "openrouter".to_string(),
-                                            iq: priority,
+                                            iq: raw_score,
                                         },
                                         priority,
                                     });
@@ -1864,8 +2329,57 @@ async fn fetch_live_routing_chain(app: &tauri::AppHandle) -> Vec<CloudModel> {
                 }
             }
         }
+
+        // Check OpenRouter credits if paid fallback is enabled
+        if enable_paid_fallback {
+            if let Ok(resp) = client.get("https://openrouter.ai/api/v1/credits")
+                .header("Authorization", format!("Bearer {}", key))
+                .header("HTTP-Referer", "https://github.com/chorned/frugaLLM")
+                .header("X-Title", "FrugaLLM")
+                .send().await {
+                if resp.status().is_success() {
+                    if let Ok(json) = resp.json::<serde_json::Value>().await {
+                        if let Some(data) = json.get("data") {
+                            let total_credits = data.get("total_credits").and_then(|c| c.as_f64()).unwrap_or(0.0);
+                            let total_usage = data.get("total_usage").and_then(|u| u.as_f64()).unwrap_or(0.0);
+                            if total_credits > total_usage {
+                                openrouter_has_credits = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if openrouter_has_credits {
+                let paid_models = [
+                    "google/gemini-2.5-flash",
+                    "anthropic/claude-3.5-haiku",
+                    "openai/gpt-4o-mini",
+                ];
+                for paid_id in paid_models {
+                    if !ranked_chain.iter().any(|rm| rm.model.model == paid_id) {
+                        let score = crate::model_db::MODEL_REGISTRY.get_score(paid_id);
+                        ranked_chain.push(RankedModel {
+                            model: CloudModel {
+                                model: paid_id.to_string(),
+                                provider: "openrouter".to_string(),
+                                iq: score,
+                            },
+                            priority: score,
+                        });
+                    }
+                }
+            }
+        }
     }
 
+    sort_and_apply_overrides(ranked_chain, &overrides)
+}
+
+fn sort_and_apply_overrides(
+    mut ranked_chain: Vec<RankedModel>,
+    overrides: &[String],
+) -> Vec<CloudModel> {
     // 4. Sort and apply overrides using exact index mapping
     ranked_chain.sort_by(|a, b| b.priority.total_cmp(&a.priority));
 
@@ -1960,6 +2474,19 @@ async fn start_frugallm_server(app: tauri::AppHandle) {
             }
             let _ = app.emit("frugallm_server_status", running_status);
 
+            let is_tool_gateway_active = check_tool_gateway_status(app.clone()).await;
+            log_event(
+                &app,
+                "INFO",
+                "INIT",
+                &format!(
+                    "FrugaLLM core server listening on {}:{} | Tool Enforcing Gateway: {}",
+                    ip,
+                    actual_port,
+                    if is_tool_gateway_active { "ACTIVE" } else { "DISABLED" }
+                ),
+            );
+
             let _ = axum::serve(listener, router).await;
         }
         Err(e) => {
@@ -1997,7 +2524,9 @@ async fn configure_hermes_defaults(app: tauri::AppHandle, state: tauri::State<'_
         std::fs::write(&config_path, config_content).map_err(|e| e.to_string())?;
 
         let soul_path = hermes_dir.join("soul.md");
-        let soul_content = r#"# IDENTITY AND PURPOSE
+        let soul_upper = hermes_dir.join("SOUL.md");
+        if !soul_path.exists() && !soul_upper.exists() {
+            let soul_content = r#"# IDENTITY AND PURPOSE
 You are Hermes, the core intelligence and primary agent operating within the Users environment. 
 
 Your SOLE PURPOSE is to act as a highly efficient, self-reliant generalist. You must execute user requests, write functional code, draft documentation, and prepare the environment directly. 
@@ -2023,7 +2552,11 @@ You are a turn-based, request-response agent. Once you finish generating a respo
 - If the user asks you to monitor progress, wait, or keep them posted, you MUST NOT simply agree and end your turn. 
 - You MUST explicitly inform the user of your turn-based nature. 
 - Never state in conversational text that you have "started a background process" or promise to "notify them soon" unless you have explicitly called a specific tool (like a cronjob utility) in the same turn to handle it."#;
-        std::fs::write(&soul_path, soul_content).map_err(|e| e.to_string())?;
+            std::fs::write(&soul_path, soul_content).map_err(|e| e.to_string())?;
+            log_event(&app, "INFO", "HERMES", "Created default soul.md in ~/.hermes/soul.md");
+        } else {
+            log_event(&app, "INFO", "HERMES", "soul.md already exists in ~/.hermes; preserving existing user file");
+        }
     }
     Ok(())
 }
@@ -2031,18 +2564,79 @@ You are a turn-based, request-response agent. Once you finish generating a respo
 #[tauri::command]
 fn edit_hermes_soul(app: tauri::AppHandle) -> Result<(), String> {
     if let Ok(home) = app.path().home_dir() {
-        let soul_path = home.join(".hermes").join("soul.md");
-        if soul_path.exists() {
-            #[cfg(target_os = "macos")]
-            let _ = std::process::Command::new("open").arg(&soul_path).spawn();
-            #[cfg(target_os = "windows")]
-            let _ = std::process::Command::new("cmd").args(["/C", "start", "", &soul_path.to_string_lossy()]).spawn();
-            #[cfg(target_os = "linux")]
-            let _ = std::process::Command::new("xdg-open").arg(&soul_path).spawn();
+        let hermes_dir = home.join(".hermes");
+        let soul_path = hermes_dir.join("soul.md");
+        let soul_upper = hermes_dir.join("SOUL.md");
+        let target_path = if soul_path.exists() {
+            soul_path
+        } else if soul_upper.exists() {
+            soul_upper
         } else {
             return Err("soul.md does not exist yet. Please initialize Hermes first.".to_string());
+        };
+        #[cfg(target_os = "macos")]
+        let _ = std::process::Command::new("open").arg(&target_path).spawn();
+        #[cfg(target_os = "windows")]
+        let _ = std::process::Command::new("cmd").args(["/C", "start", "", &target_path.to_string_lossy()]).spawn();
+        #[cfg(target_os = "linux")]
+        let _ = std::process::Command::new("xdg-open").arg(&target_path).spawn();
+    }
+    Ok(())
+}
+
+fn format_log_entry(level: &str, tag: &str, message: &str) -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    format!("[{}] [{}] [{}] {}\n", now, level, tag, message)
+}
+
+fn append_log_entry_to_path(path: &std::path::Path, level: &str, tag: &str, message: &str) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        if !parent.exists() {
+            std::fs::create_dir_all(parent)?;
         }
     }
+    use std::io::Write;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+    let entry = format_log_entry(level, tag, message);
+    file.write_all(entry.as_bytes())?;
+    Ok(())
+}
+
+fn get_app_log_file_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let log_dir = app_data_dir.join("logs");
+    if !log_dir.exists() {
+        let _ = std::fs::create_dir_all(&log_dir);
+    }
+    Ok(log_dir.join("frugallm.log"))
+}
+
+pub fn log_event(app: &tauri::AppHandle, level: &str, tag: &str, message: &str) {
+    let stdout_line = format!("[{}] [{}] {}", level, tag, message);
+    println!("{}", stdout_line);
+    if let Ok(path) = get_app_log_file_path(app) {
+        let _ = append_log_entry_to_path(&path, level, tag, message);
+    }
+}
+
+#[tauri::command]
+fn open_app_logs(app: tauri::AppHandle) -> Result<(), String> {
+    let log_path = get_app_log_file_path(&app)?;
+    if !log_path.exists() {
+        let _ = append_log_entry_to_path(&log_path, "INFO", "INIT", "FrugaLLM log initialized");
+    }
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("open").arg(&log_path).spawn();
+    #[cfg(target_os = "windows")]
+    let _ = std::process::Command::new("cmd").args(["/C", "start", "", &log_path.to_string_lossy()]).spawn();
+    #[cfg(target_os = "linux")]
+    let _ = std::process::Command::new("xdg-open").arg(&log_path).spawn();
     Ok(())
 }
 
@@ -2815,6 +3409,7 @@ fn main() {
             };
             let fallback_chain_clone = dynamic_roster_state.fallback_chain.clone();
             app.manage(dynamic_roster_state);
+            app.manage(ProviderHealthState::default());
 
             // Spawn FrugalLLM Core Server
             let app_handle_clone = app_handle.clone();
@@ -3006,6 +3601,7 @@ fn main() {
             check_hermes_status,
             check_opencode_status,
             check_ollama_status,
+            get_ollama_chat_model,
             get_hermes_version,
             get_opencode_version,
             uninstall_ollama,
@@ -3020,8 +3616,10 @@ fn main() {
             deploy_local_model,
             get_frugallm_config,
             set_frugallm_config,
+            get_provider_statuses,
             get_frugallm_server_status,
             edit_hermes_soul,
+            open_app_logs,
             is_wipe_mode,
             is_mock_update_mode,
             get_local_ips,
@@ -3466,6 +4064,212 @@ mod tests {
         assert!(!is_openrouter_free_alias("openrouter/auto"));
         assert!(!is_openrouter_free_alias("google/gemma-4-31b-it:free"));
         assert!(!is_openrouter_free_alias("meta-llama/llama-3.3-70b-instruct:free"));
+    }
+
+    #[test]
+    fn test_ollama_defaults_below_cloud_unless_pinned() {
+        let candidates = vec![
+            RankedModel {
+                model: CloudModel {
+                    model: "llama3:8b".to_string(),
+                    provider: "ollama".to_string(),
+                    iq: 45.0,
+                },
+                priority: -10.0,
+            },
+            RankedModel {
+                model: CloudModel {
+                    model: "gemini-2.5-pro".to_string(),
+                    provider: "google".to_string(),
+                    iq: 75.5,
+                },
+                priority: 75.5,
+            },
+            RankedModel {
+                model: CloudModel {
+                    model: "meta-llama/llama-3.3-70b-instruct:free".to_string(),
+                    provider: "openrouter".to_string(),
+                    iq: 62.0,
+                },
+                priority: 62.0,
+            },
+        ];
+
+        // 1. Unpinned queue: cloud models must prioritize ahead of Ollama
+        let unpinned_overrides = vec!["".to_string(), "".to_string(), "".to_string()];
+        let chain = sort_and_apply_overrides(candidates.clone(), &unpinned_overrides);
+        assert_eq!(chain.len(), 3);
+        assert_eq!(chain[0].provider, "google");
+        assert_eq!(chain[0].model, "gemini-2.5-pro");
+        assert_eq!(chain[1].provider, "openrouter");
+        assert_eq!(chain[2].provider, "ollama");
+        assert_eq!(chain[2].model, "llama3:8b");
+
+        // 2. Pinned slot: when user overrides slot 0 with Ollama, it must sit in slot 0
+        let pinned_overrides = vec!["llama3:8b".to_string(), "".to_string(), "".to_string()];
+        let pinned_chain = sort_and_apply_overrides(candidates, &pinned_overrides);
+        assert_eq!(pinned_chain[0].provider, "ollama");
+        assert_eq!(pinned_chain[0].model, "llama3:8b");
+        assert_eq!(pinned_chain[1].provider, "google");
+        assert_eq!(pinned_chain[2].provider, "openrouter");
+    }
+
+    #[test]
+    fn test_get_ollama_chat_model_selection() {
+        // 1. With frugallm-active present
+        let json_with_active = serde_json::json!({
+            "models": [
+                { "name": "llama3:8b" },
+                { "name": "frugallm-active:latest" }
+            ]
+        });
+        assert_eq!(resolve_ollama_chat_model_from_tags(&json_with_active), "frugallm-active");
+
+        // 2. Pre-installed Ollama with llama3:8b, but no frugallm-active
+        let json_preinstalled = serde_json::json!({
+            "models": [
+                { "name": "llama3:8b" },
+                { "name": "mistral:latest" }
+            ]
+        });
+        assert_eq!(resolve_ollama_chat_model_from_tags(&json_preinstalled), "llama3:8b");
+
+        // 3. Empty models
+        let json_empty = serde_json::json!({ "models": [] });
+        assert_eq!(resolve_ollama_chat_model_from_tags(&json_empty), "frugallm-active");
+    }
+
+    #[test]
+    fn test_frugallm_logger_writes_and_formats() {
+        let entry = format_log_entry("INFO", "ROUTER", "Attempt 1/2: Model=gemini-2.5-pro");
+        assert!(entry.contains("[INFO]"));
+        assert!(entry.contains("[ROUTER]"));
+        assert!(entry.contains("Attempt 1/2: Model=gemini-2.5-pro"));
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let log_dir = temp_dir.path().join("logs");
+        let log_path = log_dir.join("frugallm.log");
+
+        append_log_entry_to_path(&log_path, "INFO", "PROXY", "Test line 1").unwrap();
+        append_log_entry_to_path(&log_path, "ERROR", "ROUTER", "Test error 2").unwrap();
+
+        let contents = std::fs::read_to_string(&log_path).unwrap();
+        assert!(contents.contains("[PROXY] Test line 1"));
+        assert!(contents.contains("[ROUTER] Test error 2"));
+    }
+
+    #[test]
+    fn test_reprimand_sanitizer_removes_leakage() {
+        let chunk_with_reprimand = b"data: {\"content\":\"Here is my plan. [SYSTEM REPRIMAND: You detailed a plan and informed the user you were taking action, but failed to output the corresponding JSON tool call. Do not apologize. Output the required tool call immediately.] Let me now execute the tool.\"}\n\n";
+        let text = std::str::from_utf8(chunk_with_reprimand).unwrap();
+        let cleaned = text.replace(
+            "[SYSTEM REPRIMAND: You detailed a plan and informed the user you were taking action, but failed to output the corresponding JSON tool call. Do not apologize. Output the required tool call immediately.]",
+            "",
+        );
+        assert!(!cleaned.contains("[SYSTEM REPRIMAND:"));
+        assert!(cleaned.contains("Here is my plan. "));
+        assert!(cleaned.contains(" Let me now execute the tool."));
+    }
+
+    #[test]
+    fn test_tool_enforcement_directive_format() {
+        assert!(TOOL_ENFORCEMENT_DIRECTIVE.contains("[TOOL ENFORCEMENT DIRECTIVE]"));
+        assert!(TOOL_ENFORCEMENT_DIRECTIVE.contains("Strict tool calling is required"));
+    }
+
+    #[test]
+    fn test_parse_agent_version() {
+        // Multi-line Hermes Agent output
+        let hermes_raw = "Hermes Agent v0.21.1 (2026.9.7) · upstream 72a3277c\nInstall directory: /Users/chorned/.hermes/hermes-agent\nPython: 3.11.15\n";
+        assert_eq!(parse_agent_version(hermes_raw), Some("v0.21.1".to_string()));
+
+        // Clean semver with and without v
+        assert_eq!(parse_agent_version("1.18.29\n"), Some("v1.18.29".to_string()));
+        assert_eq!(parse_agent_version("v0.3.1"), Some("v0.3.1".to_string()));
+        assert_eq!(parse_agent_version("OpenCode 2.0.4"), Some("v2.0.4".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_provider_health_state_circuit_breaker_and_cooldowns() {
+        let state = ProviderHealthState::default();
+
+        // 1. Initial state has no cooldowns and empty statuses
+        {
+            let statuses = state.live_statuses.read().await;
+            assert!(statuses.is_empty());
+            let p_cooldowns = state.provider_cooldowns.read().await;
+            assert!(p_cooldowns.is_empty());
+            let m_cooldowns = state.model_cooldowns.read().await;
+            assert!(m_cooldowns.is_empty());
+            let gated = state.gated_models.read().await;
+            assert!(gated.is_empty());
+        }
+
+        // 2. 403 Forbidden puts provider on cooldown
+        let now = std::time::Instant::now();
+        {
+            let mut p_cooldowns = state.provider_cooldowns.write().await;
+            p_cooldowns.insert("google".to_string(), now + std::time::Duration::from_secs(600));
+            let mut statuses = state.live_statuses.write().await;
+            statuses.insert("google".to_string(), "403".to_string());
+        }
+        {
+            let p_cooldowns = state.provider_cooldowns.read().await;
+            let expiry = p_cooldowns.get("google").expect("google cooldown");
+            assert!(*expiry > std::time::Instant::now());
+
+            let statuses = state.live_statuses.read().await;
+            assert_eq!(statuses.get("google"), Some(&"403".to_string()));
+        }
+
+        // 3. 503 / Timeout puts model on 60s cooldown
+        {
+            let mut m_cooldowns = state.model_cooldowns.write().await;
+            m_cooldowns.insert("nvidia/nemotron-3-ultra-550b:free".to_string(), now + std::time::Duration::from_secs(60));
+            let mut statuses = state.live_statuses.write().await;
+            statuses.insert("openrouter".to_string(), "503".to_string());
+        }
+        {
+            let m_cooldowns = state.model_cooldowns.read().await;
+            let expiry = m_cooldowns.get("nvidia/nemotron-3-ultra-550b:free").expect("nemotron cooldown");
+            assert!(*expiry > std::time::Instant::now());
+
+            let statuses = state.live_statuses.read().await;
+            assert_eq!(statuses.get("openrouter"), Some(&"503".to_string()));
+        }
+
+        // 4. Agentic harness gating prunes model into gated_models
+        {
+            let mut gated = state.gated_models.write().await;
+            gated.insert("thinkingmachines/inkling-small:free".to_string());
+        }
+        {
+            let gated = state.gated_models.read().await;
+            assert!(gated.contains("thinkingmachines/inkling-small:free"));
+        }
+    }
+
+    #[test]
+    fn test_frugal_config_enable_paid_fallback_default() {
+        let config = FrugalConfig::default();
+        assert!(config.enable_paid_fallback);
+
+        // Deserializing without enable_paid_fallback field defaults to true
+        let json = r#"{"port": 61721}"#;
+        let parsed: FrugalConfig = serde_json::from_str(json).unwrap();
+        assert!(parsed.enable_paid_fallback);
+    }
+
+    #[test]
+    fn test_550b_penalty_in_ranking() {
+        let nemotron_score = crate::model_db::MODEL_REGISTRY.get_score("nvidia/nemotron-3-ultra-550b-a55b");
+        assert!(nemotron_score > 0.0);
+
+        let is_heavy = "nvidia/nemotron-3-ultra-550b-a55b-20260604:free".contains("550b");
+        assert!(is_heavy);
+
+        let penalized = (nemotron_score - 15.0).max(1.0);
+        assert!(penalized < nemotron_score);
     }
 }
 

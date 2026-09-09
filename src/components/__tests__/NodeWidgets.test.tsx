@@ -189,6 +189,18 @@ describe('NodeWidgets Components', () => {
       // Assert: Component maintains active state
       expect(screen.getByTestId('active-model-name')).toBeInTheDocument();
     });
+
+    it('renders error status light when lastStatus indicates an upstream error', () => {
+      render(
+        <MemoryProvider>
+          <HardwareNode lastStatus="503" />
+        </MemoryProvider>
+      );
+
+      const statusElement = screen.getByTestId('node-ollama-status');
+      expect(statusElement).toBeInTheDocument();
+      expect(statusElement).toHaveTextContent('503');
+    });
   });
 
   describe('CloudConnectNode', () => {

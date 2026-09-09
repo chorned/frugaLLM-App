@@ -45,6 +45,7 @@ impl ModelIntelligenceRegistry {
             ("thinkingmachines/inkling", 42.3),
             ("thinkingmachines/inkling-small", 41.2),
             ("nvidia/nemotron-3-ultra-550b-a55b", 38.3),
+            ("openai/gpt-4o-mini", 60.0),
         ];
 
         for (model, score) in seed_models {

@@ -15,6 +15,7 @@
     "test:unit": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
+    "screenshots": "playwright test tests/e2e/screenshots.spec.ts",
     "test:smoke": "wdio run smoke-tests/wdio.conf.js",
     "test": "npm run test:rust && npm run test:unit"
   },

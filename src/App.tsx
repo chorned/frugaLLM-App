@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import { TerminalLoader } from './components/TerminalLoader';
 import { useCanvasLogic } from './hooks/useCanvasLogic';
+import { useProxyActivityIndicator, ProxyActivityPayload } from './hooks/useProxyActivityIndicator';
 import { enable as enableAutostart, disable as disableAutostart, isEnabled as isAutostartEnabled } from '@tauri-apps/plugin-autostart';
 import { Store } from '@tauri-apps/plugin-store';
 import { Settings } from './components/Settings';
@@ -13,6 +14,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
+import { formatApiBaseUrl, copyToClipboard } from './utils/clipboard';
 import ReactMarkdown from 'react-markdown';
 import { StatusLight, InfoField, HardwareNode } from './components/NodeWidgets';
 import {
@@ -48,6 +50,25 @@ const GUIDES_MAP: Record<string, string> = {
   ollama: ollamaGuide,
   openrouter: openrouterGuide
 };
+
+let isScreenshotMode = () => false;
+let getScreenshotScreen = (): string | null => null;
+let getScreenshotInitialNodes = (n: any[]) => n;
+let APPSTORE_BOOT_LOGS: string[] = [];
+let APPSTORE_FRUGAL_CONFIG: any = null;
+let APPSTORE_FORM_DATA: any = null;
+let APPSTORE_TELEMETRY: any = null;
+
+if (import.meta.env.DEV) {
+  const mod = await import('./dev/screenshotMode');
+  isScreenshotMode = mod.isScreenshotMode;
+  getScreenshotScreen = mod.getScreenshotScreen;
+  getScreenshotInitialNodes = mod.getScreenshotInitialNodes;
+  APPSTORE_BOOT_LOGS = mod.APPSTORE_BOOT_LOGS;
+  APPSTORE_FRUGAL_CONFIG = mod.APPSTORE_FRUGAL_CONFIG;
+  APPSTORE_FORM_DATA = mod.APPSTORE_FORM_DATA;
+  APPSTORE_TELEMETRY = mod.APPSTORE_TELEMETRY;
+}
 
 
 const NODE_WIDTH = 220;
@@ -193,6 +214,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
   const [confirmUninstall, setConfirmUninstall] = useState<string | null>(null);
   const [showToolGatewayPrompt, setShowToolGatewayPrompt] = useState<'install' | 'uninstall' | null>(null);
   const [ipCopied, setIpCopied] = useState(false);
+  const [ipCopyError, setIpCopyError] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [passwordCopied, setPasswordCopied] = useState(false);
   const [enablePassword, setEnablePassword] = useState(false);
@@ -211,25 +233,49 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
     }
   }, [detectedVram]);
   
-  const [formData, setFormData] = useState({
-    ip: node.data.ip || '',
-    port: node.data.port || '',
-    status: node.data.status || 'active',
-    schemaPath: node.data.schemaPath || '',
-    cwd: node.data.cwd || '',
-    bin: node.data.bin || '',
-    extraArgs: node.data.extraArgs || '',
-    prompt: node.data.prompt || '',
-    apiKey: '',
-    googleApiKey: '',
-    bind_all_interfaces: false,
-    api_password: '',
-    hermes_workspace: frugalConfig?.hermes_workspace || '',
-    opencode_workspace: frugalConfig?.opencode_workspace || '',
-    start_on_login: false,
-    start_minimized: frugalConfig?.start_minimized || false,
-    global_cli_enabled: false,
-    manual_model_overrides: frugalConfig?.manual_model_overrides || []
+  const [formData, setFormData] = useState(() => {
+    if (import.meta.env.DEV && isScreenshotMode() && APPSTORE_FORM_DATA) {
+      return {
+        ip: node.data.ip || APPSTORE_FORM_DATA.ip,
+        port: node.data.port || APPSTORE_FORM_DATA.port,
+        status: node.data.status || 'active',
+        schemaPath: node.data.schemaPath || APPSTORE_FORM_DATA.schemaPath,
+        cwd: node.data.cwd || APPSTORE_FORM_DATA.cwd,
+        bin: node.data.bin || APPSTORE_FORM_DATA.bin,
+        extraArgs: node.data.extraArgs || APPSTORE_FORM_DATA.extraArgs,
+        prompt: node.data.prompt || APPSTORE_FORM_DATA.prompt,
+        apiKey: node.id === 'node-openrouter' ? APPSTORE_FORM_DATA.apiKey : '',
+        googleApiKey: node.id === 'node-google' ? APPSTORE_FORM_DATA.googleApiKey : '',
+        bind_all_interfaces: true,
+        api_password: APPSTORE_FORM_DATA.api_password,
+        hermes_workspace: APPSTORE_FORM_DATA.hermes_workspace,
+        opencode_workspace: APPSTORE_FORM_DATA.opencode_workspace,
+        start_on_login: true,
+        start_minimized: false,
+        global_cli_enabled: true,
+        manual_model_overrides: APPSTORE_FORM_DATA.manual_model_overrides
+      };
+    }
+    return {
+      ip: node.data.ip || '',
+      port: node.data.port || '',
+      status: node.data.status || 'active',
+      schemaPath: node.data.schemaPath || '',
+      cwd: node.data.cwd || '',
+      bin: node.data.bin || '',
+      extraArgs: node.data.extraArgs || '',
+      prompt: node.data.prompt || '',
+      apiKey: '',
+      googleApiKey: '',
+      bind_all_interfaces: false,
+      api_password: '',
+      hermes_workspace: frugalConfig?.hermes_workspace || '',
+      opencode_workspace: frugalConfig?.opencode_workspace || '',
+      start_on_login: false,
+      start_minimized: frugalConfig?.start_minimized || false,
+      global_cli_enabled: false,
+      manual_model_overrides: frugalConfig?.manual_model_overrides || []
+    };
   });
 
   useEffect(() => {
@@ -463,19 +509,27 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
                 </div>
 
                 <button 
+                  data-testid="btn-copy-ip-port"
                   onClick={async () => {
-                     try {
-                       await writeText(`http://${formData.bind_all_interfaces ? '0.0.0.0' : '127.0.0.1'}:${formData.port}`);
-                       setIpCopied(true);
-                       setTimeout(() => setIpCopied(false), 1500);
-                     } catch (err) {
-                       console.error('Clipboard write failed:', err);
-                     }
+                    const url = formatApiBaseUrl({
+                      ip: formData.ip,
+                      port: formData.port,
+                      bind_all_interfaces: formData.bind_all_interfaces,
+                    });
+                    const success = await copyToClipboard(url);
+                    if (success) {
+                      setIpCopied(true);
+                      setIpCopyError(false);
+                      setTimeout(() => setIpCopied(false), 1500);
+                    } else {
+                      setIpCopyError(true);
+                      setTimeout(() => setIpCopyError(false), 2000);
+                    }
                   }}
                   style={{ 
                     width: '100%', 
                     padding: '9px 16px', 
-                    backgroundColor: ipCopied ? '#10B981' : '#171717', 
+                    backgroundColor: ipCopied ? '#10B981' : (ipCopyError ? '#ef4444' : '#171717'), 
                     color: '#ffffff', 
                     border: 'none', 
                     borderRadius: '9999px', 
@@ -485,7 +539,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
                     fontFamily: 'inherit', 
                     transition: 'all 0.15s ease' 
                   }}>
-                  {ipCopied ? '✓ OK' : 'COPY IP & PORT'}
+                  {ipCopied ? '✓ COPIED' : (ipCopyError ? 'COPY FAILED' : 'COPY IP & PORT')}
                 </button>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '2px' }}>
@@ -1506,7 +1560,18 @@ const TerminalView = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, 
         } else if (mode === 'run-opencode-web') {
           await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && ${cliPathEnv} && ${resolveOpenCodeBin} && ${frugalEnv} && "$OPENCODE_BIN" web`] });
         } else if (mode === 'run-ollama') {
-          await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && export PATH="/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/Applications/Ollama.app/Contents/Resources:$PATH" && ${frugalEnv} && ollama run frugallm-active`] });
+          let targetModel = 'frugallm-active';
+          try {
+            const resolved = await invoke<string>('get_ollama_chat_model');
+            if (resolved) targetModel = resolved;
+          } catch (err) {
+            console.warn('Unable to resolve dynamic ollama chat model:', err);
+          }
+          await invoke('spawn_pty', { 
+            sessionId, 
+            command: 'bash', 
+            args: ['-c', `export TERM=xterm-256color && export PATH="/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/Applications/Ollama.app/Contents/Resources:$PATH" && ${frugalEnv} && TARGET_MODEL="${targetModel}" && if ! ollama list 2>/dev/null | grep -q "^$TARGET_MODEL"; then FALLBACK="$(ollama list 2>/dev/null | awk 'NR>1 {print $1}' | head -n 1)"; if [ -n "$FALLBACK" ]; then TARGET_MODEL="$FALLBACK"; fi; fi && ollama run "$TARGET_MODEL"`] 
+          });
         } else if (mode === 'run-hermes-web') {
           await invoke('spawn_pty', { sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && ${cliPathEnv} && ${resolveHermesBin} && ${frugalEnv} && "$HERMES_BIN" dashboard --host 127.0.0.1`] });
         } else if (mode === 'run-hermes-desktop') {
@@ -1695,8 +1760,19 @@ function AppContent() {
 
   const { onboardingState, handleDecision, isLoaded } = useOnboarding();
   const { theme, toggleTheme, isDark } = useTheme();
-  const [nodes, setNodes] = useState(initialNodes);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [nodes, setNodes] = useState(() => {
+    if (import.meta.env.DEV && isScreenshotMode()) {
+      return getScreenshotInitialNodes(initialNodes);
+    }
+    return initialNodes;
+  });
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(() => {
+    if (import.meta.env.DEV && isScreenshotMode()) {
+      const scr = getScreenshotScreen();
+      if (scr && scr.startsWith('node-')) return scr;
+    }
+    return null;
+  });
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLElement>(null);
@@ -1714,22 +1790,72 @@ function AppContent() {
   });
   const [guidesOpen, setGuidesOpen] = useState(false);
   const [terminalMode, setTerminalMode] = useState<'install-hermes' | 'run-hermes' | 'run-hermes-web' | 'run-hermes-gateway' | 'run-hermes-desktop' | 'install-opencode' | 'run-opencode' | 'run-opencode-web' | 'install-ollama' | 'run-ollama' | 'install-tool-gateway' | 'uninstall-tool-gateway' | null>(null);
-  const [isHermesInstalled, setIsHermesInstalled] = useState<boolean | null>(null);
-  const [isOpenCodeInstalled, setIsOpenCodeInstalled] = useState<boolean | null>(null);
-  const [hermesVersion, setHermesVersion] = useState<string>('N/A');
-  const [opencodeVersion, setOpencodeVersion] = useState<string>('N/A');
-  const [isOllamaInstalled, setIsOllamaInstalled] = useState<boolean | null>(null);
-  const [isToolGatewayInstalled, setIsToolGatewayInstalled] = useState<boolean | null>(null);
+  const [isHermesInstalled, setIsHermesInstalled] = useState<boolean | null>(() => {
+    if (import.meta.env.DEV && isScreenshotMode()) return true;
+    return null;
+  });
+  const [isOpenCodeInstalled, setIsOpenCodeInstalled] = useState<boolean | null>(() => {
+    if (import.meta.env.DEV && isScreenshotMode()) return true;
+    return null;
+  });
+  const [hermesVersion, setHermesVersion] = useState<string>(() => {
+    if (import.meta.env.DEV && isScreenshotMode()) return 'v0.4.2';
+    return 'N/A';
+  });
+  const [opencodeVersion, setOpencodeVersion] = useState<string>(() => {
+    if (import.meta.env.DEV && isScreenshotMode()) return 'v1.2.0';
+    return 'N/A';
+  });
+  const [isOllamaInstalled, setIsOllamaInstalled] = useState<boolean | null>(() => {
+    if (import.meta.env.DEV && isScreenshotMode()) return true;
+    return null;
+  });
+  const [isToolGatewayInstalled, setIsToolGatewayInstalled] = useState<boolean | null>(() => {
+    if (import.meta.env.DEV && isScreenshotMode()) return true;
+    return null;
+  });
 
-    const [isAppLoaded, setIsAppLoaded] = useState(false);
-  const [initLogs, setInitLogs] = useState<string[]>([]);
-  const [frugalConfig, setFrugalConfig] = useState<any>(null);
-  const [activeProcesses, setActiveProcesses] = useState<Record<string, boolean>>({});
+  const [isAppLoaded, setIsAppLoaded] = useState(() => {
+    if (import.meta.env.DEV && isScreenshotMode()) {
+      return getScreenshotScreen() !== 'boot';
+    }
+    return false;
+  });
+  const [initLogs, setInitLogs] = useState<string[]>(() => {
+    if (import.meta.env.DEV && isScreenshotMode() && getScreenshotScreen() === 'boot') {
+      return APPSTORE_BOOT_LOGS;
+    }
+    return [];
+  });
+  const [frugalConfig, setFrugalConfig] = useState<any>(() => {
+    if (import.meta.env.DEV && isScreenshotMode()) return APPSTORE_FRUGAL_CONFIG;
+    return null;
+  });
+  const [activeProcesses, setActiveProcesses] = useState<Record<string, boolean>>((): Record<string, boolean> => {
+    if (import.meta.env.DEV && isScreenshotMode()) {
+      return {
+        'run-hermes-gateway': true,
+        'hermes-gateway': true,
+        'run-hermes-desktop': true,
+        'run-opencode-web': true,
+      };
+    }
+    return {};
+  });
   const [showExitModal, setShowExitModal] = useState(false);
   const [exitServices, setExitServices] = useState<string[]>([]);
 
   useEffect(() => {
     let isMounted = true;
+    if (import.meta.env.DEV && isScreenshotMode()) {
+      if (getScreenshotScreen() === 'boot') {
+        setInitLogs(APPSTORE_BOOT_LOGS);
+        setIsAppLoaded(false);
+        return;
+      }
+      setIsAppLoaded(true);
+      return;
+    }
     const runInit = async () => {
       const addLog = (msg: string) => {
         if (isMounted) setInitLogs(prev => [...prev, msg]);
@@ -1834,6 +1960,22 @@ function AppContent() {
       }
       await new Promise(r => setTimeout(r, 300));
 
+      addLog("Checking provider health statuses...");
+      try {
+        const statuses = await invoke<Record<string, string>>('get_provider_statuses');
+        if (statuses && typeof statuses === 'object') {
+          setNodes(nds => nds.map(n => {
+            const providerKey = n.id.replace('node-', '');
+            if (statuses[providerKey]) {
+              return { ...n, data: { ...n.data, lastStatus: statuses[providerKey] } };
+            }
+            return n;
+          }));
+        }
+      } catch (e) {
+        console.error("Failed to query provider statuses:", e);
+      }
+
       addLog("Checking server status...");
       try {
         const status = await invoke<any>('get_frugallm_server_status');
@@ -1881,10 +2023,28 @@ function AppContent() {
         setPortConflict(null);
       }
     });
+    const unlistenProviderStatus = listen('provider_status', (event: any) => {
+      const { provider, status } = event.payload || {};
+      if (!provider) return;
+      const targetId = `node-${provider}`;
+      setNodes(nds => nds.map(n => {
+        if (n.id === targetId) {
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              lastStatus: status
+            }
+          };
+        }
+        return n;
+      }));
+    });
     return () => {
       unlistenConfig.then(f => f());
       unlistenError.then(f => f());
       unlistenStatus.then(f => f());
+      unlistenProviderStatus.then(f => f());
     };
   }, []);
 
@@ -1905,12 +2065,20 @@ function AppContent() {
 
   // UI State
   const [portConflict, setPortConflict] = useState<{ port: number; message: string } | null>(null);
-  const [detectedVram, setDetectedVram] = useState<string>('8'); // Default placeholder
-  const [latestTelemetry, setLatestTelemetry] = useState<any>(null);
-  const [hardwareProfile, setHardwareProfile] = useState<HardwareProfile | null>(null);
+  const [detectedVram, setDetectedVram] = useState<string>(() => {
+    if (import.meta.env.DEV && isScreenshotMode()) return '16';
+    return '8';
+  });
+  const [latestTelemetry, setLatestTelemetry] = useState<any>(() => {
+    if (import.meta.env.DEV && isScreenshotMode()) return APPSTORE_TELEMETRY;
+    return null;
+  });
+  const [hardwareProfile, setHardwareProfile] = useState<HardwareProfile | null>(() => {
+    if (import.meta.env.DEV && isScreenshotMode()) return (APPSTORE_TELEMETRY as any)?.hardware_profile;
+    return null;
+  });
 
-  const [activeProxyState, setActiveProxyState] = useState<{source: string, target: string} | null>(null);
-  const proxyTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { activeProxyState, handleProxyActivityEvent, cleanup: cleanupProxyIndicator } = useProxyActivityIndicator();
 
   useEffect(() => {
     invoke<HardwareProfile>('detect_hardware_profile')
@@ -2012,15 +2180,8 @@ function AppContent() {
     }).catch(console.error);
 
     let unlistenProxy: (() => void) | null = null;
-    listen<{source: string, target: string, is_active: boolean}>('proxy_activity', (event) => {
-      if (proxyTimeout.current) clearTimeout(proxyTimeout.current);
-      if (event.payload.is_active) {
-        setActiveProxyState({ source: event.payload.source, target: event.payload.target });
-        // Fallback timeout in case the drop event is lost
-        proxyTimeout.current = setTimeout(() => setActiveProxyState(null), 120000);
-      } else {
-        setActiveProxyState(null);
-      }
+    listen<ProxyActivityPayload>('proxy_activity', (event) => {
+      handleProxyActivityEvent(event.payload);
     }).then(unlisten => {
       unlistenProxy = unlisten;
     }).catch(console.error);
@@ -2068,9 +2229,7 @@ function AppContent() {
       if (unlistenServiceExit) {
         unlistenServiceExit();
       }
-      if (proxyTimeout.current) {
-        clearTimeout(proxyTimeout.current);
-      }
+      cleanupProxyIndicator();
     };
   }, []);
 
@@ -2263,7 +2422,11 @@ function AppContent() {
         try {
           const res = await tauriFetch(`https://openrouter.ai/api/v1/auth/key`, { 
             method: 'GET',
-            headers: { 'Authorization': `Bearer ${finalConfig.apiKey}` }
+            headers: { 
+              'Authorization': `Bearer ${finalConfig.apiKey}`,
+              'HTTP-Referer': 'https://github.com/chorned/frugaLLM',
+              'X-Title': 'FrugaLLM'
+            }
           });
           if (res.ok) {
             await invoke('set_credential', { service: 'openrouter', secret: finalConfig.apiKey });
@@ -2544,7 +2707,14 @@ function AppContent() {
           onMouseDown={(e) => handleCanvasMouseDown(e)}
           onClick={(e) => handleNodeClick(e, node.id)}
         >
-          <HardwareNode isGenerating={isOllamaGenerating} label={node.data.label} subheader={node.data.subheader} icon={<OllamaIcon size={14} />} isSelected={isSelected} />
+          <HardwareNode 
+            isGenerating={isOllamaGenerating} 
+            label={node.data.label} 
+            subheader={node.data.subheader} 
+            icon={<OllamaIcon size={14} />} 
+            isSelected={isSelected} 
+            lastStatus={node.data.lastStatus}
+          />
         </div>
       );
     }
@@ -2705,12 +2875,23 @@ function AppContent() {
                   </a>
                 )}
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>Status</span>
-                <span data-testid={`${node.id}-status`} style={{ fontSize: '0.78rem', fontWeight: 500, color: node.data.status === 'active' ? '#10B981' : 'var(--zen-text-secondary)' }}>
-                  {node.data.status === 'active' ? (node.data.lastStatus || '200 OK') : 'N/A'}
-                </span>
-              </div>
+              {(() => {
+                const isError = !!node.data.lastStatus && /4\d\d|5\d\d|error|timeout|offline/i.test(node.data.lastStatus);
+                const statusText = node.data.lastStatus || (node.data.status === 'active' ? '200 OK' : 'N/A');
+                const statusColor = isError 
+                  ? '#ef4444' 
+                  : (node.data.status === 'active' || node.data.lastStatus === '200 OK')
+                    ? '#10B981' 
+                    : 'var(--zen-text-secondary)';
+                return (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>Status</span>
+                    <span data-testid={`${node.id}-status`} style={{ fontSize: '0.78rem', fontWeight: 500, color: statusColor }}>
+                      {statusText}
+                    </span>
+                  </div>
+                );
+              })()}
             </>
           ) : (node.id === 'node-hermes' || node.id === 'node-opencode') ? (
             (() => {
@@ -2732,9 +2913,9 @@ function AppContent() {
                       {statusText}
                     </span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>Version:</span>
-                    <span data-testid={`${node.id}-version`} style={{ fontSize: '0.78rem', fontWeight: 500, color: 'var(--zen-text)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)', flexShrink: 0 }}>Version:</span>
+                    <span data-testid={`${node.id}-version`} style={{ fontSize: '0.78rem', fontWeight: 500, color: 'var(--zen-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={versionText}>
                       {versionText}
                     </span>
                   </div>
@@ -2986,7 +3167,7 @@ function AppContent() {
                   strokeLinecap="round"
                   strokeDasharray={line.isActive ? 8 : undefined}
                   className={line.isActive ? "edge-flow-active" : ""}
-                  style={line.isActive ? { strokeDasharray: '8', animation: 'flowAnimation 0.8s linear infinite' } : {}}
+                  style={line.isActive ? { strokeDasharray: '8', animation: 'flowAnimation 0.8s linear infinite', transition: 'stroke 0.2s ease, opacity 0.2s ease' } : { transition: 'stroke 0.2s ease, opacity 0.2s ease' }}
                 />
               ))}
             </svg>
