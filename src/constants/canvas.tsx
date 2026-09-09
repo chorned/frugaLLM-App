@@ -18,17 +18,6 @@ export const GUIDES_MAP: Record<string, string> = {
 };
 
 export const NODE_WIDTH = 220;
-const CORE_NODE_HEIGHT = 128;
-export const PERIPHERAL_NODE_HEIGHT = 104;
-
-export const NODE_HEIGHTS: Record<string, number> = {
-  'node-frugallm': CORE_NODE_HEIGHT,
-  'node-ollama': PERIPHERAL_NODE_HEIGHT,
-  'node-google': PERIPHERAL_NODE_HEIGHT,
-  'node-openrouter': PERIPHERAL_NODE_HEIGHT,
-  'node-opencode': PERIPHERAL_NODE_HEIGHT,
-  'node-hermes': PERIPHERAL_NODE_HEIGHT,
-};
 
 type NodeData = {
   label: string;
