@@ -40,7 +40,7 @@ import { IssueReporterModal } from './components/IssueReporterModal';
 import { UpdateNotification } from './components/UpdateNotification';
 import { Tooltip, InfoIconSVG } from './components/Tooltip';
 import en from './locales/en.json';
-import { Eye, EyeOff, Copy, Check, Sun, Moon, Bug } from 'lucide-react';
+import { Eye, EyeOff, Copy, Check, Sun, Moon } from 'lucide-react';
 import { loadOnnxClassifier, clearOnnxCache } from './services/onnxGateway';
 import agentsGuide from './guides/agents.md?raw';
 import ollamaGuide from './guides/ollama.md?raw';

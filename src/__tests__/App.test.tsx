@@ -1018,7 +1018,7 @@ describe('App Component Integration', () => {
   }, 15000);
 
   it('renders report issue CTA button at the bottom of NodeConfigPanel and opens IssueReporterModal', async () => {
-    (invoke as any).mockImplementation((cmd: string, args?: any) => {
+    (invoke as any).mockImplementation((cmd: string, _args?: any) => {
       if (cmd === 'get_diagnostic_data') {
         return Promise.resolve({
           app_version: '0.0.11',
