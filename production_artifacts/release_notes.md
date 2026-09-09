@@ -3,7 +3,6 @@
 ### 🚀 Features
 - **Brand Identity & Iconography Refresh:** Complete update of application branding assets and high-resolution multi-density icons across macOS (`.icns`), Windows (`.ico`), Linux (`.png`), iOS, and Android mipmap resolutions.
 - **In-App Update Checker & Notification Banner:** Integrated automated release checking against GitHub releases API with semver resolution, non-intrusive banner notifications, and direct release navigation.
-- **Accessible Tooltips & Enhanced UI States:** Added a modular `Tooltip` component with micro-interaction states, refined dark/light theme contrast, and smooth hover transitions.
 
 ### 🐛 Fixes
 - **E2E Terminal Runner Portability:** Removed hardcoded local evidence paths in Playwright terminal runner test suites to ensure deterministic execution across all CI and developer environments.
