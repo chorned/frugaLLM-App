@@ -8,7 +8,7 @@ import {
   computeMemorySegmentsForModel,
 } from '../services/memoryCalculator';
 
-export type { HardwareProfile, MemorySegments, ModelProfile } from '../services/memoryCalculator';
+export type { HardwareProfile, MemorySegments } from '../services/memoryCalculator';
 
 interface MemoryPipelineWidgetProps {
   segments?: MemorySegments;

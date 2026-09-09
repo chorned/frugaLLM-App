@@ -10,7 +10,7 @@
  * - NO "EXAMPLE", "PLACEHOLDER", or "TEST" strings are ever used.
  */
 
-export const APPSTORE_STRING_OVERRIDES = {
+const APPSTORE_STRING_OVERRIDES = {
   routingGraph: {
     nodes: {
       frugallmCore: {
@@ -70,7 +70,7 @@ export const APPSTORE_BOOT_LOGS = [
   "All neural topology subsystems nominal. Launching UI..."
 ];
 
-export const APPSTORE_ROUTING_CHAIN = [
+const APPSTORE_ROUTING_CHAIN = [
   { provider: 'OPENROUTER', model: 'anthropic/claude-3.5-sonnet', iq: 98.4, context_length: 200000 },
   { provider: 'GOOGLE', model: 'google/gemini-2.0-flash', iq: 95.1, context_length: 1048576 },
   { provider: 'OPENROUTER', model: 'meta-llama/llama-3.3-70b-instruct', iq: 92.0, context_length: 128000 },

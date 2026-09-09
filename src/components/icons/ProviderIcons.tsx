@@ -92,8 +92,6 @@ export const GeminiIcon: React.FC<IconProps> = ({
   </svg>
 );
 
-export const AIStudioIcon = GeminiIcon;
-
 /**
  * Hermes / Nous Research brand icon
  */
@@ -127,8 +125,6 @@ export const HermesIcon: React.FC<IconProps> = ({
     />
   </svg>
 );
-
-export const NousResearchIcon = HermesIcon;
 
 /**
  * OpenCode brand icon

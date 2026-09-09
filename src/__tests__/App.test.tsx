@@ -802,13 +802,13 @@ describe('App Component Integration', () => {
 
     const openrouterStatus = screen.getByTestId('node-openrouter-status');
     expect(openrouterStatus).toHaveTextContent('503');
-    expect(openrouterStatus).toHaveStyle({ color: 'rgb(239, 68, 68)' });
+    expect(openrouterStatus).toHaveStyle({ color: 'rgb(234, 179, 8)' }); // #eab308 (Temporary exhaustion)
 
-    // Verify Google status stayed at 403
+    // Verify Google status stayed at 403 (permanently dead / denied)
     expect(screen.getByTestId('node-google-status')).toHaveTextContent('403');
-    expect(screen.getByTestId('node-google-status')).toHaveStyle({ color: 'rgb(239, 68, 68)' });
+    expect(screen.getByTestId('node-google-status')).toHaveStyle({ color: 'rgb(239, 68, 68)' }); // #ef4444
 
-    // 3. Emit 200 OK for Google — Google turns green, OpenRouter remains 503
+    // 3. Emit 200 OK for Google — Google turns green, OpenRouter remains 503 yellow
     act(() => {
       eventListeners['provider_status']?.forEach(cb => cb({ payload: { provider: 'google', status: '200 OK' } }));
     });
@@ -816,7 +816,7 @@ describe('App Component Integration', () => {
     expect(screen.getByTestId('node-google-status')).toHaveTextContent('200 OK');
     expect(screen.getByTestId('node-google-status')).toHaveStyle({ color: 'rgb(16, 185, 129)' }); // #10B981
     expect(screen.getByTestId('node-openrouter-status')).toHaveTextContent('503');
-    expect(screen.getByTestId('node-openrouter-status')).toHaveStyle({ color: 'rgb(239, 68, 68)' });
+    expect(screen.getByTestId('node-openrouter-status')).toHaveStyle({ color: 'rgb(234, 179, 8)' }); // #eab308
 
     // 4. Emit 503 for Ollama
     act(() => {

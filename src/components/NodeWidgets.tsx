@@ -24,48 +24,43 @@ const InfoIconSVG = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
-export interface ProcessStatus {
-  status: 'offline' | 'starting' | 'active' | 'error';
-  pid?: number;
-  cpu?: number;
-  ram?: number;
-  uptime?: number;
-}
 
 // =============================================================================
 // StatusLight — Pulsing indicator wired to service health
 // =============================================================================
 export type NodeStatus = 'not_installed' | 'error' | 'ready' | 'active' | 'standby' | 'inactive';
 
-export const StatusLight = ({ status, text }: { status: NodeStatus; text?: string }) => {
-  let color = 'var(--zen-text-secondary)';
+export const StatusLight = ({ status, text, color: customColor }: { status: NodeStatus; text?: string; color?: string }) => {
+  let color = customColor || 'var(--zen-text-secondary)';
   let label = text || status.toUpperCase();
   let animate = false;
 
-  switch (status) {
-    case 'not_installed':
-      color = '#ef4444'; // Red
-      label = text || 'NOT INSTALLED';
-      break;
-    case 'error':
-      color = '#f97316'; // Orange
-      label = text || 'ERROR';
-      break;
-    case 'ready':
-    case 'standby':
-      color = '#eab308'; // Yellow
-      label = text || 'READY';
-      break;
-    case 'active':
-      color = '#10B981'; // Emerald Green
-      label = text || 'ACTIVE';
-      animate = true;
-      break;
-    case 'inactive':
-    default:
-      color = 'var(--zen-text-secondary)';
-      label = text || 'INACTIVE';
-      break;
+  if (!customColor) {
+    switch (status) {
+      case 'not_installed':
+        color = '#ef4444'; // Red
+        label = text || 'NOT INSTALLED';
+        break;
+      case 'error':
+        color = '#ef4444'; // Red (Hard error)
+        label = text || 'ERROR';
+        break;
+      case 'ready':
+      case 'standby':
+        color = '#eab308'; // Yellow
+        label = text || 'READY';
+        break;
+      case 'active':
+        color = '#10B981'; // Emerald Green
+        label = text || 'ACTIVE';
+        animate = true;
+        break;
+      case 'inactive':
+      default:
+        color = 'var(--zen-text-secondary)';
+        label = text || 'INACTIVE';
+        break;
+    }
   }
 
   return (
@@ -474,7 +469,10 @@ export const HardwareNode = ({
   const isLoaded = telemetry?.ollama?.status === 'active';
   const isThinking = (isGenerating && isLoaded) || liveThroughput > 0;
   const isLoading = isGenerating && !isLoaded;
-  const isError = !!lastStatus && /4\d\d|5\d\d|error|timeout|offline/i.test(lastStatus);
+  const isTemporaryExhausted = !!lastStatus && (/429/i.test(lastStatus) || /5\d\d/i.test(lastStatus) || /timeout/i.test(lastStatus));
+  const isDead = !!lastStatus && (/403|404|401/i.test(lastStatus) || /offline/i.test(lastStatus) || (!isTemporaryExhausted && /4\d\d/i.test(lastStatus)));
+  const isError = isTemporaryExhausted || isDead;
+  const statusLightColor = isDead ? '#ef4444' : isTemporaryExhausted ? '#eab308' : undefined;
 
   let headerStatusText = 'Standby';
   if (isError) headerStatusText = lastStatus!;
@@ -506,7 +504,7 @@ export const HardwareNode = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {isStatusActive && (
               <span data-testid="node-ollama-status">
-                <StatusLight status={isError ? 'error' : 'active'} text={headerStatusText} />
+                <StatusLight status={isError ? (isDead ? 'not_installed' : 'standby') : 'active'} text={headerStatusText} color={statusLightColor} />
               </span>
             )}
             <div 
@@ -531,7 +529,7 @@ export const HardwareNode = ({
         </div>
 
         {/* Body */}
-        <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: '8px', backgroundColor: 'var(--zen-surface)', color: 'var(--zen-text)' }}>
+        <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: '8px', backgroundColor: 'var(--zen-surface)', color: 'var(--zen-text)', boxSizing: 'border-box' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>Active Model</span>
             {(() => {

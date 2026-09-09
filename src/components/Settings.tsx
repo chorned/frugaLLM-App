@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { isEnabled as isAutostartEnabled, enable as enableAutostart, disable as disableAutostart } from '@tauri-apps/plugin-autostart';
 import { Store } from '@tauri-apps/plugin-store';
-import { invoke } from '@tauri-apps/api/core';
+import { setGlobalCliCommands, openAppLogs, getGlobalCliCommandsStatus } from '../services/tauri';
 import en from '../locales/en.json';
 import { Tooltip } from './Tooltip';
 import { Bug } from 'lucide-react';
@@ -63,7 +63,7 @@ export const Settings: React.FC<SettingsProps> = ({
           setLocalGlobalCli(Boolean(storeCli));
           onGlobalCliEnabledChange?.(Boolean(storeCli));
         } else {
-          const backendCli = await invoke<boolean>('get_global_cli_commands_status').catch(() => false);
+          const backendCli = await getGlobalCliCommandsStatus().catch(() => false);
           if (isMounted && backendCli !== undefined) {
             setLocalGlobalCli(Boolean(backendCli));
             onGlobalCliEnabledChange?.(Boolean(backendCli));
@@ -140,7 +140,7 @@ export const Settings: React.FC<SettingsProps> = ({
     setLocalGlobalCli(checked);
     setErrorMessage(null);
     try {
-      await invoke('set_global_cli_commands', { enabled: checked });
+      await setGlobalCliCommands(checked);
       const store = await Store.load('store.json');
       await store.set('global_cli_enabled', checked);
       await store.save();
@@ -260,7 +260,7 @@ export const Settings: React.FC<SettingsProps> = ({
           type="button"
           data-testid="btn-view-logs"
           onClick={() => {
-            invoke('open_app_logs').catch((err) => {
+            openAppLogs().catch((err) => {
               console.error('Failed to open app logs:', err);
               setErrorMessage(String(err));
             });
@@ -344,6 +344,5 @@ export const Settings: React.FC<SettingsProps> = ({
   );
 };
 
-export default Settings;
 
 

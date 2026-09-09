@@ -28,14 +28,17 @@ impl ModelIntelligenceRegistry {
 
         // Seed default foundational intelligence benchmarks to guarantee baseline scores
         let seed_models = [
+            ("google/gemini-3.5-flash", 72.0),
+            ("google/gemini-3.8-flash", 70.0),
+            ("google/gemini-3.7-flash", 68.0),
+            ("google/gemini-3.5-flash-lite", 65.0),
             ("google/gemma-4-31b-it", 63.2),
+            ("google/gemini-3.1-flash-lite", 62.0),
+            ("google/gemini-3.1-flash-lite-preview", 61.0),
             ("google/gemma-4-26b-a4b-it", 56.2),
             ("google/gemma-4-12b-it", 48.5),
             ("google/gemma-4-e4b-it", 42.0),
             ("google/gemma-4-e2b-it", 36.5),
-            ("google/gemini-2.5-flash", 65.1),
-            ("google/gemini-2.5-pro", 75.5),
-            ("google/gemini-2.5-flash-lite", 50.8),
             ("anthropic/claude-3.5-sonnet", 85.0),
             ("anthropic/claude-3.5-haiku", 58.0),
             ("meta-llama/llama-3.3-70b-instruct", 62.0),

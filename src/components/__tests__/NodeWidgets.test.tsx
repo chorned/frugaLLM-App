@@ -21,6 +21,7 @@ import {
   HardwareNode,
   CloudConnectNode,
 } from '../NodeWidgets';
+import { getEndpointStatusColor } from '../TopologyCanvas';
 import { MemoryProvider } from '../../context/MemoryContext';
 
 describe('NodeWidgets Components', () => {
@@ -214,4 +215,40 @@ describe('NodeWidgets Components', () => {
       expect(screen.getByText('openrouter.ai')).toBeInTheDocument();
     });
   });
+
+  describe('getEndpointStatusColor', () => {
+    it('returns green for 200, 200 OK, 2xx, alive, and healthy endpoints', () => {
+      expect(getEndpointStatusColor('200')).toBe('#10B981');
+      expect(getEndpointStatusColor('200 OK')).toBe('#10B981');
+      expect(getEndpointStatusColor('201')).toBe('#10B981');
+      expect(getEndpointStatusColor('alive')).toBe('#10B981');
+      expect(getEndpointStatusColor('healthy')).toBe('#10B981');
+    });
+
+    it('returns yellow for temporarily exhausted endpoints (429, 500, 503, 5xx, timeout, standby)', () => {
+      expect(getEndpointStatusColor('500')).toBe('#eab308');
+      expect(getEndpointStatusColor('429')).toBe('#eab308');
+      expect(getEndpointStatusColor('502 Bad Gateway')).toBe('#eab308');
+      expect(getEndpointStatusColor('503 Service Unavailable')).toBe('#eab308');
+      expect(getEndpointStatusColor('504 Gateway Timeout')).toBe('#eab308');
+      expect(getEndpointStatusColor('timeout')).toBe('#eab308');
+      expect(getEndpointStatusColor('standby')).toBe('#eab308');
+      expect(getEndpointStatusColor('quota exhausted')).toBe('#eab308');
+    });
+
+    it('returns red for permanently dead endpoints (404, 403, 401, offline)', () => {
+      expect(getEndpointStatusColor('404')).toBe('#ef4444');
+      expect(getEndpointStatusColor('403')).toBe('#ef4444');
+      expect(getEndpointStatusColor('401')).toBe('#ef4444');
+      expect(getEndpointStatusColor('offline')).toBe('#ef4444');
+      expect(getEndpointStatusColor('404 Not Found')).toBe('#ef4444');
+      expect(getEndpointStatusColor('403 Forbidden - Denied')).toBe('#ef4444');
+    });
+
+    it('falls back appropriately when status is undefined', () => {
+      expect(getEndpointStatusColor(undefined, false)).toBe('var(--zen-text-secondary)');
+      expect(getEndpointStatusColor(undefined, true)).toBe('#eab308');
+    });
+  });
 });
+

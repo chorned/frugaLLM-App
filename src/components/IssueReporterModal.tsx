@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { submitIssueReport, getDiagnosticData } from '../services/tauri';
 import { Bug, ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import en from '../locales/en.json';
 
@@ -42,11 +42,11 @@ export const IssueReporterModal: React.FC<IssueReporterModalProps> = ({
       setErrorMessage(null);
       setIsLoadingDiagnostics(true);
 
-      invoke<DiagnosticPayload>('get_diagnostic_data')
-        .then((data) => {
+      getDiagnosticData()
+        .then((data: any) => {
           setDiagnosticData(data);
         })
-        .catch((err) => {
+        .catch((err: any) => {
           console.warn('Failed to retrieve diagnostic data from Tauri IPC:', err);
           setDiagnosticData({
             app_version: 'unknown',
@@ -98,7 +98,7 @@ export const IssueReporterModal: React.FC<IssueReporterModalProps> = ({
         message: fullMessage,
       };
 
-      await invoke('submit_issue_report', { payload });
+      await submitIssueReport(payload);
 
       setSubmitStatus('success');
     } catch (err: any) {

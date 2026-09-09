@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ChevronUp, ChevronDown, ArrowUpToLine, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { invoke } from '@tauri-apps/api/core';
+import { getFrugallmConfig, refreshRoutingChain as fetchRoutingChain, getRoutingChain, setModelOverride } from '../services/tauri';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import en from '../locales/en.json';
 import { getProviderIcon } from './icons/ProviderIcons';
@@ -14,7 +14,7 @@ export interface CloudModel {
   context_length?: number;
 }
 
-export const isEligibleRoutingModel = (m: CloudModel): boolean => {
+const isEligibleRoutingModel = (m: CloudModel): boolean => {
   if (!m?.model) return false;
   if (m.model.includes('computer-use')) return false;
   if (isOpenRouterFreeAlias(m.model)) return false;
@@ -41,11 +41,11 @@ export const CloudRoutingPanel = ({ overrides: propOverrides, onOverridesChange 
     setLoading(true);
     setErrors({});
     try {
-      const configRes: any = await invoke('get_frugallm_config');
+      const configRes: any = await getFrugallmConfig();
       if (propOverrides === undefined) {
         setInternalOverrides(configRes?.manual_model_overrides || []);
       }
-      const res: any = await invoke('refresh_routing_chain');
+      const res: any = await fetchRoutingChain();
       const filteredRes = (res || []).filter(isEligibleRoutingModel);
       setChain(filteredRes);
     } catch (err) {
@@ -67,11 +67,11 @@ export const CloudRoutingPanel = ({ overrides: propOverrides, onOverridesChange 
       });
       
       try {
-        const res: any = await invoke('get_frugallm_config');
+        const res: any = await getFrugallmConfig();
         if (propOverrides === undefined) {
           setInternalOverrides(res?.manual_model_overrides || []);
         }
-        const cRes: any = await invoke('get_routing_chain');
+        const cRes: any = await getRoutingChain();
         if (Array.isArray(cRes) && cRes.length > 0) {
           const filteredCRes = cRes.filter(isEligibleRoutingModel);
           setChain(filteredCRes);
@@ -122,7 +122,7 @@ export const CloudRoutingPanel = ({ overrides: propOverrides, onOverridesChange 
       // Standalone mode: immediate IPC persistence
       setInternalOverrides(newOverrides);
       try {
-        await invoke('set_model_override', { overrides: newOverrides });
+        await setModelOverride(newOverrides as any);
         await refreshChain();
       } catch(err) {
          console.error("Failed to save override", err);
@@ -144,7 +144,7 @@ export const CloudRoutingPanel = ({ overrides: propOverrides, onOverridesChange 
       // Standalone mode: immediate IPC persistence
       setInternalOverrides(newOverrides);
       try {
-        await invoke('set_model_override', { overrides: newOverrides });
+        await setModelOverride(newOverrides as any);
         await refreshChain();
       } catch(err) {
          console.error("Failed to save override", err);

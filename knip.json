@@ -1,0 +1,21 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "smoke-tests/wdio.conf.js",
+    "smoke-tests/binary.spec.js"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}!"
+  ],
+  "ignoreExportsUsedInFile": true,
+  "ignoreDependencies": [
+    "@tauri-apps/plugin-shell",
+    "@wdio/local-runner",
+    "@wdio/mocha-framework",
+    "webdriverio"
+  ],
+  "ignoreIssues": {
+    "src/services/tauri.ts": ["exports"],
+    "smoke-tests/wdio.conf.js": ["unlisted"]
+  }
+}
