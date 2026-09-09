@@ -84,6 +84,7 @@ vi.mock('@tauri-apps/plugin-http', () => ({
 }));
 
 import { invoke } from '@tauri-apps/api/core';
+import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import confetti from 'canvas-confetti';
 import App from '../App';
 
@@ -825,14 +826,35 @@ describe('App Component Integration', () => {
     const ollamaStatus = screen.getByTestId('node-ollama-status');
     expect(ollamaStatus).toBeInTheDocument();
     expect(ollamaStatus).toHaveTextContent('503');
+
+    // 5. Emit 429 Rate Limit for Google — should be Yellow (#eab308 / rgb(234, 179, 8))
+    act(() => {
+      eventListeners['provider_status']?.forEach(cb => cb({ payload: { provider: 'google', status: '429' } }));
+    });
+    expect(screen.getByTestId('node-google-status')).toHaveTextContent('429');
+    expect(screen.getByTestId('node-google-status')).toHaveStyle({ color: 'rgb(234, 179, 8)' }); // #eab308
+
+    // 6. Emit 429 for OpenRouter — should be Yellow (#eab308 / rgb(234, 179, 8))
+    act(() => {
+      eventListeners['provider_status']?.forEach(cb => cb({ payload: { provider: 'openrouter', status: '429' } }));
+    });
+    expect(screen.getByTestId('node-openrouter-status')).toHaveTextContent('429');
+    expect(screen.getByTestId('node-openrouter-status')).toHaveStyle({ color: 'rgb(234, 179, 8)' }); // #eab308
+
+    // 7. Recover OpenRouter to 200 OK — should be Green (#10B981 / rgb(16, 185, 129))
+    act(() => {
+      eventListeners['provider_status']?.forEach(cb => cb({ payload: { provider: 'openrouter', status: '200 OK' } }));
+    });
+    expect(screen.getByTestId('node-openrouter-status')).toHaveTextContent('200 OK');
+    expect(screen.getByTestId('node-openrouter-status')).toHaveStyle({ color: 'rgb(16, 185, 129)' }); // #10B981
   }, 15000);
 
-  it('initializes provider statuses from backend on startup', async () => {
+  it('initializes provider statuses from backend on startup including rate limits', async () => {
     (invoke as any).mockImplementation((cmd: string) => {
       if (cmd === 'get_provider_statuses') {
         return Promise.resolve({
-          google: '403',
-          openrouter: '503',
+          google: '429',
+          openrouter: '403',
         });
       }
       if (cmd === 'is_wipe_mode') return Promise.resolve(false);
@@ -877,13 +899,211 @@ describe('App Component Integration', () => {
 
     await waitFor(() => {
       const googleStatus = screen.getByTestId('node-google-status');
-      expect(googleStatus).toHaveTextContent('403');
-      expect(googleStatus).toHaveStyle({ color: 'rgb(239, 68, 68)' });
+      expect(googleStatus).toHaveTextContent('429');
+      expect(googleStatus).toHaveStyle({ color: 'rgb(234, 179, 8)' }); // Yellow #eab308
 
       const openrouterStatus = screen.getByTestId('node-openrouter-status');
-      expect(openrouterStatus).toHaveTextContent('503');
-      expect(openrouterStatus).toHaveStyle({ color: 'rgb(239, 68, 68)' });
+      expect(openrouterStatus).toHaveTextContent('403');
+      expect(openrouterStatus).toHaveStyle({ color: 'rgb(239, 68, 68)' }); // Red #ef4444
     }, { timeout: 10000 });
+  }, 15000);
+
+  it('allows replacing an existing configured API key and persists credentials even when probe returns 403', async () => {
+    (tauriFetch as any).mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: async () => ({ error: { message: 'Forbidden' } }),
+    });
+
+    (invoke as any).mockImplementation((cmd: string, args?: any) => {
+      if (cmd === 'get_credential') {
+        if (args?.service === 'google') return Promise.resolve('AIzaSyOriginalKey123');
+        if (args?.service === 'openrouter') return Promise.resolve('sk-or-originalkey');
+        return Promise.resolve(null);
+      }
+      if (cmd === 'set_credential') return Promise.resolve();
+      if (cmd === 'refresh_routing_chain') return Promise.resolve();
+      if (cmd === 'get_provider_statuses') {
+        return Promise.resolve({
+          google: '200 OK',
+        });
+      }
+      if (cmd === 'is_wipe_mode') return Promise.resolve(false);
+      if (cmd === 'is_mock_update_mode') return Promise.resolve(false);
+      if (cmd === 'get_frugallm_config') {
+        return Promise.resolve({
+          port: 61721,
+          bind_all_interfaces: false,
+          api_password: '',
+          input_tokens_session: 0,
+          output_tokens_session: 0,
+          input_tokens_lifetime: 0,
+          output_tokens_lifetime: 0,
+          opencode_workspace: '~/OpenCode',
+          hermes_workspace: '~/Hermes',
+          start_minimized: false,
+          manual_model_overrides: [],
+          tool_enforcing_gateway: false,
+        });
+      }
+      if (cmd === 'get_routing_chain') return Promise.resolve([]);
+      if (cmd === 'check_ollama_status') return Promise.resolve(true);
+      if (cmd === 'check_hermes_status') return Promise.resolve(true);
+      if (cmd === 'check_opencode_status') return Promise.resolve(true);
+      if (cmd === 'check_tool_gateway_status') return Promise.resolve(false);
+      if (cmd === 'detect_vram') return Promise.resolve(16384);
+      if (cmd === 'get_model_tag_for_vram') return Promise.resolve('gemma4:12b');
+      if (cmd === 'detect_hardware_profile') {
+        return Promise.resolve({
+          is_unified: false,
+          dedicated_vram: 16 * 1024 * 1024 * 1024,
+          system_ram: 32 * 1024 * 1024 * 1024,
+          execution_ceiling: 16 * 1024 * 1024 * 1024,
+          os_architecture: 'macos-x86_64',
+        });
+      }
+      return Promise.resolve();
+    });
+
+    render(<App />);
+
+    // Wait for the app to finish loading and display the existing key prefix
+    await waitFor(() => {
+      const apiKeyDisplay = screen.getByTestId('node-google-api-key');
+      expect(apiKeyDisplay).toHaveTextContent('AIzaS...');
+    }, { timeout: 10000 });
+
+    // Open Google AI Studio config panel
+    const googleNode = document.getElementById('node-google');
+    expect(googleNode).not.toBeNull();
+    fireEvent.click(googleNode!);
+
+    // NodeConfigPanel opens: Check configured placeholder and Disconnect button
+    await waitFor(() => {
+      const input = screen.getByPlaceholderText('•••••••••••••••• (Key Configured)');
+      expect(input).toBeInTheDocument();
+      expect(screen.getByText('DISCONNECT')).toBeInTheDocument();
+    });
+
+    // Replace the API key with a new key with prefix 'NEWKY'
+    const input = screen.getByPlaceholderText('•••••••••••••••• (Key Configured)');
+    fireEvent.change(input, { target: { value: 'NEWKY_test_replaced_google_api_key' } });
+
+    // Verify SAVE button is enabled
+    const saveButton = screen.getByTestId('save-node-config-button');
+    expect(saveButton).not.toBeDisabled();
+
+    // Click SAVE CHANGES
+    fireEvent.click(saveButton);
+
+    // Verify set_credential was called with the new key!
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('set_credential', {
+        service: 'google',
+        secret: 'NEWKY_test_replaced_google_api_key',
+      });
+    });
+
+    // Verify the canvas node now displays the new prefix and 403 error in red
+    await waitFor(() => {
+      const apiKeyDisplay = screen.getByTestId('node-google-api-key');
+      expect(apiKeyDisplay).toHaveTextContent('NEWKY...');
+      const statusDisplay = screen.getByTestId('node-google-status');
+      expect(statusDisplay).toHaveTextContent('403');
+      expect(statusDisplay).toHaveStyle({ color: 'rgb(239, 68, 68)' });
+    });
+
+    // Verify Disconnect button remains visible even when status is 403
+    expect(screen.getByText('DISCONNECT')).toBeInTheDocument();
+  }, 15000);
+
+  it('renders report issue CTA button at the bottom of NodeConfigPanel and opens IssueReporterModal', async () => {
+    (invoke as any).mockImplementation((cmd: string, args?: any) => {
+      if (cmd === 'get_diagnostic_data') {
+        return Promise.resolve({
+          app_version: '0.0.11',
+          os_info: 'macos x86_64',
+          logs: '[1234] [INFO] system ok',
+        });
+      }
+      if (cmd === 'get_credential') return Promise.resolve(null);
+      if (cmd === 'is_wipe_mode') return Promise.resolve(false);
+      if (cmd === 'is_mock_update_mode') return Promise.resolve(false);
+      if (cmd === 'get_frugallm_config') {
+        return Promise.resolve({
+          port: 61721,
+          bind_all_interfaces: false,
+          api_password: '',
+          input_tokens_session: 0,
+          output_tokens_session: 0,
+          input_tokens_lifetime: 0,
+          output_tokens_lifetime: 0,
+          opencode_workspace: '~/OpenCode',
+          hermes_workspace: '~/Hermes',
+          start_minimized: false,
+          manual_model_overrides: [],
+          tool_enforcing_gateway: false,
+        });
+      }
+      if (cmd === 'get_routing_chain') return Promise.resolve([]);
+      if (cmd === 'check_ollama_status') return Promise.resolve(false);
+      if (cmd === 'check_hermes_status') return Promise.resolve(false);
+      if (cmd === 'check_opencode_status') return Promise.resolve(false);
+      if (cmd === 'check_tool_gateway_status') return Promise.resolve(false);
+      if (cmd === 'get_provider_statuses') return Promise.resolve({});
+      if (cmd === 'detect_vram') return Promise.resolve(16384);
+      if (cmd === 'get_model_tag_for_vram') return Promise.resolve('gemma4:12b');
+      if (cmd === 'detect_hardware_profile') {
+        return Promise.resolve({
+          is_unified: false,
+          dedicated_vram: 16 * 1024 * 1024 * 1024,
+          system_ram: 32 * 1024 * 1024 * 1024,
+          execution_ceiling: 16 * 1024 * 1024 * 1024,
+          os_architecture: 'macos-x86_64',
+        });
+      }
+      return Promise.resolve();
+    });
+
+    render(<App />);
+
+    // 1. First, click Google Node and verify "Report Issue" button is NOT present
+    await waitFor(() => {
+      expect(document.getElementById('node-google')).not.toBeNull();
+    }, { timeout: 10000 });
+    const googleNode = document.getElementById('node-google')!;
+    fireEvent.click(googleNode);
+
+    // Ensure Google Node panel opens, but does not have the report issue button
+    await waitFor(() => {
+      expect(screen.getByTestId('save-node-config-button')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('report-issue-button')).not.toBeInTheDocument();
+
+    // 2. Click FrugaLLM node to open its settings panel
+    const frugallmNode = document.getElementById('node-frugallm')!;
+    fireEvent.click(frugallmNode);
+
+    // Verify "Report Issue & Send Diagnostics" button is present underneath View Logs
+    await waitFor(() => {
+      expect(screen.getByTestId('btn-view-logs')).toBeInTheDocument();
+      expect(screen.getByTestId('report-issue-button')).toBeInTheDocument();
+    });
+
+    // 3. Click the button to trigger modal
+    fireEvent.click(screen.getByTestId('report-issue-button'));
+
+    // Verify IssueReporterModal is displayed and get_diagnostic_data was invoked
+    await waitFor(() => {
+      expect(screen.getByTestId('issue-reporter-modal')).toBeInTheDocument();
+      expect(invoke).toHaveBeenCalledWith('get_diagnostic_data');
+    });
+
+    // Close modal
+    fireEvent.click(screen.getByTestId('cancel-issue-button'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('issue-reporter-modal')).not.toBeInTheDocument();
+    });
   }, 15000);
 });
 

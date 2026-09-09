@@ -36,10 +36,11 @@ import { OnboardingDecision } from './components/OnboardingDecision';
 import { OnboardingOverlay } from './components/OnboardingOverlay';
 import { PortConflictBanner } from './components/PortConflictBanner';
 import { ExitConfirmationModal } from './components/ExitConfirmationModal';
+import { IssueReporterModal } from './components/IssueReporterModal';
 import { UpdateNotification } from './components/UpdateNotification';
 import { Tooltip, InfoIconSVG } from './components/Tooltip';
 import en from './locales/en.json';
-import { Eye, EyeOff, Copy, Check, Sun, Moon } from 'lucide-react';
+import { Eye, EyeOff, Copy, Check, Sun, Moon, Bug } from 'lucide-react';
 import { loadOnnxClassifier, clearOnnxCache } from './services/onnxGateway';
 import agentsGuide from './guides/agents.md?raw';
 import ollamaGuide from './guides/ollama.md?raw';
@@ -209,7 +210,7 @@ const Icons = {
   opencode: <OpenCodeIcon size={14} />,
 };
 
-const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeInstalled, isOllamaInstalled, isToolGatewayInstalled, detectedVram, setDetectedVram, hasActiveBackend, handleInitializeHermes, handleOpenHermes, handleUninstallHermes, handleInitializeOpenCode, handleOpenOpenCode, handleUninstallOpenCode, handleInitializeOllama, handleOpenOllama, handleUninstallOllama, handleInstallToolGateway, handleUninstallToolGateway, handleDisconnectOpenRouter, handleDisconnectGoogle, frugalConfig, handleOpenHermesGateway, handleOpenHermesDesktop, handleOpenHermesWeb, handleOpenOpenCodeWeb, activeProcesses, handleKillProcess, setFrugalConfig, latestTelemetry, hardwareProfile, portConflict }: any) => {
+const NodeConfigPanel = ({ node, onClose, onSave, onOpenIssueReporter, isHermesInstalled, isOpenCodeInstalled, isOllamaInstalled, isToolGatewayInstalled, detectedVram, setDetectedVram, hasActiveBackend, handleInitializeHermes, handleOpenHermes, handleUninstallHermes, handleInitializeOpenCode, handleOpenOpenCode, handleUninstallOpenCode, handleInitializeOllama, handleOpenOllama, handleUninstallOllama, handleInstallToolGateway, handleUninstallToolGateway, handleDisconnectOpenRouter, handleDisconnectGoogle, frugalConfig, handleOpenHermesGateway, handleOpenHermesDesktop, handleOpenHermesWeb, handleOpenOpenCodeWeb, activeProcesses, handleKillProcess, setFrugalConfig, latestTelemetry, hardwareProfile, portConflict }: any) => {
   const memory = useMemory();
   const [confirmUninstall, setConfirmUninstall] = useState<string | null>(null);
   const [showToolGatewayPrompt, setShowToolGatewayPrompt] = useState<'install' | 'uninstall' | null>(null);
@@ -220,6 +221,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
   const [enablePassword, setEnablePassword] = useState(false);
   const [initialData, setInitialData] = useState<any>(null);
   const [initialEnablePassword, setInitialEnablePassword] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     const vramNum = Number(detectedVram) || 0;
@@ -328,7 +330,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
       setFormData(initOther);
       setInitialData(initOther);
     }
-  }, [node, frugalConfig]);
+  }, [node.id, frugalConfig]);
 
   const hasChanges = (() => {
     if (!initialData) return false;
@@ -381,33 +383,46 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
 
   const handleChange = (e: any) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
   const handleSave = async () => {
-    if (!hasChanges) return;
-    if (node.id === 'node-frugallm') {
-      try {
-        if (formData.start_on_login) {
-          await enableAutostart();
-        } else {
-          await disableAutostart();
+    if (!hasChanges || isSaving) return;
+    setIsSaving(true);
+    try {
+      if (node.id === 'node-frugallm') {
+        try {
+          if (formData.start_on_login) {
+            await enableAutostart();
+          } else {
+            await disableAutostart();
+          }
+        } catch (err) {
+          console.warn('Failed to update autostart setting:', err);
         }
-      } catch (err) {
-        console.warn('Failed to update autostart setting:', err);
+        try {
+          const store = await Store.load('store.json');
+          await store.set('start_minimized', Boolean(formData.start_minimized));
+          await store.save();
+        } catch (err) {
+          console.warn('Failed to save start_minimized to store:', err);
+        }
       }
-      try {
-        const store = await Store.load('store.json');
-        await store.set('start_minimized', Boolean(formData.start_minimized));
-        await store.save();
-      } catch (err) {
-        console.warn('Failed to save start_minimized to store:', err);
-      }
+      const dataToSave = {
+        ...formData,
+        api_password: enablePassword ? formData.api_password : '',
+        manual_model_overrides: formData.manual_model_overrides
+      };
+      await onSave(node.id, dataToSave);
+      const resetForm = {
+        ...formData,
+        apiKey: '',
+        googleApiKey: ''
+      };
+      setFormData(resetForm);
+      setInitialData({ ...resetForm });
+      setInitialEnablePassword(enablePassword);
+    } catch (err) {
+      console.error('Failed to save node config:', err);
+    } finally {
+      setIsSaving(false);
     }
-    const dataToSave = {
-      ...formData,
-      api_password: enablePassword ? formData.api_password : '',
-      manual_model_overrides: formData.manual_model_overrides
-    };
-    onSave(node.id, dataToSave);
-    setInitialData({ ...formData });
-    setInitialEnablePassword(enablePassword);
   };
   
   const handlePanelClick = (e: any) => e.stopPropagation();
@@ -683,6 +698,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
                     onStartMinimizedChange={(minimized) => setFormData(prev => ({ ...prev, start_minimized: minimized }))}
                     globalCliEnabled={formData.global_cli_enabled}
                     onGlobalCliEnabledChange={(enabled) => setFormData(prev => ({ ...prev, global_cli_enabled: enabled }))}
+                    onReportIssue={onOpenIssueReporter}
                   />
                 </div>
               </div>
@@ -773,14 +789,14 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
               {node.id === 'node-openrouter' && (
                 <div>
                   <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>API KEY <Tooltip text="Your OpenRouter API Key. This will be securely saved into your operating system's native Keychain!" /></label>
-                  <input type="password" name="apiKey" value={formData.apiKey || ''} onChange={handleChange} placeholder={node.data.status === 'active' ? en.routingGraph.nodeConfigPanel.inputs.openRouterApiKey.configuredPlaceholder : en.routingGraph.nodeConfigPanel.inputs.openRouterApiKey.placeholder}
+                  <input type="password" name="apiKey" value={formData.apiKey || ''} onChange={handleChange} placeholder={Boolean(node.data.keyPrefix || node.data.status === 'active') ? en.routingGraph.nodeConfigPanel.inputs.openRouterApiKey.configuredPlaceholder : en.routingGraph.nodeConfigPanel.inputs.openRouterApiKey.placeholder}
                     style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem', boxShadow: 'none' }} />
                 </div>
               )}
               {node.id === 'node-google' && (
                 <div>
                   <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>API KEY <Tooltip text="Your Google AI Studio API Key. This will be securely saved into your operating system's native Keychain!" /></label>
-                  <input type="password" name="googleApiKey" value={formData.googleApiKey || ''} onChange={handleChange} placeholder={node.data.status === 'active' ? en.routingGraph.nodeConfigPanel.inputs.googleApiKey.configuredPlaceholder : en.routingGraph.nodeConfigPanel.inputs.googleApiKey.placeholder}
+                  <input type="password" name="googleApiKey" value={formData.googleApiKey || ''} onChange={handleChange} placeholder={Boolean(node.data.keyPrefix || node.data.status === 'active') ? en.routingGraph.nodeConfigPanel.inputs.googleApiKey.configuredPlaceholder : en.routingGraph.nodeConfigPanel.inputs.googleApiKey.placeholder}
                     style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem', boxShadow: 'none' }} />
                 </div>
               )}
@@ -1153,7 +1169,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
         </div>
       )}
       
-      {node.id === 'node-openrouter' && node.data.status === 'active' && (
+      {node.id === 'node-openrouter' && Boolean(node.data.keyPrefix || node.data.status === 'active') && (
         <div style={{ marginTop: '12px', padding: '14px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '14px' }}>
           <h4 style={{ margin: '0 0 8px 0', color: 'var(--zen-text)', fontSize: '0.8rem', fontWeight: 600 }}>OPENROUTER CONNECTED</h4>
           {confirmUninstall === 'openrouter' ? (
@@ -1176,7 +1192,7 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
         </div>
       )}
 
-      {node.id === 'node-google' && node.data.status === 'active' && (
+      {node.id === 'node-google' && Boolean(node.data.keyPrefix || node.data.status === 'active') && (
         <div style={{ marginTop: '12px', padding: '14px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '14px' }}>
           <h4 style={{ margin: '0 0 8px 0', color: 'var(--zen-text)', fontSize: '0.8rem', fontWeight: 600 }}>GOOGLE AI STUDIO CONNECTED</h4>
           {confirmUninstall === 'google' ? (
@@ -1203,35 +1219,35 @@ const NodeConfigPanel = ({ node, onClose, onSave, isHermesInstalled, isOpenCodeI
       <div style={{ padding: '14px 20px', borderTop: '1px solid var(--zen-border)', backgroundColor: 'var(--zen-surface)', display: 'flex', gap: '8px' }}>
         <button 
           onClick={handleSave} 
-          disabled={!hasChanges}
+          disabled={!hasChanges || isSaving}
           data-testid="save-node-config-button"
-          className={`btn-cta ${hasChanges ? 'btn-cta-primary' : 'btn-cta-secondary'}`}
+          className={`btn-cta ${hasChanges && !isSaving ? 'btn-cta-primary' : 'btn-cta-secondary'}`}
           style={{ 
             flex: 1, 
             padding: '11px 20px', 
-            backgroundColor: hasChanges ? 'var(--zen-accent)' : 'var(--zen-pill-bg)', 
-            color: hasChanges ? '#FFFFFF' : 'var(--zen-text-secondary)', 
-            border: hasChanges ? 'none' : '1px solid var(--zen-pill-border)', 
+            backgroundColor: hasChanges && !isSaving ? 'var(--zen-accent)' : 'var(--zen-pill-bg)', 
+            color: hasChanges && !isSaving ? '#FFFFFF' : 'var(--zen-text-secondary)', 
+            border: hasChanges && !isSaving ? 'none' : '1px solid var(--zen-pill-border)', 
             borderRadius: '9999px', 
             fontWeight: 600, 
             fontSize: '0.85rem', 
-            cursor: hasChanges ? 'pointer' : 'not-allowed', 
+            cursor: hasChanges && !isSaving ? 'pointer' : 'not-allowed', 
             opacity: 1,
             fontFamily: 'inherit', 
-            boxShadow: hasChanges ? 'var(--zen-active-glow)' : 'none', 
+            boxShadow: hasChanges && !isSaving ? 'var(--zen-active-glow)' : 'none', 
           }}
           onMouseDown={e => { 
-            if (hasChanges) {
+            if (hasChanges && !isSaving) {
               e.currentTarget.style.transform = 'scale(0.99)'; 
             }
           }}
           onMouseUp={e => { 
-            if (hasChanges) {
+            if (hasChanges && !isSaving) {
               e.currentTarget.style.transform = 'none'; 
             }
           }}
         >
-          SAVE CHANGES
+          {isSaving ? 'SAVING...' : 'SAVE CHANGES'}
         </button>
       </div>
     </div>
@@ -1844,6 +1860,7 @@ function AppContent() {
   });
   const [showExitModal, setShowExitModal] = useState(false);
   const [exitServices, setExitServices] = useState<string[]>([]);
+  const [isIssueReporterOpen, setIsIssueReporterOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -2389,29 +2406,57 @@ function AppContent() {
     
     if (nodeId === 'node-google') {
       if (finalConfig.googleApiKey) {
+        await invoke('set_credential', { service: 'google', secret: finalConfig.googleApiKey });
+        await invoke('refresh_routing_chain').catch(console.error);
+        finalConfig.status = 'active';
+        finalConfig.keyPrefix = finalConfig.googleApiKey.slice(0, 5);
+
         try {
-          const res = await tauriFetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${finalConfig.googleApiKey}`, { method: 'GET' });
-          if (res.ok) {
-            await invoke('set_credential', { service: 'google', secret: finalConfig.googleApiKey });
-            await invoke('refresh_routing_chain').catch(console.error);
-            finalConfig.status = 'active';
-            finalConfig.keyPrefix = finalConfig.googleApiKey.slice(0, 5);
-            finalConfig.lastStatus = '200 OK';
-            confetti({
-              particleCount: 150,
-              spread: 70,
-              origin: { y: 0.6 },
-              colors: ['#3b82f6', '#ffffff', '#111827']
-            });
-          } else {
-             console.error("Google API key test failed", res.status);
-             finalConfig.status = 'error';
-             finalConfig.lastStatus = `${res.status} Error`;
+          const probeCandidates = [
+            'gemini-flash-latest',
+            'gemini-3.5-flash',
+            'gemma-4-26b-a4b-it'
+          ];
+          let lastStat = 'offline';
+          let verifiedOk = false;
+
+          for (const cand of probeCandidates) {
+            const res = await tauriFetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${cand}:generateContent?key=${finalConfig.googleApiKey}`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  contents: [{ parts: [{ text: 'ping' }] }],
+                  generationConfig: { maxOutputTokens: 1 }
+                })
+              }
+            );
+            if (res.ok) {
+              verifiedOk = true;
+              finalConfig.lastStatus = '200 OK';
+              confetti({
+                particleCount: 150,
+                spread: 70,
+                origin: { y: 0.6 },
+                colors: ['#3b82f6', '#ffffff', '#111827']
+              });
+              break;
+            } else {
+              lastStat = `${res.status}`;
+              if (res.status === 403) {
+                break;
+              }
+            }
+          }
+
+          if (!verifiedOk) {
+            console.error("Google API key test failed", lastStat);
+            finalConfig.lastStatus = lastStat;
           }
         } catch (e) {
-          console.error("Failed to save google credential", e);
-          finalConfig.status = 'error';
-          finalConfig.lastStatus = 'Error';
+          console.error("Failed to test google credential", e);
+          finalConfig.lastStatus = 'offline';
         }
         delete finalConfig.googleApiKey;
       }
@@ -2419,6 +2464,11 @@ function AppContent() {
     
     if (nodeId === 'node-openrouter') {
       if (finalConfig.apiKey) {
+        await invoke('set_credential', { service: 'openrouter', secret: finalConfig.apiKey });
+        await invoke('refresh_routing_chain').catch(console.error);
+        finalConfig.status = 'active';
+        finalConfig.keyPrefix = finalConfig.apiKey.slice(0, 5);
+
         try {
           const res = await tauriFetch(`https://openrouter.ai/api/v1/auth/key`, { 
             method: 'GET',
@@ -2429,10 +2479,6 @@ function AppContent() {
             }
           });
           if (res.ok) {
-            await invoke('set_credential', { service: 'openrouter', secret: finalConfig.apiKey });
-            await invoke('refresh_routing_chain').catch(console.error);
-            finalConfig.status = 'active';
-            finalConfig.keyPrefix = finalConfig.apiKey.slice(0, 5);
             finalConfig.lastStatus = '200 OK';
             confetti({
               particleCount: 150,
@@ -2442,13 +2488,11 @@ function AppContent() {
             });
           } else {
             console.error("OpenRouter API key test failed", res.status);
-            finalConfig.status = 'error';
-            finalConfig.lastStatus = `${res.status} Error`;
+            finalConfig.lastStatus = `${res.status}`;
           }
         } catch (e) {
-          console.error("Failed to save openrouter credential", e);
-          finalConfig.status = 'error';
-          finalConfig.lastStatus = 'Error';
+          console.error("Failed to test openrouter credential", e);
+          finalConfig.lastStatus = 'offline';
         }
         delete finalConfig.apiKey;
       }
@@ -2850,7 +2894,7 @@ function AppContent() {
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>API Key</span>
-                {node.data.status === 'active' ? (
+                {Boolean(node.data.keyPrefix || node.data.status === 'active') ? (
                   <span data-testid={`${node.id}-api-key`} style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--zen-text)', fontFamily: 'monospace', letterSpacing: '0.5px' }}>
                     {node.data.keyPrefix ? `${node.data.keyPrefix}...` : (node.id === 'node-google' ? 'AIzaS...' : 'sk-or...')}
                   </span>
@@ -2876,13 +2920,21 @@ function AppContent() {
                 )}
               </div>
               {(() => {
-                const isError = !!node.data.lastStatus && /4\d\d|5\d\d|error|timeout|offline/i.test(node.data.lastStatus);
-                const statusText = node.data.lastStatus || (node.data.status === 'active' ? '200 OK' : 'N/A');
-                const statusColor = isError 
-                  ? '#ef4444' 
-                  : (node.data.status === 'active' || node.data.lastStatus === '200 OK')
-                    ? '#10B981' 
-                    : 'var(--zen-text-secondary)';
+                const rawStatus = node.data.lastStatus;
+                const isRateLimited = !!rawStatus && /429/i.test(rawStatus);
+                const isHardError = !!rawStatus && (/4\d\d|5\d\d|error|timeout|offline/i.test(rawStatus) && !isRateLimited);
+                const isSuccess = !!rawStatus && (rawStatus === '200 OK' || /^2\d\d$/i.test(rawStatus) || /200/i.test(rawStatus));
+                
+                const statusText = rawStatus || (node.data.status === 'active' ? 'Standby' : 'N/A');
+                const statusColor = isRateLimited
+                  ? '#eab308' // Yellow: Rate limited / cooldown
+                  : isHardError
+                    ? '#ef4444' // Red: Hard blocked (403), 5xx, or network failure
+                    : isSuccess
+                      ? '#10B981' // Green: 200 OK healthy
+                      : (node.data.status === 'active')
+                        ? '#eab308' // Standby / pending verification
+                        : 'var(--zen-text-secondary)';
                 return (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>Status</span>
@@ -3293,7 +3345,7 @@ function AppContent() {
       {/* Settings Modal */}
       {selectedNode && !terminalMode && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.3)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setSelectedNodeId(null)}>
-          <NodeConfigPanel node={selectedNode} onClose={() => setSelectedNodeId(null)} onSave={handleSaveNodeConfig} onOpenGuide={setActiveGuide} isHermesInstalled={isHermesInstalled} isOpenCodeInstalled={isOpenCodeInstalled} isOllamaInstalled={isOllamaInstalled} isToolGatewayInstalled={isToolGatewayInstalled} detectedVram={detectedVram} setDetectedVram={setDetectedVram} hasActiveBackend={hasActiveBackend} handleInitializeHermes={handleInitializeHermes} handleOpenHermes={handleOpenHermes} handleUninstallHermes={handleUninstallHermes} handleInitializeOpenCode={handleInitializeOpenCode} handleOpenOpenCode={handleOpenOpenCode} handleUninstallOpenCode={handleUninstallOpenCode} handleInitializeOllama={handleInitializeOllama} handleOpenOllama={handleOpenOllama} handleUninstallOllama={handleUninstallOllama} handleInstallToolGateway={handleInstallToolGateway} handleUninstallToolGateway={handleUninstallToolGateway} handleDisconnectOpenRouter={handleDisconnectOpenRouter} handleDisconnectGoogle={handleDisconnectGoogle} frugalConfig={frugalConfig} setFrugalConfig={setFrugalConfig} handleOpenHermesGateway={handleOpenHermesGateway} handleOpenHermesDesktop={handleOpenHermesDesktop} handleOpenHermesWeb={handleOpenHermesWeb} handleOpenOpenCodeWeb={handleOpenOpenCodeWeb} activeProcesses={activeProcesses} handleKillProcess={handleKillProcess} latestTelemetry={latestTelemetry} hardwareProfile={hardwareProfile} portConflict={portConflict} />
+          <NodeConfigPanel node={selectedNode} onClose={() => setSelectedNodeId(null)} onSave={handleSaveNodeConfig} onOpenIssueReporter={() => setIsIssueReporterOpen(true)} onOpenGuide={setActiveGuide} isHermesInstalled={isHermesInstalled} isOpenCodeInstalled={isOpenCodeInstalled} isOllamaInstalled={isOllamaInstalled} isToolGatewayInstalled={isToolGatewayInstalled} detectedVram={detectedVram} setDetectedVram={setDetectedVram} hasActiveBackend={hasActiveBackend} handleInitializeHermes={handleInitializeHermes} handleOpenHermes={handleOpenHermes} handleUninstallHermes={handleUninstallHermes} handleInitializeOpenCode={handleInitializeOpenCode} handleOpenOpenCode={handleOpenOpenCode} handleUninstallOpenCode={handleUninstallOpenCode} handleInitializeOllama={handleInitializeOllama} handleOpenOllama={handleOpenOllama} handleUninstallOllama={handleUninstallOllama} handleInstallToolGateway={handleInstallToolGateway} handleUninstallToolGateway={handleUninstallToolGateway} handleDisconnectOpenRouter={handleDisconnectOpenRouter} handleDisconnectGoogle={handleDisconnectGoogle} frugalConfig={frugalConfig} setFrugalConfig={setFrugalConfig} handleOpenHermesGateway={handleOpenHermesGateway} handleOpenHermesDesktop={handleOpenHermesDesktop} handleOpenHermesWeb={handleOpenHermesWeb} handleOpenOpenCodeWeb={handleOpenOpenCodeWeb} activeProcesses={activeProcesses} handleKillProcess={handleKillProcess} latestTelemetry={latestTelemetry} hardwareProfile={hardwareProfile} portConflict={portConflict} />
         </div>
       )}
 
@@ -3389,6 +3441,12 @@ function AppContent() {
           invoke('confirm_exit_app').catch(console.error);
         }}
         activeServices={exitServices}
+      />
+
+      {/* Issue Reporter Modal */}
+      <IssueReporterModal
+        isOpen={isIssueReporterOpen}
+        onClose={() => setIsIssueReporterOpen(false)}
       />
 
       {onboardingState === 'fresh' && (

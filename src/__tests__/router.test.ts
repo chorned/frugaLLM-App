@@ -68,21 +68,21 @@ describe('router module', () => {
     expect(mockFetch).toHaveBeenNthCalledWith(3, 'https://openrouter.ai/api/v1/models', { headers: {} });
   });
 
-  it('filters models requiring "tools" supported parameter and zero prompt/completion pricing', async () => {
+  it('filters models requiring "tools" supported parameter, zero pricing, and >= 128k context window', async () => {
     // Arrange
     const mockModels = [
       {
         id: 'free/tool-model',
         supported_parameters: ['tools', 'temperature'],
         pricing: { prompt: '0', completion: '0' },
-        context_length: 32000,
+        context_length: 128000,
         created: 100,
       },
       {
         id: 'paid/tool-model',
         supported_parameters: ['tools'],
         pricing: { prompt: '0.0001', completion: '0.0002' },
-        context_length: 64000,
+        context_length: 128000,
         created: 100,
       },
       {
@@ -93,10 +93,17 @@ describe('router module', () => {
         created: 100,
       },
       {
+        id: 'free/small-context-model',
+        supported_parameters: ['tools'],
+        pricing: { prompt: '0', completion: '0' },
+        context_length: 32000,
+        created: 100,
+      },
+      {
         id: 'paid/completion-only-model',
         supported_parameters: ['tools'],
         pricing: { prompt: '0', completion: '0.0005' },
-        context_length: 32000,
+        context_length: 128000,
         created: 100,
       },
       {
@@ -127,14 +134,63 @@ describe('router module', () => {
     expect(result).toEqual(['free/tool-model']);
   });
 
+  it('strictly rejects models with context window below 128000 tokens', async () => {
+    const mockModels = [
+      {
+        id: 'model/8k',
+        supported_parameters: ['tools'],
+        pricing: { prompt: '0', completion: '0' },
+        context_length: 8192,
+      },
+      {
+        id: 'model/32k',
+        supported_parameters: ['tools'],
+        pricing: { prompt: '0', completion: '0' },
+        context_length: 32000,
+      },
+      {
+        id: 'model/64k',
+        supported_parameters: ['tools'],
+        pricing: { prompt: '0', completion: '0' },
+        context_length: 64000,
+      },
+      {
+        id: 'model/missing-ctx',
+        supported_parameters: ['tools'],
+        pricing: { prompt: '0', completion: '0' },
+      },
+      {
+        id: 'model/valid-128k',
+        supported_parameters: ['tools'],
+        pricing: { prompt: '0', completion: '0' },
+        context_length: 128000,
+      },
+    ];
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: mockModels }),
+    });
+
+    const result = await fetchFreeOpenRouterModels();
+    expect(result).toEqual(['model/valid-128k']);
+  });
+
   it('sorts free models primarily by context length (descending) and secondarily by created timestamp (descending)', async () => {
     // Arrange
     const mockModels = [
       {
-        id: 'model/short-ctx',
+        id: 'model/huge-ctx',
         supported_parameters: ['tools'],
         pricing: { prompt: '0', completion: '0' },
-        context_length: 8000,
+        context_length: 1000000,
+        created: 100,
+      },
+      {
+        id: 'model/200k-ctx',
+        supported_parameters: ['tools'],
+        pricing: { prompt: '0', completion: '0' },
+        context_length: 200000,
         created: 500,
       },
       {
@@ -152,11 +208,11 @@ describe('router module', () => {
         created: 300,
       },
       {
-        id: 'model/medium-ctx',
+        id: 'model/excluded-short-ctx',
         supported_parameters: ['tools'],
         pricing: { prompt: '0', completion: '0' },
         context_length: 32000,
-        created: 200,
+        created: 900,
       },
     ];
 
@@ -170,10 +226,10 @@ describe('router module', () => {
 
     // Assert
     expect(result).toEqual([
+      'model/huge-ctx',
+      'model/200k-ctx',
       'model/long-ctx-new',
       'model/long-ctx-old',
-      'model/medium-ctx',
-      'model/short-ctx',
     ]);
   });
 

@@ -129,6 +129,26 @@ describe('CloudRoutingPanel Component', () => {
     expect(screen.getByText('SKIPPED: 429 (QUOTA)')).toBeInTheDocument();
   });
 
+  it('displays timeout/cooldown error badge when proxy_model_error with TTFT timeout event is received', async () => {
+    // Arrange
+    render(<CloudRoutingPanel />);
+    await waitFor(() => expect(screen.getByText('openrouter/anthropic-claude-3.5-sonnet')).toBeInTheDocument());
+
+    // Act: Emit TTFT timeout error event
+    await act(async () => {
+      proxyErrorCallback({
+        payload: {
+          model: 'openrouter/anthropic-claude-3.5-sonnet',
+          provider: 'openrouter',
+          error: 'openrouter API error: HTTP timeout - Exceeded TTFT timeout (10s) waiting for first token on model nvidia/nemotron',
+        },
+      });
+    });
+
+    // Assert
+    expect(screen.getByText('SKIPPED: TIMEOUT (COOLDOWN)')).toBeInTheDocument();
+  });
+
   it('handles reordering via Rank Top button and invokes set_model_override', async () => {
     // Arrange
     render(<CloudRoutingPanel />);
@@ -194,5 +214,37 @@ describe('CloudRoutingPanel Component', () => {
     
     // Assert: set_model_override was NOT called immediately
     expect(invoke).not.toHaveBeenCalledWith('set_model_override', expect.anything());
+  });
+
+  it('filters out models with context_length < 128000 and frugallm-active models', async () => {
+    const contextTestModels: CloudModel[] = [
+      { model: 'model/valid-128k', provider: 'openrouter', iq: 80, context_length: 128000 },
+      { model: 'model/valid-1m', provider: 'google', iq: 90, context_length: 1048576 },
+      { model: 'model/excluded-8k', provider: 'google', iq: 70, context_length: 8192 },
+      { model: 'model/excluded-32k', provider: 'openrouter', iq: 60, context_length: 32000 },
+      { model: 'frugallm-active:latest', provider: 'ollama', iq: 0, context_length: 131072 },
+    ];
+
+    (invoke as any).mockImplementation((cmd: string) => {
+      if (cmd === 'get_frugallm_config') return Promise.resolve({ manual_model_overrides: [] });
+      if (cmd === 'get_routing_chain' || cmd === 'refresh_routing_chain') return Promise.resolve(contextTestModels);
+      return Promise.resolve();
+    });
+
+    render(<CloudRoutingPanel />);
+
+    await waitFor(() => {
+      expect(screen.getByText('model/valid-128k')).toBeInTheDocument();
+      expect(screen.getByText('model/valid-1m')).toBeInTheDocument();
+    });
+
+    // Sub-128k models and frugallm-active aliases must be strictly excluded from display
+    expect(screen.queryByText('model/excluded-8k')).not.toBeInTheDocument();
+    expect(screen.queryByText('model/excluded-32k')).not.toBeInTheDocument();
+    expect(screen.queryByText('frugallm-active:latest')).not.toBeInTheDocument();
+
+    // Context badges are removed
+    expect(screen.queryByTestId('model-context-model/valid-128k')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('model-context-model/valid-1m')).not.toBeInTheDocument();
   });
 });

@@ -71,11 +71,11 @@ export const APPSTORE_BOOT_LOGS = [
 ];
 
 export const APPSTORE_ROUTING_CHAIN = [
-  { provider: 'OPENROUTER', model: 'anthropic/claude-3.5-sonnet', iq: 98.4 },
-  { provider: 'GOOGLE', model: 'google/gemini-2.0-flash', iq: 95.1 },
-  { provider: 'OPENROUTER', model: 'meta-llama/llama-3.3-70b-instruct', iq: 92.0 },
-  { provider: 'OPENROUTER', model: 'deepseek/deepseek-chat', iq: 89.6 },
-  { provider: 'OPENROUTER', model: 'openai/gpt-4o', iq: 88.2 }
+  { provider: 'OPENROUTER', model: 'anthropic/claude-3.5-sonnet', iq: 98.4, context_length: 200000 },
+  { provider: 'GOOGLE', model: 'google/gemini-2.0-flash', iq: 95.1, context_length: 1048576 },
+  { provider: 'OPENROUTER', model: 'meta-llama/llama-3.3-70b-instruct', iq: 92.0, context_length: 128000 },
+  { provider: 'OPENROUTER', model: 'deepseek/deepseek-chat', iq: 89.6, context_length: 128000 },
+  { provider: 'OPENROUTER', model: 'openai/gpt-4o', iq: 88.2, context_length: 128000 }
 ];
 
 export const APPSTORE_FRUGAL_CONFIG = {
@@ -181,7 +181,8 @@ export function getScreenshotInitialNodes(baseNodes: any[]): any[] {
             ip: 'openrouter.ai',
             port: '443',
             status: 'active',
-            keyPrefix: 'sk-or-v1-98a3f82b'
+            keyPrefix: 'sk-or-v1-98a3f82b',
+            lastStatus: '200 OK'
           }
         };
       case 'node-google':
@@ -194,7 +195,8 @@ export function getScreenshotInitialNodes(baseNodes: any[]): any[] {
             ip: 'generativelanguage.googleapis.com',
             port: '443',
             status: 'active',
-            keyPrefix: 'AIzaSyD849aF'
+            keyPrefix: 'AIzaSyD849aF',
+            lastStatus: '200 OK'
           }
         };
       case 'node-frugallm':

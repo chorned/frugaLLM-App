@@ -133,6 +133,7 @@
         "disconnect": "DISCONNECT",
         "updateProtocol": "UPDATE PROTOCOL",
         "help": "HELP",
+        "reportIssue": "Report Issue & Send Diagnostics",
         "hermes": {
           "prerequisite": "Please connect an intelligence source to FrugaLLM first.",
           "initialize": "INSTALL HERMES",
@@ -290,9 +291,11 @@
       "scorePrefix": "⚡ SCORE: ",
       "skippedQuota": "SKIPPED: 429 (QUOTA)",
       "skippedError": "SKIPPED: ERROR",
+      "skippedTimeout": "SKIPPED: TIMEOUT (COOLDOWN)",
       "resetRankTitle": "Reset Rank (Drop to Dynamic)",
       "resetButton": "Reset",
-      "active": "ACTIVE"
+      "active": "ACTIVE",
+      "contextWindow": "CTX"
     }
   },
   "onboarding": {
@@ -344,7 +347,52 @@
   "bootScreen": {
     "title": "Starting FrugaLLM...",
     "logoAlt": "FrugaLLM Logo"
+  },
+  "issueReporter": {
+    "title": "Report an Issue",
+    "subtitle": "Help us improve FrugaLLM. Diagnostic logs will be automatically extracted and scrubbed for sensitive credentials before submission.",
+    "fields": {
+      "title": {
+        "label": "Issue Title",
+        "placeholder": "Brief summary of what happened"
+      },
+      "description": {
+        "label": "Description",
+        "placeholder": "Describe what you were doing, what went wrong, and steps to reproduce..."
+      },
+      "email": {
+        "label": "Your Email (Optional)",
+        "placeholder": "you@example.com (if you'd like follow-up updates)"
+      },
+      "includeDiagnostics": {
+        "label": "Include system diagnostics & sanitized logs"
+      }
+    },
+    "diagnostics": {
+      "previewToggle": "View Diagnostics & Logs Preview",
+      "hideToggle": "Hide Diagnostics Preview",
+      "appVersion": "App Version",
+      "os": "Operating System",
+      "logs": "Sanitized Application Logs",
+      "loading": "Gathering system diagnostics...",
+      "sanitizedNotice": "Sensitive credentials (API keys and Bearer tokens) are automatically redacted."
+    },
+    "buttons": {
+      "cancel": "Cancel",
+      "submit": "Submit Issue",
+      "submitting": "Submitting...",
+      "close": "Close"
+    },
+    "feedback": {
+      "successTitle": "Report Submitted Successfully",
+      "successMessage": "Thank you! Your issue report and diagnostics have been securely delivered to our Linear tracking queue.",
+      "errorTitle": "Submission Error",
+      "errorMessage": "Failed to submit report. Please check your internet connection and try again.",
+      "validationError": "Please provide both an issue title and description.",
+      "missingKeyError": "Web3Forms Access Key is not configured. Please set VITE_WEB3FORMS_ACCESS_KEY in your .env file."
+    }
   }
 }
+
 
 

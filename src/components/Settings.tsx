@@ -4,6 +4,7 @@ import { Store } from '@tauri-apps/plugin-store';
 import { invoke } from '@tauri-apps/api/core';
 import en from '../locales/en.json';
 import { Tooltip } from './Tooltip';
+import { Bug } from 'lucide-react';
 
 export interface SettingsProps {
   startOnLogin?: boolean;
@@ -12,6 +13,7 @@ export interface SettingsProps {
   onStartMinimizedChange?: (minimized: boolean) => void;
   globalCliEnabled?: boolean;
   onGlobalCliEnabledChange?: (enabled: boolean) => void;
+  onReportIssue?: () => void;
 }
 
 export const Settings: React.FC<SettingsProps> = ({
@@ -21,6 +23,7 @@ export const Settings: React.FC<SettingsProps> = ({
   onStartMinimizedChange,
   globalCliEnabled,
   onGlobalCliEnabledChange,
+  onReportIssue,
 }) => {
   const [localStartOnLogin, setLocalStartOnLogin] = useState<boolean>(startOnLogin ?? false);
   const [localStartMinimized, setLocalStartMinimized] = useState<boolean>(startMinimized ?? false);
@@ -251,8 +254,8 @@ export const Settings: React.FC<SettingsProps> = ({
         </label>
       </div>
 
-      {/* View Logs Action */}
-      <div style={{ marginTop: '4px', paddingTop: '8px', borderTop: '1px solid var(--zen-border)' }}>
+      {/* View Logs & Report Issue Actions */}
+      <div style={{ marginTop: '4px', paddingTop: '8px', borderTop: '1px solid var(--zen-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <button
           type="button"
           data-testid="btn-view-logs"
@@ -282,6 +285,44 @@ export const Settings: React.FC<SettingsProps> = ({
         >
           {strings.viewLogs?.label || 'VIEW LOGS'}
         </button>
+
+        {onReportIssue && (
+          <button
+            type="button"
+            data-testid="report-issue-button"
+            onClick={onReportIssue}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              backgroundColor: 'transparent',
+              borderRadius: '9999px',
+              color: 'var(--zen-text-secondary)',
+              border: '1px dashed var(--zen-border)',
+              fontWeight: 500,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              fontSize: '0.75rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              transition: 'all 0.15s ease',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.color = 'var(--zen-text)';
+              e.currentTarget.style.borderColor = 'var(--zen-accent)';
+              e.currentTarget.style.backgroundColor = 'var(--zen-surface-hover)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.color = 'var(--zen-text-secondary)';
+              e.currentTarget.style.borderColor = 'var(--zen-border)';
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+          >
+            <Bug size={14} />
+            <span>{en.routingGraph?.nodeConfigPanel?.actions?.reportIssue || 'Report Issue & Send Diagnostics'}</span>
+          </button>
+        )}
       </div>
 
       {errorMessage && (

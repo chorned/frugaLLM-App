@@ -8,6 +8,8 @@ export function isOpenRouterFreeAlias(id?: string): boolean {
   return lower === 'openrouter/free' || lower === 'openrouter:free';
 }
 
+export const MIN_CONTEXT_WINDOW = 128000;
+
 export async function fetchFreeOpenRouterModels(apiKey?: string): Promise<string[]> {
   try {
     const headers: Record<string, string> = {};
@@ -27,6 +29,10 @@ export async function fetchFreeOpenRouterModels(apiKey?: string): Promise<string
     const freeModels = models.filter((m: any) => {
       // Hide the openrouter:free / openrouter/free router model alias
       if (isOpenRouterFreeAlias(m?.id)) return false;
+
+      // Must have at least 128k context window
+      const ctx = typeof m?.context_length === 'number' ? m.context_length : 0;
+      if (ctx < MIN_CONTEXT_WINDOW) return false;
 
       // Must support tools for our gatekeeper
       const params = m.supported_parameters || [];

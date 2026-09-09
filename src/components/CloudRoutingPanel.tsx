@@ -5,13 +5,23 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import en from '../locales/en.json';
 import { getProviderIcon } from './icons/ProviderIcons';
-import { isOpenRouterFreeAlias } from '../router';
+import { isOpenRouterFreeAlias, MIN_CONTEXT_WINDOW } from '../router';
 
 export interface CloudModel {
   model: string;
   provider: string;
   iq?: number;
+  context_length?: number;
 }
+
+export const isEligibleRoutingModel = (m: CloudModel): boolean => {
+  if (!m?.model) return false;
+  if (m.model.includes('computer-use')) return false;
+  if (isOpenRouterFreeAlias(m.model)) return false;
+  if (m.model.startsWith('frugallm-active')) return false;
+  if (typeof m.context_length === 'number' && m.context_length < MIN_CONTEXT_WINDOW) return false;
+  return true;
+};
 
 export interface CloudRoutingPanelProps {
   overrides?: string[];
@@ -36,7 +46,7 @@ export const CloudRoutingPanel = ({ overrides: propOverrides, onOverridesChange 
         setInternalOverrides(configRes?.manual_model_overrides || []);
       }
       const res: any = await invoke('refresh_routing_chain');
-      const filteredRes = (res || []).filter((m: CloudModel) => !m?.model?.includes('computer-use') && !isOpenRouterFreeAlias(m?.model));
+      const filteredRes = (res || []).filter(isEligibleRoutingModel);
       setChain(filteredRes);
     } catch (err) {
       console.error('Failed to refresh routing chain:', err);
@@ -63,7 +73,7 @@ export const CloudRoutingPanel = ({ overrides: propOverrides, onOverridesChange 
         }
         const cRes: any = await invoke('get_routing_chain');
         if (Array.isArray(cRes) && cRes.length > 0) {
-          const filteredCRes = cRes.filter((m: CloudModel) => !m?.model?.includes('computer-use') && !isOpenRouterFreeAlias(m?.model));
+          const filteredCRes = cRes.filter(isEligibleRoutingModel);
           setChain(filteredCRes);
         }
         refreshChain();
@@ -269,11 +279,24 @@ export const CloudRoutingPanel = ({ overrides: propOverrides, onOverridesChange 
                       {t?.scorePrefix || '⚡ SCORE: '}{(item.iq && item.iq > 0) ? item.iq : 'N/A'}
                     </span>
                   )}
-                  {errors[item.model] && (
-                    <span style={{ fontSize: '0.65rem', color: '#DC2626', backgroundColor: '#FEE2E2', padding: '2px 8px', borderRadius: '9999px', fontWeight: 600, letterSpacing: '0.02em' }}>
-                      {errors[item.model].includes("429") ? (t?.skippedQuota || "SKIPPED: 429 (QUOTA)") : (t?.skippedError || "SKIPPED: ERROR")}
-                    </span>
-                  )}
+                  {errors[item.model] && (() => {
+                    const errLower = errors[item.model].toLowerCase();
+                    const isTimeout = errLower.includes("timeout") || errLower.includes("ttft");
+                    const isQuota = errors[item.model].includes("429");
+                    const color = isTimeout ? '#D97706' : '#DC2626';
+                    const bgColor = isTimeout ? '#FEF3C7' : '#FEE2E2';
+                    const label = isQuota 
+                      ? (t?.skippedQuota || "SKIPPED: 429 (QUOTA)") 
+                      : isTimeout 
+                      ? (t?.skippedTimeout || "SKIPPED: TIMEOUT (COOLDOWN)") 
+                      : (t?.skippedError || "SKIPPED: ERROR");
+
+                    return (
+                      <span style={{ fontSize: '0.65rem', color, backgroundColor: bgColor, padding: '2px 8px', borderRadius: '9999px', fontWeight: 600, letterSpacing: '0.02em' }}>
+                        {label}
+                      </span>
+                    );
+                  })()}
                 </div>
               </div>
               

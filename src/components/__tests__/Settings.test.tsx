@@ -255,4 +255,21 @@ describe('Settings Component', () => {
     fireEvent.click(btn);
     expect(mockInvoke).toHaveBeenCalledWith('open_app_logs', undefined);
   });
+
+  it('renders Report Issue button underneath View Logs when onReportIssue is provided', async () => {
+    const onReportIssue = vi.fn();
+    render(<Settings onReportIssue={onReportIssue} />);
+    const btn = await screen.findByTestId('report-issue-button');
+    expect(btn).toBeInTheDocument();
+    expect(screen.getByTestId('btn-view-logs')).toBeInTheDocument();
+
+    fireEvent.click(btn);
+    expect(onReportIssue).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not render Report Issue button when onReportIssue is not provided', async () => {
+    render(<Settings />);
+    await screen.findByTestId('btn-view-logs');
+    expect(screen.queryByTestId('report-issue-button')).not.toBeInTheDocument();
+  });
 });

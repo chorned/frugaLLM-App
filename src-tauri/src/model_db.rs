@@ -65,6 +65,22 @@ impl ModelIntelligenceRegistry {
             id = format!("google/{}", stripped);
         }
 
+        // Map Ollama Gemma4 tags to registered benchmark scores
+        if id.starts_with("gemma4:") || id.starts_with("gemma-4:") {
+            let tag = id.split(':').nth(1).unwrap_or("").trim_end_matches(":free");
+            let mapped = match tag {
+                "e2b" => "google/gemma-4-e2b-it",
+                "e4b" => "google/gemma-4-e4b-it",
+                "12b" => "google/gemma-4-12b-it",
+                "26b" => "google/gemma-4-26b-a4b-it",
+                "31b" => "google/gemma-4-31b-it",
+                _ => "",
+            };
+            if !mapped.is_empty() {
+                return mapped.to_string();
+            }
+        }
+
         // Strip OpenRouter tier suffixes like :free, :nitro, :extended
         if let Some(base) = id.split(':').next() {
             id = base.to_string();
@@ -182,6 +198,34 @@ mod tests {
                 "meta-llama/llama-3.3-70b-instruct:nitro"
             ),
             "meta-llama/llama-3.3-70b-instruct"
+        );
+    }
+
+    #[test]
+    fn test_normalize_model_id_ollama_gemma4() {
+        assert_eq!(
+            ModelIntelligenceRegistry::normalize_model_id("gemma4:e2b"),
+            "google/gemma-4-e2b-it"
+        );
+        assert_eq!(
+            ModelIntelligenceRegistry::normalize_model_id("gemma4:e4b"),
+            "google/gemma-4-e4b-it"
+        );
+        assert_eq!(
+            ModelIntelligenceRegistry::normalize_model_id("gemma4:12b"),
+            "google/gemma-4-12b-it"
+        );
+        assert_eq!(
+            ModelIntelligenceRegistry::normalize_model_id("gemma4:26b"),
+            "google/gemma-4-26b-a4b-it"
+        );
+        assert_eq!(
+            ModelIntelligenceRegistry::normalize_model_id("gemma4:31b"),
+            "google/gemma-4-31b-it"
+        );
+        assert_eq!(
+            ModelIntelligenceRegistry::normalize_model_id("GEMMA-4:E2B"),
+            "google/gemma-4-e2b-it"
         );
     }
 
