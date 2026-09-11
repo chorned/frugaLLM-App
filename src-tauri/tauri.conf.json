@@ -37,7 +37,7 @@
     ],
     "macOS": {
       "hardenedRuntime": true,
-      "signingIdentity": "Developer ID Application: Carl Horned (PG6G5TQVVQ)",
+      "signingIdentity": "Developer ID Application: Carl Horned (PG6G5TQVQQ)",
       "entitlements": "./Entitlements.plist"
     }
   }
