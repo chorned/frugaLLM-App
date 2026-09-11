@@ -15,6 +15,7 @@
 - **Persistent Windows PATH Synchronization:** Synchronized `%LOCALAPPDATA%\hermes\bin`, `%LOCALAPPDATA%\Programs\opencode`, `%LOCALAPPDATA%\Programs\Ollama`, and `$HOME\.opencode\bin` into user-level Windows registry PATH settings when toggling global CLI commands.
 - **Robust WebView ONNX Caching:** Guarded browser `CacheStorage` checks in `onnxGateway.ts` to support restricted WebKitGTK and WebView2 contexts safely without breaking local ONNX session initialization.
 - **Modular Architectural Boundaries (CHO-118):** Refactored `src-tauri/src/main.rs` to maintain 226 lines (< 250 lines) while supporting dynamic startup hooks.
+- **Automated macOS Code Signing & Apple Notarization:** Configured Developer ID Application certificate signing with Hardened Runtime (`Entitlements.plist`) and App Store Connect API notarization pipeline via GitHub Actions for seamless Gatekeeper compliance.
 - **Cross-Platform Verification & Test Pyramid:** All 67 Rust unit tests and 232 Vitest tests passing green.
 
 ### 📦 Downloads & Installation
