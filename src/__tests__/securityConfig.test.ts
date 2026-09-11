@@ -118,4 +118,28 @@ describe('DevSecOps & Repository Security Compliance (CHO-85)', () => {
     expect(content).toMatch(/groups:\s*\n\s*cargo-dependencies:\s*\n\s*patterns:\s*\n\s*-\s*["']\*["']/);
     expect(content).toMatch(/groups:\s*\n\s*actions-dependencies:\s*\n\s*patterns:\s*\n\s*-\s*["']\*["']/);
   });
+
+  it('verifies macOS Developer ID signing identity and Team ID (PG6G5TQVQQ) consistency across tauri.conf.json and release.yml', () => {
+    const tauriConfPath = path.join(rootDir, 'src-tauri/tauri.conf.json');
+    expect(fs.existsSync(tauriConfPath)).toBe(true);
+    const tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, 'utf-8'));
+    const tauriSigningIdentity = tauriConf?.bundle?.macOS?.signingIdentity;
+
+    expect(tauriSigningIdentity).toBeDefined();
+    expect(tauriSigningIdentity).toBe('Developer ID Application: Carl Horned (PG6G5TQVQQ)');
+
+    const releaseWorkflowPath = path.join(rootDir, '.github/workflows/release.yml');
+    expect(fs.existsSync(releaseWorkflowPath)).toBe(true);
+    const releaseContent = fs.readFileSync(releaseWorkflowPath, 'utf-8');
+
+    const identityMatch = releaseContent.match(/APPLE_SIGNING_IDENTITY:\s*["']([^"']+)["']/);
+    expect(identityMatch).not.toBeNull();
+    expect(identityMatch![1]).toBe(tauriSigningIdentity);
+
+    // Verify Developer ID format: Developer ID Application: <Name> (<10-character Team ID>)
+    const teamIdMatch = tauriSigningIdentity.match(/\(([A-Z0-9]{10})\)$/);
+    expect(teamIdMatch).not.toBeNull();
+    expect(teamIdMatch![1]).toBe('PG6G5TQVQQ');
+  });
 });
+
