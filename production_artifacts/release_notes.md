@@ -12,7 +12,8 @@
 - **Canvas Node Geometry Cleanups:** Pruned redundant canvas height constants in favor of dynamic card sizing and balanced symmetrical canvas padding.
 
 ### 🔧 Under the Hood
-- **Comprehensive Test Coverage & Hardening:** 227 frontend unit tests across 35 suites and 57 Rust backend unit tests validating zero regressions across theme toggles, model score normalization, and telemetry pipelines.
+- **Modernized Build & Testing Toolchain:** Upgraded to Vite 8.2.2, Vitest 5.0.0, `@vitest/coverage-v8` 5.0.0, and WebdriverIO 9.31.6, consolidating and resolving four open Dependabot PRs (#34, #35, #36, #37).
+- **Full Test Pyramid Gate Validation:** Validated 100% green coverage across all testing tiers: 57 Rust backend unit tests, 35 Vitest suites (227 tests), 45 Playwright E2E browser flows, and production bundling.
 - **Extended Model Pricing & Gating Logic:** Added support for token pricing structures and 128k context-window gating across both local and cloud routing candidates.
 
 ### 📦 Downloads & Installation
