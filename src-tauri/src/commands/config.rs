@@ -1,8 +1,10 @@
 use std::env;
 use tauri::{Manager, Emitter, State};
 use crate::state::*;
-use crate::commands::*;
 use crate::proxy::*;
+
+#[cfg(unix)]
+use crate::commands::{get_hermes_source_path, get_opencode_source_path, get_ollama_source_path};
 
 
 #[tauri::command]
@@ -271,10 +273,9 @@ pub fn set_global_cli_commands(app: tauri::AppHandle, enabled: bool) -> Result<(
 
 #[tauri::command]
 pub fn get_global_cli_commands_status(app: tauri::AppHandle) -> Result<bool, String> {
-    let home = app.path().home_dir().map_err(|e| e.to_string())?;
-
     #[cfg(unix)]
     {
+        let home = app.path().home_dir().map_err(|e| e.to_string())?;
         let local_bin_hermes = home.join(".local").join("bin").join("hermes");
         if local_bin_hermes.exists() || local_bin_hermes.symlink_metadata().is_ok() {
             return Ok(true);

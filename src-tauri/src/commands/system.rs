@@ -5,11 +5,12 @@ use crate::state::*;
 pub async fn get_hardware_profile() -> Result<HardwareProfile, String> {
     let is_unified: bool;
     let mut dedicated_vram: u64 = 0;
-    let mut system_ram: u64 = 0;
+    let mut system_ram: u64;
     let os_architecture: String;
 
     #[cfg(target_os = "macos")]
     {
+        system_ram = 0;
         let is_arm = std::env::consts::ARCH == "aarch64";
         os_architecture = format!("macos-{}", std::env::consts::ARCH);
 

@@ -655,13 +655,13 @@ pub async fn configure_hermes_defaults(app: tauri::AppHandle, state: tauri::Stat
         
         let config_path = hermes_dir.join("config.yaml");
         let config_content = format!("model:\n  default: \"frugallm\"\n  provider: \"custom\"\n  base_url: \"http://127.0.0.1:{}/v1\"\n", port);
-        std::fs::write(&config_path, config_content).map_err(|e| e.to_string())?;
+        std::fs::write(&config_path, &config_content).map_err(|e| e.to_string())?;
 
         let soul_path = hermes_dir.join("soul.md");
         let soul_upper = hermes_dir.join("SOUL.md");
         let soul_content = get_default_soul_template();
         if !soul_path.exists() && !soul_upper.exists() {
-            std::fs::write(&soul_path, soul_content).map_err(|e| e.to_string())?;
+            std::fs::write(&soul_path, &soul_content).map_err(|e| e.to_string())?;
             log_event(&app, "INFO", "HERMES", "Created default soul.md in ~/.hermes/soul.md");
         } else {
             log_event(&app, "INFO", "HERMES", "soul.md already exists in ~/.hermes; preserving existing user file");
@@ -673,7 +673,7 @@ pub async fn configure_hermes_defaults(app: tauri::AppHandle, state: tauri::Stat
             let _ = std::fs::create_dir_all(&win_hermes_dir);
             let _ = std::fs::write(win_hermes_dir.join("config.yaml"), &config_content);
             if !win_hermes_dir.join("soul.md").exists() && !win_hermes_dir.join("SOUL.md").exists() {
-                let _ = std::fs::write(win_hermes_dir.join("soul.md"), soul_content);
+                let _ = std::fs::write(win_hermes_dir.join("soul.md"), &soul_content);
             }
         }
     }
