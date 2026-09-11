@@ -1,24 +1,25 @@
-# FrugaLLM v0.0.12 Release Notes
+# FrugaLLM v0.0.13 Release Notes
 
 ### 🚀 Features
-- **In-App Diagnostic Issue Reporter:** Integrated an end-to-end feedback and bug reporting modal into node configuration. Automatically bundles system architecture, VRAM metrics, and sanitized proxy logs while strictly scrubbing API keys, tokens, and credentials before dispatch.
-- **Dynamic Next-Call Provider Health Status:** Upgraded visual status indicators to reflect the health of the *next upcoming fallback model*. Providers stay Green (`200 OK`) as long as an alternative candidate in the pool is viable, switching to Yellow (`429`/`500` temporary exhaustion) or Red (`404`/`403` fatal lockout) based on true backend routability.
-- **Extended Google Gemini Model Registry:** Added modern active Gemini 3.5 & 3.8 candidates (`gemini-3.5-flash`, `gemini-3.8-flash`, etc.) and pruned deprecated endpoints to prevent false 404 lockout cycles on newly provisioned API keys.
+- **Fresh-Install Dark Mode Default:** Application boots immediately into dark mode (`theme-ebony`) on clean installations when no prior theme preferences are detected in local storage, providing a streamlined, developer-first experience out of the box.
+- **Calibrated Local vs. Cloud Model Guidance:** Local model selection guidance in node settings has been calibrated to clearly articulate trade-offs between parameter tiers (2B–4B vs. 26B–31B) and benchmark expectations against frontier cloud endpoints (Claude 3.5 Sonnet, Gemini 1.5 Pro).
+- **Unified Interactive Canvas Tooltips:** Standardized hover tooltips across core FrugaLLM node parameters (Routing Mode, Tool Routing, Model Filtering, and Auto-Failover), ensuring consistent guidance across canvas topologies.
+- **In-App Issue Reporter Integration:** Diagnostic feedback reporting modal embedded across the footer, settings drawer, and node configuration panels with automatic log sanitization.
 
 ### 🐛 Fixes
-- **Topology Canvas Node Padding & Geometry:** Symmetrized the vertical and horizontal layout of all peripheral and core canvas nodes. Eliminated dead container bottom space and standardized uniform 10px spacing between card borders and inner telemetry rows.
-- **Exhaustive `--wipe` Clean-Slate Cleanup:** Resolved an issue where `--wipe` failed to purge the Tool Enforcing Gateway marker and local model caches. `--wipe` now comprehensively clears `tool_gateway_installed`, local `models/`, `frugal_config.json`, OpenCode settings, and client-side ONNX browser caches.
-- **Native OpenCode & Agent Uninstallation:** Replaced brittle shell subshell calls in uninstallation handlers with dedicated Rust IPC commands (`uninstall_opencode`, `uninstall_hermes`), fixing silent failures in the node configuration uninstallation CTA.
+- **Node Configuration Layout Streamlining:** Removed bulky multi-card info panels from Ollama settings, keeping node panels uncluttered and responsive while delegating parameter descriptions to field-level tooltips.
+- **Pruned Obsolete Quick Start Guides:** Removed deprecated guide files and the legacy `GuidesModal` component in favor of unified in-canvas contextual documentation.
+- **Canvas Node Geometry Cleanups:** Pruned redundant canvas height constants in favor of dynamic card sizing and balanced symmetrical canvas padding.
 
 ### 🔧 Under the Hood
-- **Frontend & Backend Architectural Deconstruction:** Modularized monolithic entry points (`App.tsx` and `src-tauri/src/main.rs`) into focused domain components (`TopologyCanvas`, `NodeConfigPanel`, `TerminalView`, `Header`, `Footer`), custom React hooks, proxy service modules, and typed Tauri IPC clients. `main.rs` is strictly capped at under 250 lines.
-- **High-Fidelity Automated Test Suites:** Validated zero regressions across the codebase with 51 Rust unit tests and 201 frontend Vitest unit tests across 31 suites passing cleanly.
+- **Comprehensive Test Coverage & Hardening:** 227 frontend unit tests across 35 suites and 57 Rust backend unit tests validating zero regressions across theme toggles, model score normalization, and telemetry pipelines.
+- **Extended Model Pricing & Gating Logic:** Added support for token pricing structures and 128k context-window gating across both local and cloud routing candidates.
 
 ### 📦 Downloads & Installation
 
 | Platform | Variant / Architecture | Direct Download |
 | :--- | :--- | :--- |
-| **macOS** | Universal (Apple Silicon & Intel) | [frugallm-app_0.0.12_universal.dmg](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.12/frugallm-app_0.0.12_universal.dmg) |
-| **Windows** | Standard Installer (`.exe`) | [frugallm-app_0.0.12_x64-setup.exe](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.12/frugallm-app_0.0.12_x64-setup.exe) |
-| **Ubuntu** | Debian Installer (`.deb`) | [frugallm-app_0.0.12_amd64.deb](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.12/frugallm-app_0.0.12_amd64.deb) |
-| **SteamOS** | Universal Portable (`.AppImage`) | [frugallm-app_0.0.12_amd64.AppImage](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.12/frugallm-app_0.0.12_amd64.AppImage) |
+| **macOS** | Universal (Apple Silicon & Intel) | [frugallm-app_0.0.13_universal.dmg](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.13/frugallm-app_0.0.13_universal.dmg) |
+| **Windows** | Standard Installer (`.exe`) | [frugallm-app_0.0.13_x64-setup.exe](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.13/frugallm-app_0.0.13_x64-setup.exe) |
+| **Ubuntu** | Debian Installer (`.deb`) | [frugallm-app_0.0.13_amd64.deb](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.13/frugallm-app_0.0.13_amd64.deb) |
+| **SteamOS** | Universal Portable (`.AppImage`) | [frugallm-app_0.0.13_amd64.AppImage](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.13/frugallm-app_0.0.13_amd64.AppImage) |
