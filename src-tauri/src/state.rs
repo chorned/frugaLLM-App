@@ -216,6 +216,8 @@ pub async fn refresh_provider_status_for_next_call(
     }
 }
 
+/// Holds the dynamic cloud model fallback chain in Tauri managed state.
+/// Populated asynchronously on startup and self-healed on-demand during proxy routing or health checks.
 pub struct DynamicRosterState {
     pub fallback_chain: Arc<tokio::sync::RwLock<Vec<CloudModel>>>,
 }

@@ -12,7 +12,7 @@ use crate::state::*;
 use crate::commands::*;
 
 
-pub const TOOL_ENFORCEMENT_DIRECTIVE: &str = 
+pub const TOOL_ENFORCEMENT_DIRECTIVE: &str =
     "\n[TOOL ENFORCEMENT DIRECTIVE]: Strict tool calling is required. If you describe actions, plan tool execution, or state that you will read/edit files or run commands, you MUST execute the matching tool call immediately. Do not state conversational promises without invoking the tool.";
 
 
@@ -1635,7 +1635,7 @@ pub async fn check_and_retry_providers(app: &tauri::AppHandle, client: &reqwest:
                                 vec!["gemini-flash-latest".to_string(), "gemini-3.5-flash".to_string(), "gemma-4-26b-a4b-it".to_string()]
                             };
 
-                            let (gen_status, is_403) = probe_google_service_health(&client, &key, &candidate_names, app).await;
+                            let (gen_status, is_403) = probe_google_service_health(client, &key, &candidate_names, app).await;
                             if is_403 || gen_status != "200 OK" {
                                 update_provider_status(app, "google", &gen_status).await;
                                 false
