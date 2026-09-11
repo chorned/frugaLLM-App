@@ -266,7 +266,6 @@ pub async fn check_ollama_status() -> bool {
             "/usr/bin/ollama",
             "/Applications/Ollama.app/Contents/Resources/ollama",
             "/Applications/Ollama.app/Contents/MacOS/Ollama",
-            "/Applications/Ollama.app"
         ];
         is_ollama_in_paths(&paths)
     }

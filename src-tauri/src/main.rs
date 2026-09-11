@@ -117,6 +117,17 @@ fn main() {
                 fallback_chain: dynamic_roster.clone(),
             });
 
+            // Populate dynamic roster chain on startup
+            let roster_startup = dynamic_roster.clone();
+            let app_handle_startup = app_handle.clone();
+            tauri::async_runtime::spawn(async move {
+                let initial_chain = proxy::server::fetch_live_routing_chain(&app_handle_startup).await;
+                if !initial_chain.is_empty() {
+                    let mut guard = roster_startup.write().await;
+                    *guard = initial_chain;
+                }
+            });
+
             // Provider Health State (in-memory circuit breaker and rate limit cooldowns)
             let health_state = ProviderHealthState::default();
             app.manage(health_state);
@@ -140,56 +151,25 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            set_model_override,
-            get_launch_options,
-            set_credential,
-            get_credential,
-            delete_credential,
-            wipe_credentials,
-            check_hermes_status,
-            check_opencode_status,
-            check_ollama_status,
-            get_ollama_chat_model,
-            get_hermes_version,
-            get_opencode_version,
-            uninstall_ollama,
-            uninstall_opencode,
-            uninstall_hermes,
-            detect_vram,
-            detect_hardware_profile,
-            spawn_pty,
-            write_pty,
-            kill_pty,
-            resize_pty,
-            configure_hermes_defaults,
-            configure_opencode_defaults,
-            deploy_local_model,
-            get_frugallm_config,
-            set_frugallm_config,
-            get_provider_statuses,
-            get_frugallm_server_status,
-            edit_hermes_soul,
-            open_app_logs,
-            is_wipe_mode,
-            is_mock_update_mode,
-            get_local_ips,
-            restart_app,
-            get_routing_chain,
-            set_routing_chain,
-            refresh_routing_chain,
-            check_tool_gateway_status,
-            set_tool_gateway_installed,
+            set_model_override, get_launch_options,
+            set_credential, get_credential, delete_credential, wipe_credentials,
+            check_hermes_status, check_opencode_status, check_ollama_status,
+            get_ollama_chat_model, get_hermes_version, get_opencode_version,
+            uninstall_ollama, uninstall_opencode, uninstall_hermes,
+            detect_vram, detect_hardware_profile,
+            spawn_pty, write_pty, kill_pty, resize_pty,
+            configure_hermes_defaults, configure_opencode_defaults,
+            deploy_local_model, get_frugallm_config, set_frugallm_config,
+            get_provider_statuses, get_frugallm_server_status,
+            edit_hermes_soul, open_app_logs,
+            is_wipe_mode, is_mock_update_mode, get_local_ips, restart_app,
+            get_routing_chain, set_routing_chain, refresh_routing_chain,
+            check_tool_gateway_status, set_tool_gateway_installed,
             get_model_tag_for_vram,
-            start_hermes_service,
-            stop_hermes_service,
-            has_active_services,
-            get_active_services,
-            confirm_exit_app,
-            check_hermes_ready,
-            set_global_cli_commands,
-            get_global_cli_commands_status,
-            get_diagnostic_data,
-            submit_issue_report
+            start_hermes_service, stop_hermes_service,
+            has_active_services, get_active_services, confirm_exit_app, check_hermes_ready,
+            set_global_cli_commands, get_global_cli_commands_status,
+            get_diagnostic_data, submit_issue_report
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

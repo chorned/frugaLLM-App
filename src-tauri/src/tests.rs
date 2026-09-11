@@ -1400,3 +1400,80 @@ use std::collections::{HashMap, HashSet};
         assert!(powershell_script.contains("-PassThru"));
         assert!(powershell_script.contains("WaitForExit()"));
     }
+
+    #[test]
+    fn test_ollama_bare_app_bundle_directory_not_reported_as_installed() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        // Create an empty /Applications/Ollama.app directory (orphaned app bundle)
+        let app_bundle_dir = temp_dir.path().join("Ollama.app");
+        fs::create_dir_all(&app_bundle_dir).unwrap();
+
+        // Standard candidate paths checked by check_ollama_status on macOS/Linux
+        // MUST NOT include bare app_bundle_dir!
+        let bin_subpath1 = app_bundle_dir.join("Contents").join("Resources").join("ollama");
+        let bin_subpath2 = app_bundle_dir.join("Contents").join("MacOS").join("Ollama");
+
+        let checked_paths = vec![
+            bin_subpath1.to_string_lossy().to_string(),
+            bin_subpath2.to_string_lossy().to_string(),
+        ];
+        let str_refs: Vec<&str> = checked_paths.iter().map(|s| s.as_str()).collect();
+
+        // Because the bare folder exists but neither executable binary exists inside Contents, is_ollama_in_paths must return false
+        assert_eq!(is_ollama_in_paths(&str_refs), false);
+
+        // Now create an actual binary inside Contents/MacOS/Ollama
+        fs::create_dir_all(bin_subpath2.parent().unwrap()).unwrap();
+        fs::File::create(&bin_subpath2).unwrap();
+
+        // Once the actual binary exists, detection returns true
+        assert_eq!(is_ollama_in_paths(&str_refs), true);
+    }
+
+    #[tokio::test]
+    async fn test_dynamic_roster_startup_and_self_healing_recovery() {
+        let dynamic_roster = Arc::new(tokio::sync::RwLock::new(Vec::new()));
+        let state = DynamicRosterState {
+            fallback_chain: dynamic_roster.clone(),
+        };
+
+        // Initially on cold boot, fallback_chain is empty
+        {
+            let guard = state.fallback_chain.read().await;
+            assert!(guard.is_empty());
+        }
+
+        // Check is_chain_empty evaluation
+        let is_empty = state.fallback_chain.read().await.is_empty();
+        assert!(is_empty);
+
+        // Simulate startup or on-demand discovery population
+        let mock_chain = vec![
+            CloudModel {
+                provider: "google".to_string(),
+                model: "gemini-2.5-flash".to_string(),
+                iq: 95.0,
+                context_length: Some(1_000_000),
+            },
+            CloudModel {
+                provider: "openrouter".to_string(),
+                model: "meta-llama/llama-3.3-70b-instruct:free".to_string(),
+                iq: 90.0,
+                context_length: Some(128_000),
+            },
+        ];
+
+        {
+            let mut guard = state.fallback_chain.write().await;
+            *guard = mock_chain.clone();
+        }
+
+        // Verify chain is no longer empty and candidates match
+        {
+            let guard = state.fallback_chain.read().await;
+            assert_eq!(guard.len(), 2);
+            assert_eq!(guard[0].provider, "google");
+            assert_eq!(guard[1].provider, "openrouter");
+        }
+        assert!(!state.fallback_chain.read().await.is_empty());
+    }

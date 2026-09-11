@@ -794,11 +794,28 @@ async fn chat_completions(
         }
     }
 
-    let chain = {
+    let mut chain = {
         let fallback_chain = app.state::<DynamicRosterState>().fallback_chain.clone();
         let guard = fallback_chain.read().await;
         guard.clone()
     };
+
+    // Self-healing fallback: If roster is empty on incoming request, discover on-demand
+    if chain.is_empty() {
+        log_event(
+            &app,
+            "WARN",
+            "ROUTER",
+            "Dynamic roster empty on incoming request; attempting on-demand discovery...",
+        );
+        let live_chain = fetch_live_routing_chain(&app).await;
+        if !live_chain.is_empty() {
+            let fallback_chain = app.state::<DynamicRosterState>().fallback_chain.clone();
+            let mut guard = fallback_chain.write().await;
+            *guard = live_chain.clone();
+            chain = live_chain;
+        }
+    }
 
     let mut errors = Vec::new();
     let mut skip_google = false;
@@ -1639,7 +1656,13 @@ pub async fn check_and_retry_providers(app: &tauri::AppHandle, client: &reqwest:
                                 } else { false }
                             };
                             update_provider_status(app, "google", "200 OK").await;
-                            if was_error {
+                            let is_chain_empty = if let Some(roster) = app.try_state::<DynamicRosterState>() {
+                                roster.fallback_chain.read().await.is_empty()
+                            } else {
+                                false
+                            };
+
+                            if was_error || is_chain_empty {
                                 if let Some(roster) = app.try_state::<DynamicRosterState>() {
                                     let new_chain = fetch_live_routing_chain(app).await;
                                     let mut guard = roster.fallback_chain.write().await;
@@ -1686,7 +1709,13 @@ pub async fn check_and_retry_providers(app: &tauri::AppHandle, client: &reqwest:
                             } else { false }
                         };
                         update_provider_status(app, "openrouter", "200 OK").await;
-                        if was_error {
+                        let is_chain_empty = if let Some(roster) = app.try_state::<DynamicRosterState>() {
+                            roster.fallback_chain.read().await.is_empty()
+                        } else {
+                            false
+                        };
+
+                        if was_error || is_chain_empty {
                             if let Some(roster) = app.try_state::<DynamicRosterState>() {
                                 let new_chain = fetch_live_routing_chain(app).await;
                                 let mut guard = roster.fallback_chain.write().await;
