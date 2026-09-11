@@ -99,6 +99,42 @@ pub fn get_opencode_source_path(home: &std::path::Path) -> Option<std::path::Pat
     }
     #[cfg(target_os = "windows")]
     {
+        // Check for .cmd shims in local directories
+        let cmd1 = home.join(".local").join("bin").join("opencode.cmd");
+        if cmd1.exists() {
+            return Some(cmd1);
+        }
+        let cmd2 = home.join(".opencode").join("bin").join("opencode.cmd");
+        if cmd2.exists() {
+            return Some(cmd2);
+        }
+        // Check %APPDATA%\npm and shim node_modules/opencode-ai/bin/opencode.exe if present
+        let app_data = std::env::var("APPDATA")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| home.join("AppData").join("Roaming"));
+        let npm_dir = app_data.join("npm");
+        let npm_cmd = npm_dir.join("opencode.cmd");
+        if npm_cmd.exists() {
+            let npm_exe = npm_dir.join("node_modules").join("opencode-ai").join("bin").join("opencode.exe");
+            let local_exe = home.join(".local").join("bin").join("opencode.exe");
+            if npm_exe.exists() {
+                if !local_exe.exists() {
+                    if let Some(parent) = local_exe.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    let _ = std::fs::copy(&npm_exe, &local_exe);
+                }
+                if local_exe.exists() {
+                    return Some(local_exe);
+                }
+            }
+            return Some(npm_cmd);
+        }
+        let npm_bin = npm_dir.join("opencode");
+        if npm_bin.exists() {
+            return Some(npm_bin);
+        }
+
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
             let p_app = std::path::PathBuf::from(local_app_data).join("Programs").join("opencode").join("opencode.exe");
             if p_app.exists() {
@@ -121,6 +157,10 @@ pub fn get_opencode_source_path(home: &std::path::Path) -> Option<std::path::Pat
                 let exe = dir.join("opencode.exe");
                 if exe.exists() {
                     return Some(exe);
+                }
+                let cmd = dir.join("opencode.cmd");
+                if cmd.exists() {
+                    return Some(cmd);
                 }
             }
             let bin = dir.join("opencode");
@@ -449,7 +489,15 @@ pub async fn get_hermes_version(app: tauri::AppHandle) -> String {
 pub async fn get_opencode_version(app: tauri::AppHandle) -> String {
     if let Ok(home) = app.path().home_dir() {
         if let Some(opencode_bin) = get_opencode_source_path(&home) {
-            if let Ok(output) = tokio::process::Command::new(&opencode_bin).arg("--version").output().await {
+            let is_cmd = opencode_bin.extension().map(|e| e.eq_ignore_ascii_case("cmd") || e.eq_ignore_ascii_case("bat")).unwrap_or(false);
+            let mut cmd = if cfg!(windows) && is_cmd {
+                let mut c = tokio::process::Command::new("cmd.exe");
+                c.args(["/C", &opencode_bin.to_string_lossy()]);
+                c
+            } else {
+                tokio::process::Command::new(&opencode_bin)
+            };
+            if let Ok(output) = cmd.arg("--version").output().await {
                 if output.status.success() {
                     let v = String::from_utf8_lossy(&output.stdout);
                     if let Some(parsed) = parse_agent_version(&v) {
@@ -584,6 +632,11 @@ pub fn wipe_opencode(home: &std::path::Path) {
     let _ = std::fs::remove_dir_all(home.join(".cache").join("opencode"));
     let _ = std::fs::remove_file(home.join(".local").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" }));
     let _ = std::fs::remove_file(home.join(".cargo").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" }));
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::fs::remove_file(home.join(".local").join("bin").join("opencode.cmd"));
+        let _ = std::fs::remove_file(home.join(".opencode").join("bin").join("opencode.cmd"));
+    }
 }
 
 #[tauri::command(async)]
@@ -596,6 +649,7 @@ pub async fn uninstall_opencode(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         let _ = tokio::process::Command::new("taskkill").args(["/F", "/IM", "opencode.exe", "/T"]).output().await;
+        let _ = tokio::process::Command::new("cmd.exe").args(["/C", "npm", "uninstall", "-g", "opencode-ai"]).output().await;
     }
 
     // 2. Remove directories and binary symlinks
@@ -610,6 +664,11 @@ pub async fn uninstall_opencode(app: tauri::AppHandle) -> Result<(), String> {
         let _ = tokio::fs::remove_file(&local_bin).await;
         let cargo_bin = home.join(".cargo").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
         let _ = tokio::fs::remove_file(&cargo_bin).await;
+        #[cfg(target_os = "windows")]
+        {
+            let _ = tokio::fs::remove_file(home.join(".local").join("bin").join("opencode.cmd")).await;
+            let _ = tokio::fs::remove_file(home.join(".opencode").join("bin").join("opencode.cmd")).await;
+        }
     }
 
     Ok(())
@@ -918,7 +977,8 @@ pub async fn configure_opencode_defaults(app: tauri::AppHandle, state: tauri::St
             "model": "litellm/frugallm"
         });
         
-        std::fs::write(&config_path, serde_json::to_string_pretty(&config_content).unwrap()).map_err(|e| e.to_string())?;
+        let json_str = serde_json::to_string_pretty(&config_content).map_err(|e| e.to_string())?;
+        std::fs::write(&config_path, json_str).map_err(|e| e.to_string())?;
     }
     Ok(())
 }

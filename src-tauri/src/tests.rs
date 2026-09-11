@@ -62,6 +62,51 @@ use std::collections::{HashMap, HashSet};
     }
 
     #[test]
+    fn test_opencode_wipe_mocked() {
+        use crate::commands::agents::wipe_opencode;
+        let temp_dir = tempfile::tempdir().unwrap();
+        let home = temp_dir.path();
+        
+        let opencode_dir = home.join(".opencode");
+        let config_dir = home.join(".config").join("opencode");
+        let local_bin = home.join(".local").join("bin");
+        fs::create_dir_all(&opencode_dir).unwrap();
+        fs::create_dir_all(&config_dir).unwrap();
+        fs::create_dir_all(&local_bin).unwrap();
+        
+        let exe_name = if cfg!(windows) { "opencode.exe" } else { "opencode" };
+        let exe_file = local_bin.join(exe_name);
+        fs::File::create(&exe_file).unwrap();
+        
+        assert!(exe_file.exists());
+        assert!(opencode_dir.exists());
+        
+        wipe_opencode(home);
+        
+        assert!(!exe_file.exists());
+        assert!(!opencode_dir.exists());
+        assert!(!config_dir.exists());
+    }
+
+    #[test]
+    fn test_pty_exit_payload_structure() {
+        #[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
+        struct ExitPayload {
+            session_id: String,
+            exit_code: u32,
+        }
+
+        let payload = ExitPayload {
+            session_id: "test-session-123".to_string(),
+            exit_code: 0,
+        };
+
+        let json = serde_json::to_string(&payload).unwrap();
+        let parsed: ExitPayload = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, payload);
+    }
+
+    #[test]
     fn test_is_ollama_in_paths() {
         let temp_dir = tempfile::tempdir().unwrap();
         

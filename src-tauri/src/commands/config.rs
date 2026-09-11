@@ -201,11 +201,16 @@ pub fn sync_windows_path(home: &std::path::Path, enable: bool) -> Result<(), Str
     let local_appdata = std::env::var("LOCALAPPDATA")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| home.join("AppData").join("Local"));
+    let appdata = std::env::var("APPDATA")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| home.join("AppData").join("Roaming"));
+    let npm_appdata = appdata.join("npm");
     let hermes_appdata = local_appdata.join("hermes").join("bin");
     let opencode_appdata = local_appdata.join("Programs").join("opencode");
     let ollama_appdata = local_appdata.join("Programs").join("Ollama");
     
     let path_entries = [
+        npm_appdata.to_string_lossy().to_string(),
         hermes_appdata.to_string_lossy().to_string(),
         opencode_appdata.to_string_lossy().to_string(),
         ollama_appdata.to_string_lossy().to_string(),
