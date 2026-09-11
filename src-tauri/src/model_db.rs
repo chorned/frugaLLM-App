@@ -28,27 +28,80 @@ impl ModelIntelligenceRegistry {
 
         // Seed default foundational intelligence benchmarks to guarantee baseline scores
         let seed_models = [
-            ("google/gemini-3.5-flash", 72.0),
+            // Modern Google Frontier & Flash Models
             ("google/gemini-3.8-flash", 70.0),
             ("google/gemini-3.7-flash", 68.0),
+            ("google/gemini-3.5-flash", 72.0),
             ("google/gemini-3.5-flash-lite", 65.0),
-            ("google/gemma-4-31b-it", 63.2),
             ("google/gemini-3.1-flash-lite", 62.0),
             ("google/gemini-3.1-flash-lite-preview", 61.0),
+            ("google/gemini-2.5-pro", 88.0),
+            ("google/gemini-2.5-flash", 78.0),
+            ("google/gemini-2.0-pro", 84.0),
+            ("google/gemini-2.0-flash", 74.0),
+            ("google/gemini-2.0-flash-lite", 66.0),
+            ("google/gemini-1.5-pro", 76.0),
+            ("google/gemini-1.5-flash", 65.0),
+            ("google/gemini-1.5-flash-8b", 55.0),
+            
+            // Google Gemma Family (Open Weights)
+            ("google/gemma-4-31b-it", 63.2),
             ("google/gemma-4-26b-a4b-it", 56.2),
             ("google/gemma-4-12b-it", 48.5),
             ("google/gemma-4-e4b-it", 42.0),
             ("google/gemma-4-e2b-it", 36.5),
+            ("google/gemma-2-27b-it", 61.0),
+            ("google/gemma-2-9b-it", 52.0),
+            ("google/gemma-2-2b-it", 38.0),
+
+            // Anthropic Claude Family
+            ("anthropic/claude-3.7-sonnet", 92.0),
             ("anthropic/claude-3.5-sonnet", 85.0),
             ("anthropic/claude-3.5-haiku", 58.0),
-            ("meta-llama/llama-3.3-70b-instruct", 62.0),
+            ("anthropic/claude-3-opus", 78.0),
+            ("anthropic/claude-3-sonnet", 68.0),
+            ("anthropic/claude-3-haiku", 48.0),
+
+            // OpenAI Frontier & Reasoning Models
+            ("openai/o3-mini", 86.0),
+            ("openai/o1", 90.0),
+            ("openai/o1-mini", 78.0),
+            ("openai/gpt-4o", 82.0),
+            ("openai/gpt-4o-mini", 60.0),
+            ("openai/gpt-4-turbo", 76.0),
+
+            // DeepSeek Family
+            ("deepseek/deepseek-r1", 89.0),
+            ("deepseek/deepseek-chat", 80.0),
+            ("deepseek/deepseek-v3", 80.0),
+
+            // Meta Llama Family
+            ("meta-llama/llama-3.3-70b-instruct", 72.0),
+            ("meta-llama/llama-3.1-405b-instruct", 84.0),
+            ("meta-llama/llama-3.1-70b-instruct", 70.0),
+            ("meta-llama/llama-3.1-8b-instruct", 52.0),
+            ("meta-llama/llama-3.2-3b-instruct", 42.0),
+            ("meta-llama/llama-3.2-1b-instruct", 32.0),
+
+            // Qwen Family
+            ("qwen/qwen-2.5-72b-instruct", 76.0),
+            ("qwen/qwen-2.5-coder-32b-instruct", 74.0),
+            ("qwen/qwen-2.5-14b-instruct", 62.0),
+            ("qwen/qwen-2.5-7b-instruct", 50.0),
+
+            // Mistral Family
+            ("mistralai/mistral-large-2411", 78.0),
+            ("mistralai/codestral-2501", 72.0),
+            ("mistralai/mistral-small", 58.0),
+            ("mistralai/mistral-7b-instruct", 45.0),
+
+            // Specialized & Partner Roster
             ("z-ai/glm-5.2", 52.6),
             ("minimax/minimax-m3", 45.4),
             ("minimax/minimax-m2.7", 38.9),
             ("thinkingmachines/inkling", 42.3),
             ("thinkingmachines/inkling-small", 41.2),
             ("nvidia/nemotron-3-ultra-550b-a55b", 38.3),
-            ("openai/gpt-4o-mini", 60.0),
         ];
 
         for (model, score) in seed_models {
@@ -84,9 +137,65 @@ impl ModelIntelligenceRegistry {
             }
         }
 
+        // Map Ollama Gemma2 tags
+        if id.starts_with("gemma2:") || id.starts_with("gemma-2:") {
+            let tag = id.split(':').nth(1).unwrap_or("").trim_end_matches(":free");
+            let mapped = match tag {
+                "2b" => "google/gemma-2-2b-it",
+                "9b" => "google/gemma-2-9b-it",
+                "27b" => "google/gemma-2-27b-it",
+                _ => "",
+            };
+            if !mapped.is_empty() {
+                return mapped.to_string();
+            }
+        }
+
+        // Map Ollama Llama tags
+        if id.starts_with("llama3.3:") || id.starts_with("llama-3.3:") {
+            return "meta-llama/llama-3.3-70b-instruct".to_string();
+        }
+        if id.starts_with("llama3.1:") || id.starts_with("llama-3.1:") {
+            let tag = id.split(':').nth(1).unwrap_or("");
+            return if tag.starts_with("70b") {
+                "meta-llama/llama-3.1-70b-instruct".to_string()
+            } else if tag.starts_with("405b") {
+                "meta-llama/llama-3.1-405b-instruct".to_string()
+            } else {
+                "meta-llama/llama-3.1-8b-instruct".to_string()
+            };
+        }
+        if id.starts_with("llama3.2:") || id.starts_with("llama-3.2:") {
+            let tag = id.split(':').nth(1).unwrap_or("");
+            return if tag.starts_with("1b") {
+                "meta-llama/llama-3.2-1b-instruct".to_string()
+            } else {
+                "meta-llama/llama-3.2-3b-instruct".to_string()
+            };
+        }
+        if id.starts_with("deepseek-r1:") {
+            return "deepseek/deepseek-r1".to_string();
+        }
+        if id.starts_with("qwen2.5:") {
+            return "qwen/qwen-2.5-7b-instruct".to_string();
+        }
+
         // Strip OpenRouter tier suffixes like :free, :nitro, :extended
         if let Some(base) = id.split(':').next() {
             id = base.to_string();
+        }
+
+        // Auto-prefix well-known families if provider is omitted
+        if !id.contains('/') {
+            if id.starts_with("gemini-") || id.starts_with("gemma-") {
+                id = format!("google/{}", id);
+            } else if id.starts_with("claude-") {
+                id = format!("anthropic/{}", id);
+            } else if id.starts_with("gpt-") || id.starts_with("o1") || id.starts_with("o3") {
+                id = format!("openai/{}", id);
+            } else if id.starts_with("llama-") {
+                id = format!("meta-llama/{}", id);
+            }
         }
 
         id
@@ -115,7 +224,34 @@ impl ModelIntelligenceRegistry {
             }
         }
 
-        // 4. Fuzzy match: If the query is "minimax/minimax-m3", it should match "minimax/minimax-m3-20260531"
+        // 4. Strip common version/date/channel suffixes (-latest, -preview, -001, -exp)
+        let stripped_norm = normalized
+            .trim_end_matches("-latest")
+            .trim_end_matches("-preview")
+            .trim_end_matches("-001");
+        if stripped_norm != normalized {
+            if let Some(s) = guard.get(stripped_norm) {
+                return s.score;
+            }
+            for (k, v) in guard.iter() {
+                let k_norm = Self::normalize_model_id(k);
+                if k_norm == stripped_norm {
+                    return v.score;
+                }
+            }
+        }
+
+        // 5. Provider-agnostic matching: if query has no provider prefix or matches key suffix
+        let bare_name = normalized.rsplit('/').next().unwrap_or(&normalized);
+        let stripped_bare = stripped_norm.rsplit('/').next().unwrap_or(stripped_norm);
+        for (k, v) in guard.iter() {
+            let k_bare = k.rsplit('/').next().unwrap_or(k);
+            if k_bare == bare_name || k_bare == stripped_bare {
+                return v.score;
+            }
+        }
+
+        // 6. Fuzzy match: If the query is "minimax/minimax-m3", it should match "minimax/minimax-m3-20260531"
         for (k, v) in guard.iter() {
             let k_norm = Self::normalize_model_id(k);
             if k_norm.starts_with(&normalized) {
@@ -127,7 +263,7 @@ impl ModelIntelligenceRegistry {
             }
         }
 
-        // 5. Reverse fuzzy match: If query has date suffix "google/gemma-4-31b-it-20260402", matches "google/gemma-4-31b-it"
+        // 7. Reverse fuzzy match: If query has date suffix "google/gemma-4-31b-it-20260402", matches "google/gemma-4-31b-it"
         for (k, v) in guard.iter() {
             let k_norm = Self::normalize_model_id(k);
             if normalized.starts_with(&k_norm) {
@@ -358,5 +494,17 @@ mod tests {
             mapped_results[1].0
         );
         assert_eq!(mapped_results[1].1, 56.2);
+    }
+
+    #[test]
+    fn test_expanded_model_scoring_and_unprefixed_resolution() {
+        // Test that global registry resolves scores for unprefixed and tagged model names
+        assert_eq!(MODEL_REGISTRY.get_score("models/gemini-2.5-flash"), 78.0);
+        assert_eq!(MODEL_REGISTRY.get_score("gemini-2.5-flash"), 78.0);
+        assert_eq!(MODEL_REGISTRY.get_score("gemini-1.5-flash-latest"), 65.0);
+        assert_eq!(MODEL_REGISTRY.get_score("google/gemini-2.0-flash"), 74.0);
+        assert_eq!(MODEL_REGISTRY.get_score("llama3.1:8b"), 52.0);
+        assert_eq!(MODEL_REGISTRY.get_score("gemma2:9b"), 52.0);
+        assert_eq!(MODEL_REGISTRY.get_score("deepseek-r1:8b"), 89.0);
     }
 }

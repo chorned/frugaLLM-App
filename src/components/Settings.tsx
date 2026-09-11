@@ -168,7 +168,7 @@ export const Settings: React.FC<SettingsProps> = ({
       }}
     >
       {/* Start on Login Toggle */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
         <label
           style={{
             display: 'flex',
@@ -190,12 +190,19 @@ export const Settings: React.FC<SettingsProps> = ({
             onChange={(e) => handleToggleAutostart(e.target.checked)}
             style={{ borderRadius: '4px', cursor: 'pointer' }}
           />
-          <span>{strings.startOnLogin.label}</span>
+          <Tooltip 
+            text={strings.startOnLogin.tooltip || `${strings.startOnLogin.helpText} ${strings.startOnLogin.outcomeHelp}`}
+            triggerTestId="btn-start-on-login-info"
+            testId="start-on-login-tooltip-box"
+            ariaLabel={strings.startOnLogin.label}
+          >
+            <span>{strings.startOnLogin.label}</span>
+          </Tooltip>
         </label>
       </div>
 
       {/* Start Minimized Toggle */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
         <label
           style={{
             display: 'flex',
@@ -217,11 +224,18 @@ export const Settings: React.FC<SettingsProps> = ({
             onChange={(e) => handleToggleStartMinimized(e.target.checked)}
             style={{ borderRadius: '4px', cursor: 'pointer' }}
           />
-          <span>{strings.startMinimized.label}</span>
+          <Tooltip 
+            text={strings.startMinimized.tooltip || `${strings.startMinimized.helpText} ${strings.startMinimized.outcomeHelp}`}
+            triggerTestId="btn-start-minimized-info"
+            testId="start-minimized-tooltip-box"
+            ariaLabel={strings.startMinimized.label}
+          >
+            <span>{strings.startMinimized.label}</span>
+          </Tooltip>
         </label>
       </div>
 
-      {/* Global CLI Commands Toggle with Hover Tooltip ( i ) */}
+      {/* Global CLI Commands Toggle with Dotted Underline Tooltip */}
       <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
         <label
           style={{
@@ -244,47 +258,57 @@ export const Settings: React.FC<SettingsProps> = ({
             onChange={(e) => handleToggleGlobalCli(e.target.checked)}
             style={{ borderRadius: '4px', cursor: 'pointer' }}
           />
-          <span>{strings.globalCli.label}</span>
           <Tooltip 
-            text={strings.globalCli.tooltip}
+            text={strings.globalCli.tooltip || `${strings.globalCli.helpText} ${strings.globalCli.outcomeHelp}`}
             triggerTestId="btn-global-cli-info"
             testId="global-cli-tooltip-box"
-            ariaLabel="Info about global CLI commands"
-          />
+            ariaLabel={strings.globalCli.label}
+          >
+            <span>{strings.globalCli.label}</span>
+          </Tooltip>
         </label>
       </div>
 
       {/* View Logs & Report Issue Actions */}
       <div style={{ marginTop: '4px', paddingTop: '8px', borderTop: '1px solid var(--zen-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <button
-          type="button"
-          data-testid="btn-view-logs"
-          onClick={() => {
-            openAppLogs().catch((err) => {
-              console.error('Failed to open app logs:', err);
-              setErrorMessage(String(err));
-            });
-          }}
-          style={{
-            width: '100%',
-            padding: '8px 12px',
-            backgroundColor: 'var(--zen-surface-hover)',
-            borderRadius: '9999px',
-            color: 'var(--zen-text)',
-            border: '1px solid var(--zen-border)',
-            fontWeight: 600,
-            cursor: 'pointer',
-            fontFamily: 'inherit',
-            fontSize: '0.75rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '6px',
-            transition: 'all 0.15s ease',
-          }}
-        >
-          {strings.viewLogs?.label || 'VIEW LOGS'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%' }}>
+          <button
+            type="button"
+            data-testid="btn-view-logs"
+            onClick={() => {
+              openAppLogs().catch((err) => {
+                console.error('Failed to open app logs:', err);
+                setErrorMessage(String(err));
+              });
+            }}
+            style={{
+              flex: 1,
+              padding: '8px 12px',
+              backgroundColor: 'var(--zen-surface-hover)',
+              borderRadius: '9999px',
+              color: 'var(--zen-text)',
+              border: '1px solid var(--zen-border)',
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              fontSize: '0.75rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <Tooltip
+              text={strings.viewLogs.tooltip || `${strings.viewLogs.helpText} ${strings.viewLogs.outcomeHelp}`}
+              triggerTestId="btn-view-logs-help"
+              testId="view-logs-help-box"
+              ariaLabel="Help for viewing application logs"
+            >
+              <span>{strings.viewLogs?.label || 'VIEW LOGS'}</span>
+            </Tooltip>
+          </button>
+        </div>
 
         {onReportIssue && (
           <button

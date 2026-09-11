@@ -282,6 +282,8 @@ describe('App Component Integration', () => {
           screen.getByText(/Close the service currently using port \[5050\] and restart the app\./i)
         ).toBeInTheDocument();
         expect(screen.getByTestId('frugallm-port-conflict-badge')).toBeInTheDocument();
+        expect(screen.getByTestId('footer-status-dot')).toHaveStyle({ backgroundColor: '#ef4444' });
+        expect(screen.getByTestId('footer-status-text')).toHaveTextContent('Port Conflict');
       },
       { timeout: 10000 }
     );
@@ -702,21 +704,15 @@ describe('App Component Integration', () => {
     expect(logoSvg).toBeInTheDocument();
     expect(screen.getByTestId('header-frugallm-icon')).toBeInTheDocument();
 
-    // Footer assertions: placeholder hyperlinks
+    // Footer assertions: Horned.se and Github hyperlinks
     const footer = screen.getByTestId('app-footer');
     expect(footer).toBeInTheDocument();
-    expect(screen.getByTestId('footer-link-docs')).toHaveTextContent('Documentation');
-    expect(screen.getByTestId('footer-link-github')).toHaveTextContent('GitHub');
-    expect(screen.getByTestId('footer-link-guides')).toHaveTextContent('Quickstart Guides');
-    expect(screen.getByTestId('footer-link-privacy')).toHaveTextContent('Privacy & Telemetry');
-
-    // Footer Guides link interaction
-    fireEvent.click(screen.getByTestId('footer-link-guides'));
-    await waitFor(() => {
-      expect(screen.getByText(/FRUGALLM \/\/ QUICKSTART GUIDES/i)).toBeInTheDocument();
-    });
-    // Close guides modal
-    fireEvent.click(screen.getByRole('button', { name: '✕' }));
+    expect(screen.getByTestId('footer-link-horned')).toHaveTextContent('Horned.se');
+    expect(screen.getByTestId('footer-link-github')).toHaveTextContent('Github');
+    expect(screen.queryByTestId('footer-link-docs')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('footer-link-privacy')).not.toBeInTheDocument();
+    expect(screen.getByTestId('footer-status-dot')).toHaveStyle({ backgroundColor: '#10B981' });
+    expect(screen.getByTestId('footer-status-text')).toHaveTextContent('System Ready');
 
     // Canvas node gear icon styling assertion: Dark grey matching headerText
     const frugalNode = container.querySelector('[data-node-id="node-frugallm"]') as HTMLElement;

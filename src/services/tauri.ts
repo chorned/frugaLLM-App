@@ -11,8 +11,10 @@ export interface FrugalConfig {
   google_api_key?: string;
   input_tokens_lifetime?: number;
   output_tokens_lifetime?: number;
+  cached_tokens_lifetime?: number;
   input_tokens_session?: number;
   output_tokens_session?: number;
+  cached_tokens_session?: number;
   [key: string]: any;
 }
 

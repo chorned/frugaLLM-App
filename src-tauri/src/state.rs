@@ -232,8 +232,12 @@ pub struct FrugalConfig {
     pub api_password: Option<String>,
     pub input_tokens_session: u64,
     pub output_tokens_session: u64,
+    #[serde(default)]
+    pub cached_tokens_session: u64,
     pub input_tokens_lifetime: u64,
     pub output_tokens_lifetime: u64,
+    #[serde(default)]
+    pub cached_tokens_lifetime: u64,
     pub opencode_workspace: Option<String>,
     pub hermes_workspace: Option<String>,
     #[serde(default)]
@@ -254,8 +258,10 @@ impl Default for FrugalConfig {
             api_password: None,
             input_tokens_session: 0,
             output_tokens_session: 0,
+            cached_tokens_session: 0,
             input_tokens_lifetime: 0,
             output_tokens_lifetime: 0,
+            cached_tokens_lifetime: 0,
             opencode_workspace: Some("~/OpenCode".to_string()),
             hermes_workspace: Some("~/Hermes".to_string()),
             start_minimized: false,
@@ -326,6 +332,8 @@ pub struct NotifyOnDrop {
     pub token_estimate: Arc<std::sync::atomic::AtomicUsize>,
     pub exact_output_tokens: Arc<std::sync::atomic::AtomicUsize>,
     pub exact_input_tokens: Arc<std::sync::atomic::AtomicUsize>,
+    pub exact_cached_tokens: Arc<std::sync::atomic::AtomicUsize>,
+    pub has_exact_input: Arc<std::sync::atomic::AtomicBool>,
     pub input_tokens_estimate: usize,
 }
 impl Drop for NotifyOnDrop {
@@ -340,9 +348,18 @@ impl Drop for NotifyOnDrop {
         let output_tokens = if exact_out > 0 { exact_out } else { self.token_estimate.load(std::sync::atomic::Ordering::Acquire) / 4 };
         
         let exact_in = self.exact_input_tokens.load(std::sync::atomic::Ordering::Acquire);
-        let input_tokens = if exact_in > 0 { exact_in } else { self.input_tokens_estimate / 4 };
+        let has_exact_in = self.has_exact_input.load(std::sync::atomic::Ordering::Acquire);
+        let input_tokens = if has_exact_in {
+            exact_in
+        } else if exact_in > 0 {
+            exact_in
+        } else {
+            self.input_tokens_estimate / 4
+        };
+
+        let cached_tokens = self.exact_cached_tokens.load(std::sync::atomic::Ordering::Acquire);
         
-        if output_tokens > 0 || input_tokens > 0 {
+        if output_tokens > 0 || input_tokens > 0 || cached_tokens > 0 {
             let app_handle = self.app.clone();
             tauri::async_runtime::spawn(async move {
                 let state = app_handle.state::<FrugalConfigState>();
@@ -350,8 +367,10 @@ impl Drop for NotifyOnDrop {
                     let mut config = state.config.lock().await;
                     config.input_tokens_session += input_tokens as u64;
                     config.output_tokens_session += output_tokens as u64;
+                    config.cached_tokens_session += cached_tokens as u64;
                     config.input_tokens_lifetime += input_tokens as u64;
                     config.output_tokens_lifetime += output_tokens as u64;
+                    config.cached_tokens_lifetime += cached_tokens as u64;
                 }
                 state.is_dirty.store(true, std::sync::atomic::Ordering::Release);
                 let _ = app_handle.emit("frugallm_config_updated", ());

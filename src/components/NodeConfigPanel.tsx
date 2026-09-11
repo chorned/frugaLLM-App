@@ -338,13 +338,21 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: '10px' }}>
                   <div>
-                    <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>IP ADDRESS / HOST <Tooltip text="Where does this service live on the network? Usually, it's right here on your computer ('127.0.0.1' or 'localhost'), but it could be a cloud API halfway across the world!" /></label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>
+                      <Tooltip text={en.routingGraph.nodeConfigPanel.inputs.ip.tooltip || en.routingGraph.nodeConfigPanel.inputs.ip.helpText} triggerTestId="btn-ip-info">
+                        <span>{en.routingGraph.nodeConfigPanel.inputs.ip.label}</span>
+                      </Tooltip>
+                    </label>
                     <div style={{ padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem' }}>
                       {formData.bind_all_interfaces ? '0.0.0.0' : (formData.ip || '127.0.0.1')}
                     </div>
                   </div>
                   <div>
-                    <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>PORT <Tooltip text="Think of the IP address as the building, and the Port as the specific door to knock on. It's how our hub knows exactly where to send its messages." /></label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>
+                      <Tooltip text={en.routingGraph.nodeConfigPanel.inputs.port.tooltip} triggerTestId="btn-port-help">
+                        <span>{en.routingGraph.nodeConfigPanel.inputs.port.label}</span>
+                      </Tooltip>
+                    </label>
                     <input 
                       type="text" 
                       name="port" 
@@ -374,39 +382,47 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
                   </div>
                 </div>
 
-                <button 
-                  data-testid="btn-copy-ip-port"
-                  onClick={async () => {
-                    const url = formatApiBaseUrl({
-                      ip: formData.ip,
-                      port: formData.port,
-                      bind_all_interfaces: formData.bind_all_interfaces,
-                    });
-                    const success = await copyToClipboard(url);
-                    if (success) {
-                      setIpCopied(true);
-                      setIpCopyError(false);
-                      setTimeout(() => setIpCopied(false), 1500);
-                    } else {
-                      setIpCopyError(true);
-                      setTimeout(() => setIpCopyError(false), 2000);
-                    }
-                  }}
-                  style={{ 
-                    width: '100%', 
-                    padding: '9px 16px', 
-                    backgroundColor: ipCopied ? '#10B981' : (ipCopyError ? '#ef4444' : '#171717'), 
-                    color: '#ffffff', 
-                    border: 'none', 
-                    borderRadius: '9999px', 
-                    fontWeight: 600, 
-                    fontSize: '0.78rem', 
-                    cursor: 'pointer', 
-                    fontFamily: 'inherit', 
-                    transition: 'all 0.15s ease' 
-                  }}>
-                  {ipCopied ? '✓ COPIED' : (ipCopyError ? 'COPY FAILED' : 'COPY IP & PORT')}
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                  <Tooltip 
+                    text={en.routingGraph.nodeConfigPanel.inputs.copyIpAndPort.tooltip || en.routingGraph.nodeConfigPanel.inputs.copyIpAndPort.outcomeHelp}
+                    triggerTestId="btn-copy-ip-port-help"
+                    style={{ width: '100%', textDecoration: 'none' }}
+                  >
+                    <button 
+                      data-testid="btn-copy-ip-port"
+                      onClick={async () => {
+                        const url = formatApiBaseUrl({
+                          ip: formData.ip,
+                          port: formData.port,
+                          bind_all_interfaces: formData.bind_all_interfaces,
+                        });
+                        const success = await copyToClipboard(url);
+                        if (success) {
+                          setIpCopied(true);
+                          setIpCopyError(false);
+                          setTimeout(() => setIpCopied(false), 1500);
+                        } else {
+                          setIpCopyError(true);
+                          setTimeout(() => setIpCopyError(false), 2000);
+                        }
+                      }}
+                      style={{ 
+                        width: '100%', 
+                        padding: '9px 16px', 
+                        backgroundColor: ipCopied ? '#10B981' : (ipCopyError ? '#ef4444' : '#171717'), 
+                        color: '#ffffff', 
+                        border: 'none', 
+                        borderRadius: '9999px', 
+                        fontWeight: 600, 
+                        fontSize: '0.78rem', 
+                        cursor: 'pointer', 
+                        fontFamily: 'inherit', 
+                        transition: 'all 0.15s ease' 
+                      }}>
+                      {ipCopied ? '✓ COPIED' : (ipCopyError ? 'COPY FAILED' : 'COPY IP & PORT')}
+                    </button>
+                  </Tooltip>
+                </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '2px' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 500, color: 'var(--zen-text)' }}>
@@ -417,8 +433,9 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
                       onChange={(e) => setFormData(prev => ({ ...prev, bind_all_interfaces: e.target.checked }))} 
                       style={{ borderRadius: '4px', cursor: 'pointer' }}
                     />
-                    {en.routingGraph.nodeConfigPanel.inputs.bindAllInterfaces.label}
-                    <Tooltip text={en.routingGraph.nodeConfigPanel.inputs.bindAllInterfaces.helpText} />
+                    <Tooltip text={en.routingGraph.nodeConfigPanel.inputs.bindAllInterfaces.tooltip} triggerTestId="btn-bind-all-interfaces-help">
+                      <span>{en.routingGraph.nodeConfigPanel.inputs.bindAllInterfaces.label}</span>
+                    </Tooltip>
                   </label>
                 </div>
 
@@ -439,8 +456,9 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
                         }} 
                         style={{ borderRadius: '4px', cursor: 'pointer' }}
                       />
-                      {en.routingGraph.nodeConfigPanel.inputs.apiPassword.checkboxLabel}
-                      <Tooltip text={en.routingGraph.nodeConfigPanel.inputs.apiPassword.helpText} />
+                      <Tooltip text={en.routingGraph.nodeConfigPanel.inputs.apiPassword.tooltip} triggerTestId="btn-api-password-help">
+                        <span>{en.routingGraph.nodeConfigPanel.inputs.apiPassword.checkboxLabel}</span>
+                      </Tooltip>
                     </label>
                     {enablePassword && formData.api_password && (
                       <span style={{ fontSize: '0.7rem', color: '#10B981', fontWeight: 600 }}>
@@ -565,27 +583,47 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
           ) : node.data.isAgent ? (
             <>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>SCHEMA PATH <Tooltip text="Think of this as the agent's strict instruction manual. By giving it a JSON schema, we force the AI to return data in the exact structure your application expects. No more messy text—just clean data!" /></label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>
+                  <Tooltip text={en.routingGraph.nodeConfigPanel.inputs.schemaPath.tooltip} triggerTestId="btn-schema-path-help">
+                    <span>{en.routingGraph.nodeConfigPanel.inputs.schemaPath.label}</span>
+                  </Tooltip>
+                </label>
                 <input type="text" name="schemaPath" value={formData.schemaPath} onChange={handleChange} 
                   style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem', boxShadow: 'none' }} />
               </div>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>WORKING DIR (CWD) <Tooltip text="Where should the agent live while it works? This is the folder on your computer where the agent will run commands and look for files. It's basically the agent's home base." /></label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>
+                  <Tooltip text={en.routingGraph.nodeConfigPanel.inputs.workingDir.tooltip} triggerTestId="btn-cwd-help">
+                    <span>{en.routingGraph.nodeConfigPanel.inputs.workingDir.label}</span>
+                  </Tooltip>
+                </label>
                 <input type="text" name="cwd" value={formData.cwd} onChange={handleChange} 
                   style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem', boxShadow: 'none' }} />
               </div>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>EXECUTABLE (BIN) <Tooltip text="Which program is actually doing the heavy lifting? This tells the system what tool to launch under the hood. Usually, it's 'agy' for our Antigravity agent, but you can plug in any CLI tool!" /></label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>
+                  <Tooltip text={en.routingGraph.nodeConfigPanel.inputs.executable.tooltip} triggerTestId="btn-bin-help">
+                    <span>{en.routingGraph.nodeConfigPanel.inputs.executable.label}</span>
+                  </Tooltip>
+                </label>
                 <input type="text" name="bin" value={formData.bin} onChange={handleChange} 
                   style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem', boxShadow: 'none' }} />
               </div>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>EXTRA ARGS (CSV) <Tooltip text="Want to tweak how the agent runs? You can pass secret flags here (like '--verbose' to see its inner thoughts). Just list them out, separated by commas." /></label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>
+                  <Tooltip text={en.routingGraph.nodeConfigPanel.inputs.extraArgs.tooltip} triggerTestId="btn-extra-args-help">
+                    <span>{en.routingGraph.nodeConfigPanel.inputs.extraArgs.label}</span>
+                  </Tooltip>
+                </label>
                 <input type="text" name="extraArgs" value={formData.extraArgs} onChange={handleChange} placeholder="--verbose, --force"
                   style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem', boxShadow: 'none' }} />
               </div>
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>INSTRUCTION PROMPT <Tooltip text="This is your agent's main mission. Tell it exactly what you want it to accomplish. Be as specific as possible—the better the prompt, the better the results!" /></label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>
+                  <Tooltip text={en.routingGraph.nodeConfigPanel.inputs.prompt.tooltip} triggerTestId="btn-prompt-help">
+                    <span>{en.routingGraph.nodeConfigPanel.inputs.prompt.label}</span>
+                  </Tooltip>
+                </label>
                 <textarea name="prompt" value={formData.prompt} onChange={handleChange} rows={2} 
                   style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem', boxShadow: 'none' }} />
               </div>
@@ -595,7 +633,11 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
               {node.id !== 'node-openrouter' && node.id !== 'node-google' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: '10px' }}>
                   <div>
-                    <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>IP ADDRESS / HOST <Tooltip text="Where does this service live on the network? Usually, it's right here on your computer ('127.0.0.1' or 'localhost'), but it could be a cloud API halfway across the world!" /></label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>
+                      <Tooltip text={en.routingGraph.nodeConfigPanel.inputs.ip.tooltip || en.routingGraph.nodeConfigPanel.inputs.ip.helpText}>
+                        <span>{en.routingGraph.nodeConfigPanel.inputs.ip.label}</span>
+                      </Tooltip>
+                    </label>
                     {node.id === 'node-hermes' || node.id === 'node-opencode' ? (
                       <div style={{ padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem' }}>
                         {formData.ip}
@@ -606,7 +648,11 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
                     )}
                   </div>
                   <div>
-                    <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>PORT <Tooltip text="Think of the IP address as the building, and the Port as the specific door to knock on. It's how our hub knows exactly where to send its messages." /></label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>
+                      <Tooltip text={en.routingGraph.nodeConfigPanel.inputs.port.tooltip}>
+                        <span>{en.routingGraph.nodeConfigPanel.inputs.port.label}</span>
+                      </Tooltip>
+                    </label>
                     {node.id === 'node-hermes' || node.id === 'node-opencode' ? (
                       <div style={{ padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem' }}>
                         {formData.port}
@@ -639,14 +685,22 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
               )}
               {node.id === 'node-openrouter' && (
                 <div>
-                  <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>API KEY <Tooltip text="Your OpenRouter API Key. This will be securely saved into your operating system's native Keychain!" /></label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>
+                    <Tooltip text={en.routingGraph.nodeConfigPanel.inputs.openRouterApiKey.tooltip} triggerTestId="btn-openrouter-key-help">
+                      <span>{en.routingGraph.nodeConfigPanel.inputs.openRouterApiKey.label}</span>
+                    </Tooltip>
+                  </label>
                   <input type="password" name="apiKey" value={formData.apiKey || ''} onChange={handleChange} placeholder={Boolean(node.data.keyPrefix || node.data.status === 'active') ? en.routingGraph.nodeConfigPanel.inputs.openRouterApiKey.configuredPlaceholder : en.routingGraph.nodeConfigPanel.inputs.openRouterApiKey.placeholder}
                     style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem', boxShadow: 'none' }} />
                 </div>
               )}
               {node.id === 'node-google' && (
                 <div>
-                  <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>API KEY <Tooltip text="Your Google AI Studio API Key. This will be securely saved into your operating system's native Keychain!" /></label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px', letterSpacing: '0.02em' }}>
+                    <Tooltip text={en.routingGraph.nodeConfigPanel.inputs.googleApiKey.tooltip} triggerTestId="btn-google-key-help">
+                      <span>{en.routingGraph.nodeConfigPanel.inputs.googleApiKey.label}</span>
+                    </Tooltip>
+                  </label>
                   <input type="password" name="googleApiKey" value={formData.googleApiKey || ''} onChange={handleChange} placeholder={Boolean(node.data.keyPrefix || node.data.status === 'active') ? en.routingGraph.nodeConfigPanel.inputs.googleApiKey.configuredPlaceholder : en.routingGraph.nodeConfigPanel.inputs.googleApiKey.placeholder}
                     style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem', boxShadow: 'none' }} />
                 </div>
@@ -665,7 +719,16 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
       {node.id === 'node-hermes' && isHermesInstalled === false && (
         <div style={{ marginTop: '12px', padding: '14px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '14px' }}>
           {!hasActiveBackend ? (
-            <p style={{ fontSize: '0.75rem', color: 'var(--zen-text)', margin: 0, fontWeight: 500 }}>Please connect an intelligence source to FrugaLLM first.</p>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <Tooltip 
+                text={en.routingGraph.nodeConfigPanel.inputs.agentPrerequisite.tooltip || en.routingGraph.nodeConfigPanel.inputs.agentPrerequisite.outcomeHelp}
+                triggerTestId="btn-hermes-prereq-help"
+              >
+                <p style={{ fontSize: '0.75rem', color: 'var(--zen-text)', margin: 0, fontWeight: 500 }}>
+                  {en.routingGraph.nodeConfigPanel.actions.hermes.prerequisite}
+                </p>
+              </Tooltip>
+            </div>
           ) : (
             <button 
               onClick={(e) => { e.stopPropagation(); handleInitializeHermes(); }}
@@ -753,7 +816,16 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
       {node.id === 'node-opencode' && isOpenCodeInstalled === false && (
         <div style={{ marginTop: '12px', padding: '14px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '14px' }}>
           {!hasActiveBackend ? (
-            <p style={{ fontSize: '0.75rem', color: 'var(--zen-text)', margin: 0, fontWeight: 500 }}>Please connect an intelligence source to FrugaLLM first.</p>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <Tooltip 
+                text={en.routingGraph.nodeConfigPanel.inputs.agentPrerequisite.tooltip || en.routingGraph.nodeConfigPanel.inputs.agentPrerequisite.outcomeHelp}
+                triggerTestId="btn-opencode-prereq-help"
+              >
+                <p style={{ fontSize: '0.75rem', color: 'var(--zen-text)', margin: 0, fontWeight: 500 }}>
+                  {en.routingGraph.nodeConfigPanel.actions.opencode.prerequisite}
+                </p>
+              </Tooltip>
+            </div>
           ) : (
             <button 
               onClick={(e) => { e.stopPropagation(); handleInitializeOpenCode(); }}
@@ -814,7 +886,11 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
       {node.id === 'node-ollama' && isOllamaInstalled === false && (
         <div style={{ marginTop: '12px', padding: '14px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '14px' }}>
           <div style={{ marginBottom: '10px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px' }}>VRAM DETECTED (GB) <Tooltip text="We tried to auto-detect your Video RAM, but you can correct this if it's wrong." /></label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px' }}>
+              <Tooltip text={en.routingGraph.nodeConfigPanel.inputs.vramDetected.tooltip} triggerTestId="btn-vram-detected-help">
+                <span>{en.routingGraph.nodeConfigPanel.inputs.vramDetected.label}</span>
+              </Tooltip>
+            </label>
             <input 
               type="text" 
               value={detectedVram} 
@@ -829,7 +905,11 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
           </div>
 
           <div style={{ marginBottom: '12px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px' }}>RECOMMENDED MODEL <Tooltip text="Based on your VRAM, we'll pull this model for you!" /></label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px' }}>
+              <Tooltip text={en.routingGraph.nodeConfigPanel.inputs.recommendedModel.tooltip} triggerTestId="btn-recommended-model-help">
+                <span>{en.routingGraph.nodeConfigPanel.inputs.recommendedModel.label}</span>
+              </Tooltip>
+            </label>
             <select 
               value={memory.activeModelName} 
               onChange={(e) => memory.setActiveModelName(e.target.value)}
@@ -855,11 +935,19 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
             />
           </div>
 
-          <button 
-            onClick={(e) => { e.stopPropagation(); handleInitializeOllama(); }}
-            style={{ width: '100%', padding: '10px 16px', backgroundColor: '#171717', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s ease' }}>
-            INSTALL OLLAMA
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+            <Tooltip 
+              text={en.routingGraph.nodeConfigPanel.inputs.ollamaMissing.tooltip || en.routingGraph.nodeConfigPanel.inputs.ollamaMissing.outcomeHelp}
+              triggerTestId="btn-install-ollama-help"
+              style={{ width: '100%', textDecoration: 'none' }}
+            >
+              <button 
+                onClick={(e) => { e.stopPropagation(); handleInitializeOllama(); }}
+                style={{ width: '100%', padding: '10px 16px', backgroundColor: '#171717', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s ease' }}>
+                INSTALL OLLAMA
+              </button>
+            </Tooltip>
+          </div>
         </div>
       )}
       
@@ -902,9 +990,17 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
       {node.id === 'node-ollama' && isOllamaInstalled === true && (
         <div style={{ marginTop: '12px', padding: '14px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '14px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <h4 style={{ margin: 0, color: 'var(--zen-text)', fontSize: '0.8rem', fontWeight: 600, letterSpacing: '0.02em' }}>
-              {en.routingGraph.nodeConfigPanel.actions.toolGateway.title}
-            </h4>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Tooltip 
+                text={en.routingGraph.nodeConfigPanel.actions.toolGateway.tooltip || en.routingGraph.nodeConfigPanel.actions.toolGateway.helpText} 
+                triggerTestId="btn-tool-gateway-info"
+                testId="tool-gateway-tooltip-box"
+              >
+                <h4 style={{ margin: 0, color: 'var(--zen-text)', fontSize: '0.8rem', fontWeight: 600, letterSpacing: '0.02em' }}>
+                  {en.routingGraph.nodeConfigPanel.actions.toolGateway.title}
+                </h4>
+              </Tooltip>
+            </div>
             <span 
               data-testid="tool-gateway-status"
               style={{ 

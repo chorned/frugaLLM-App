@@ -49,8 +49,10 @@ pub async fn set_frugallm_config(app: tauri::AppHandle, state: State<'_, FrugalC
     let mut updated_config = new_config.clone();
     updated_config.input_tokens_lifetime = config.input_tokens_lifetime;
     updated_config.output_tokens_lifetime = config.output_tokens_lifetime;
+    updated_config.cached_tokens_lifetime = config.cached_tokens_lifetime;
     updated_config.input_tokens_session = config.input_tokens_session;
     updated_config.output_tokens_session = config.output_tokens_session;
+    updated_config.cached_tokens_session = config.cached_tokens_session;
     
     let port_changed = config.port != updated_config.port;
     let ip_changed = config.bind_all_interfaces != updated_config.bind_all_interfaces;

@@ -6,6 +6,8 @@ import en from '../locales/en.json';
 import { MemoryPipelineWidget } from './MemoryPipelineWidget';
 import { useMemory } from '../context/MemoryContext';
 import { OllamaIcon } from './icons/ProviderIcons';
+import { Tooltip } from './Tooltip';
+import { Icons } from '../constants/canvas';
 
 let isScreenshotMode = () => false;
 let APPSTORE_TELEMETRY: any = null;
@@ -330,7 +332,8 @@ export const HardwareNode = ({
   subheader = (en.routingGraph.nodes.ollamaLocal as any).subheader || 'Open source',
   icon,
   isSelected = false,
-  lastStatus
+  lastStatus,
+  onSettingsClick
 }: { 
   isGenerating?: boolean;
   label?: string;
@@ -338,6 +341,7 @@ export const HardwareNode = ({
   icon?: React.ReactNode;
   isSelected?: boolean;
   lastStatus?: string;
+  onSettingsClick?: (e?: React.MouseEvent) => void;
 }) => {
   const memory = useMemory();
   const memoryRef = useRef(memory);
@@ -507,24 +511,26 @@ export const HardwareNode = ({
                 <StatusLight status={isError ? (isDead ? 'not_installed' : 'standby') : 'active'} text={headerStatusText} color={statusLightColor} />
               </span>
             )}
-            <div 
-              data-testid="hardware-info-btn"
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowPanel(prev => !prev);
-              }}
-              title="View Hardware Telemetry"
-              style={{
-                cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: 'var(--zen-text)',
-                padding: '4px', borderRadius: '9999px',
-                opacity: 0.8
-              }}
-            >
-              <InfoIconSVG width="14" height="14" style={{ display: 'block' }} />
-            </div>
+            {onSettingsClick && (
+              <div 
+                data-testid="hardware-settings-btn"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSettingsClick(e);
+                }}
+                title={en.routingGraph.nodes.ollamaLocal.label || 'Settings'}
+                style={{
+                  cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: 'var(--zen-text)',
+                  padding: '4px', borderRadius: '9999px',
+                  opacity: 0.8
+                }}
+              >
+                {Icons.settings}
+              </div>
+            )}
           </div>
         </div>
 
@@ -542,7 +548,12 @@ export const HardwareNode = ({
               );
             })()}
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div 
+            data-testid="hardware-telemetry-trigger"
+            onClick={() => setShowPanel(prev => !prev)}
+            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+            title="View Hardware Telemetry"
+          >
             <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>Allocation</span>
             <span data-testid="hardware-node-allocation" style={{ fontSize: '0.78rem', fontWeight: 500, color: 'var(--zen-text-secondary)' }}>
               {memUsed} / {memTotal} GB
@@ -579,41 +590,30 @@ export const HardwareNode = ({
             {/* Average Throughput Metric Card */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--zen-surface-secondary)', padding: '12px 16px', borderRadius: '14px', border: 'none' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div 
+                  data-testid="benchmark-toggle"
+                  onClick={() => setShowBenchmarks(prev => !prev)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
+                  title={en.routingGraph.hardwareTelemetryWidget.viewBenchmarks}
+                >
                   <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--zen-text)' }}>
                     {en.routingGraph.hardwareTelemetryWidget.avgThroughput}
                   </span>
-                  <div
-                    data-testid="benchmark-info-btn"
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowBenchmarks(prev => !prev);
-                    }}
-                    title={en.routingGraph.hardwareTelemetryWidget.viewBenchmarks}
-                    style={{
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: showBenchmarks ? 'var(--zen-text)' : 'var(--zen-text-secondary)',
-                      opacity: showBenchmarks ? 1 : 0.75,
-                      transition: 'all 0.15s ease',
-                      padding: '2px',
-                      borderRadius: '4px'
-                    }}
-                  >
-                    <InfoIconSVG width="13" height="13" />
-                  </div>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   {liveThroughput > 0 && (
                     <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10b981' }} />
                   )}
-                  <span data-testid="live-throughput-stat" style={{ fontSize: '0.95rem', fontWeight: 700, color: (liveThroughput > 0 || avgThroughput > 0) ? 'var(--zen-text)' : 'var(--zen-text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
-                    {(liveThroughput > 0 ? liveThroughput : avgThroughput).toFixed(1)} <span style={{ fontSize: '0.7rem', color: 'var(--zen-text-secondary)', fontWeight: 500 }}>t/s</span>
-                  </span>
+                  <Tooltip 
+                    text={en.routingGraph.hardwareTelemetryWidget.throughputHelp}
+                    triggerTestId="btn-throughput-help"
+                    ariaLabel="Help for throughput speed"
+                  >
+                    <span data-testid="live-throughput-stat" style={{ fontSize: '0.95rem', fontWeight: 700, color: (liveThroughput > 0 || avgThroughput > 0) ? 'var(--zen-text)' : 'var(--zen-text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
+                      {(liveThroughput > 0 ? liveThroughput : avgThroughput).toFixed(1)} <span style={{ fontSize: '0.7rem', color: 'var(--zen-text-secondary)', fontWeight: 500 }}>t/s</span>
+                    </span>
+                  </Tooltip>
                 </div>
               </div>
             </div>

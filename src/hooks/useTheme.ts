@@ -11,15 +11,9 @@ export function getInitialTheme(): Theme {
       if (storedTheme === 'dark' || storedTheme === 'light') {
         return storedTheme;
       }
-      if (window.matchMedia) {
-        const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-        if (typeof mediaQuery.matches === 'boolean') {
-          return mediaQuery.matches ? 'dark' : 'light';
-        }
-      }
     }
   } catch {
-    // Fallback if localStorage or matchMedia is restricted
+    // Fallback if localStorage is restricted
   }
   return 'dark';
 }

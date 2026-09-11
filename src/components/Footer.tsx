@@ -4,10 +4,28 @@ import { UpdateNotification } from './UpdateNotification';
 import en from '../locales/en.json';
 
 export interface FooterProps {
-  onOpenGuides: () => void;
+  portConflict?: { port: number; message: string } | boolean | null;
+  daemonError?: string | boolean | null;
 }
 
-export const Footer: React.FC<FooterProps> = ({ onOpenGuides }) => {
+export const Footer: React.FC<FooterProps> = ({ portConflict, daemonError }) => {
+  const isPortConflict = Boolean(portConflict);
+  const isDaemonFailure = Boolean(daemonError);
+  const isError = isPortConflict || isDaemonFailure;
+
+  const statusColor = isError ? '#ef4444' : '#10B981';
+  const statusText = isPortConflict
+    ? (en.footer?.portConflict || 'Port Conflict')
+    : isDaemonFailure
+    ? (en.footer?.daemonFailure || 'Daemon Failure')
+    : (en.footer?.status || 'System Ready');
+
+  const statusTitle = isPortConflict
+    ? (typeof portConflict === 'object' && portConflict?.message ? portConflict.message : 'Port conflict detected')
+    : isDaemonFailure && typeof daemonError === 'string'
+    ? daemonError
+    : undefined;
+
   return (
     <footer 
       data-testid="app-footer" 
@@ -26,52 +44,57 @@ export const Footer: React.FC<FooterProps> = ({ onOpenGuides }) => {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
         <a 
-          href="#docs" 
-          data-testid="footer-link-docs"
-          onClick={(e) => { e.preventDefault(); }} 
+          href="https://horned.se/" 
+          target="_blank" 
+          rel="noreferrer"
+          data-testid="footer-link-horned"
+          onClick={(e) => { e.preventDefault(); openUrl('https://horned.se/').catch(() => {}); }} 
           style={{ color: 'var(--zen-text-secondary)', textDecoration: 'none', fontWeight: 500, transition: 'color 0.15s' }}
           onMouseEnter={(e) => e.currentTarget.style.color = 'var(--zen-text)'}
           onMouseLeave={(e) => e.currentTarget.style.color = 'var(--zen-text-secondary)'}
         >
-          {en.footer?.documentation || 'Documentation'}
+          {en.footer?.horned || 'Horned.se'}
         </a>
         <a 
-          href="https://github.com" 
+          href="https://github.com/chorned" 
           target="_blank" 
           rel="noreferrer"
           data-testid="footer-link-github"
-          onClick={(e) => { e.preventDefault(); openUrl('https://github.com').catch(() => {}); }} 
+          onClick={(e) => { e.preventDefault(); openUrl('https://github.com/chorned').catch(() => {}); }} 
           style={{ color: 'var(--zen-text-secondary)', textDecoration: 'none', fontWeight: 500, transition: 'color 0.15s' }}
           onMouseEnter={(e) => e.currentTarget.style.color = 'var(--zen-text)'}
           onMouseLeave={(e) => e.currentTarget.style.color = 'var(--zen-text-secondary)'}
         >
-          {en.footer?.github || 'GitHub'}
-        </a>
-        <a 
-          href="#guides" 
-          data-testid="footer-link-guides"
-          onClick={(e) => { e.preventDefault(); onOpenGuides(); }} 
-          style={{ color: 'var(--zen-text-secondary)', textDecoration: 'none', fontWeight: 500, transition: 'color 0.15s' }}
-          onMouseEnter={(e) => e.currentTarget.style.color = 'var(--zen-text)'}
-          onMouseLeave={(e) => e.currentTarget.style.color = 'var(--zen-text-secondary)'}
-        >
-          {en.footer?.guides || 'Quickstart Guides'}
-        </a>
-        <a 
-          href="#privacy" 
-          data-testid="footer-link-privacy"
-          onClick={(e) => { e.preventDefault(); }} 
-          style={{ color: 'var(--zen-text-secondary)', textDecoration: 'none', fontWeight: 500, transition: 'color 0.15s' }}
-          onMouseEnter={(e) => e.currentTarget.style.color = 'var(--zen-text)'}
-          onMouseLeave={(e) => e.currentTarget.style.color = 'var(--zen-text-secondary)'}
-        >
-          {en.footer?.privacy || 'Privacy & Telemetry'}
+          {en.footer?.github || 'Github'}
         </a>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+      <div 
+        data-testid="footer-status-container"
+        title={statusTitle}
+        style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+      >
         <UpdateNotification />
-        <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981' }} />
-        <span style={{ fontWeight: 500, color: 'var(--zen-text-secondary)' }}>{en.footer?.status || 'System Ready'}</span>
+        <span 
+          data-testid="footer-status-dot"
+          style={{ 
+            width: '6px', 
+            height: '6px', 
+            borderRadius: '50%', 
+            backgroundColor: statusColor,
+            flexShrink: 0,
+            transition: 'background-color 0.2s ease'
+          }} 
+        />
+        <span 
+          data-testid="footer-status-text"
+          style={{ 
+            fontWeight: 500, 
+            color: isError ? '#ef4444' : 'var(--zen-text-secondary)',
+            transition: 'color 0.2s ease'
+          }}
+        >
+          {statusText}
+        </span>
       </div>
     </footer>
   );

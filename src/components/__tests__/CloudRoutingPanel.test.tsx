@@ -68,7 +68,7 @@ describe('CloudRoutingPanel Component', () => {
     expect(screen.getByText('ACTIVE')).toBeInTheDocument();
   });
 
-  it('renders a score of 0 or missing score as "⚡ SCORE: N/A" and positive scores as actual values', async () => {
+  it('renders a score of 0 or missing score as "SCORE: N/A" and positive scores as actual values', async () => {
     const freeModels: CloudModel[] = [
       { model: 'google/gemma-4-26b-a4b-it:free', provider: 'openrouter', iq: 0 },
       { model: 'google/gemma-4-31b-it:free', provider: 'openrouter', iq: 81.2 },
@@ -88,8 +88,8 @@ describe('CloudRoutingPanel Component', () => {
     });
 
     // Assert that score 0 is rendered as N/A, and positive score is rendered with value
-    expect(screen.getByText('⚡ SCORE: N/A')).toBeInTheDocument();
-    expect(screen.getByText('⚡ SCORE: 81.2')).toBeInTheDocument();
+    expect(screen.getByText('SCORE: N/A')).toBeInTheDocument();
+    expect(screen.getByText('SCORE: 81.2')).toBeInTheDocument();
   });
 
   it('renders empty placeholder when routing pool has no models', async () => {

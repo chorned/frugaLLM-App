@@ -6,6 +6,7 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import en from '../locales/en.json';
 import { getProviderIcon } from './icons/ProviderIcons';
 import { isOpenRouterFreeAlias, MIN_CONTEXT_WINDOW } from '../router';
+import { Tooltip } from './Tooltip';
 
 export interface CloudModel {
   model: string;
@@ -155,9 +156,15 @@ export const CloudRoutingPanel = ({ overrides: propOverrides, onOverridesChange 
   return (
     <div data-testid="cloud-routing-panel" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
-        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--zen-text)', letterSpacing: '0.02em' }}>
-          {t?.title || 'GLOBAL ROUTING POOL'}
-        </div>
+        <Tooltip 
+          text={t?.infoTooltip || "FrugaLLM prioritizes models from top to bottom. Requests target the top model first and instantly fail over to lower tiers if rate limits or errors occur."}
+          triggerTestId="btn-cloud-routing-info"
+          ariaLabel="Info about global routing pool"
+        >
+          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--zen-text)', letterSpacing: '0.02em' }}>
+            {t?.title || 'GLOBAL ROUTING POOL'}
+          </span>
+        </Tooltip>
         <button 
           className="btn-cta btn-cta-secondary"
           onClick={refreshChain} 
@@ -182,7 +189,7 @@ export const CloudRoutingPanel = ({ overrides: propOverrides, onOverridesChange 
       
       <div 
         className="routing-pool-scrollbar" 
-        style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '340px', overflowY: 'auto', paddingRight: '6px' }}
+        style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '365px', overflowY: 'auto', paddingRight: '6px' }}
       >
         {chain.length === 0 && !loading && (
           <div style={{ fontSize: '0.78rem', color: 'var(--zen-text-secondary)', textAlign: 'center', padding: '24px 12px', lineHeight: 1.5 }}>
@@ -267,17 +274,20 @@ export const CloudRoutingPanel = ({ overrides: propOverrides, onOverridesChange 
                 <span style={{ fontSize: '0.82rem', fontWeight: isActive ? 600 : 450, color: 'var(--zen-text)' }}>
                   {item.model}
                 </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '3px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', flexWrap: 'wrap' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     {getProviderIcon(item.provider, { size: 12 })}
-                    <span style={{ fontSize: '0.68rem', color: 'var(--zen-text-secondary)', textTransform: 'uppercase', fontWeight: 500 }}>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--zen-text-secondary)', textTransform: 'uppercase', fontWeight: 500, letterSpacing: '0.02em' }}>
                       {item.provider}
                     </span>
                   </div>
                   {item.iq !== undefined && (
-                    <span style={{ fontSize: '0.65rem', color: '#171717', backgroundColor: '#E4E4E7', padding: '2px 8px', borderRadius: '9999px', fontWeight: 600, letterSpacing: '0.02em' }}>
-                      {t?.scorePrefix || '⚡ SCORE: '}{(item.iq && item.iq > 0) ? item.iq : 'N/A'}
-                    </span>
+                    <>
+                      <span style={{ width: '1px', height: '9px', backgroundColor: 'var(--zen-border)', opacity: 0.6, margin: '0 1px' }} />
+                      <span style={{ fontSize: '0.68rem', color: 'var(--zen-text-secondary)', fontWeight: 500, letterSpacing: '0.02em', display: 'inline-flex', alignItems: 'center' }}>
+                        {t?.scorePrefix || 'SCORE: '}{(item.iq && item.iq > 0) ? item.iq : 'N/A'}
+                      </span>
+                    </>
                   )}
                   {errors[item.model] && (() => {
                     const errLower = errors[item.model].toLowerCase();
@@ -292,9 +302,16 @@ export const CloudRoutingPanel = ({ overrides: propOverrides, onOverridesChange 
                       : (t?.skippedError || "SKIPPED: ERROR");
 
                     return (
-                      <span style={{ fontSize: '0.65rem', color, backgroundColor: bgColor, padding: '2px 8px', borderRadius: '9999px', fontWeight: 600, letterSpacing: '0.02em' }}>
-                        {label}
-                      </span>
+                      <Tooltip 
+                        text={`${t?.modelErrorHelp || 'Why was this skipped?'} (${errors[item.model]})`}
+                        triggerTestId={`btn-model-error-help-${item.model}`}
+                        ariaLabel={`Help for model ${item.model} error`}
+                        style={{ pointerEvents: 'auto' }}
+                      >
+                        <span style={{ fontSize: '0.65rem', color, backgroundColor: bgColor, padding: '2px 8px', borderRadius: '9999px', fontWeight: 600, letterSpacing: '0.02em' }}>
+                          {label}
+                        </span>
+                      </Tooltip>
                     );
                   })()}
                 </div>

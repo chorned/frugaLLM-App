@@ -1203,4 +1203,86 @@ use std::collections::{HashMap, HashSet};
         assert_eq!(status_403, "403");
     }
 
+    #[test]
+    fn test_extract_token_metrics_openai_with_cached_tokens() {
+        let json: serde_json::Value = serde_json::json!({
+            "usage": {
+                "prompt_tokens": 12000,
+                "completion_tokens": 500,
+                "total_tokens": 12500,
+                "prompt_tokens_details": {
+                    "cached_tokens": 10000
+                }
+            }
+        });
+
+        let metrics = extract_token_metrics_from_value(&json);
+        assert_eq!(metrics.cached_tokens, Some(10000));
+        assert_eq!(metrics.input_tokens, Some(2000)); // 12000 total prompt - 10000 cached = 2000 uncached
+        assert_eq!(metrics.output_tokens, Some(500));
+    }
+
+    #[test]
+    fn test_extract_token_metrics_openrouter_top_level_cached_tokens() {
+        let json: serde_json::Value = serde_json::json!({
+            "usage": {
+                "prompt_tokens": 5000,
+                "completion_tokens": 200,
+                "cached_tokens": 4000
+            }
+        });
+
+        let metrics = extract_token_metrics_from_value(&json);
+        assert_eq!(metrics.cached_tokens, Some(4000));
+        assert_eq!(metrics.input_tokens, Some(1000)); // 5000 - 4000
+        assert_eq!(metrics.output_tokens, Some(200));
+    }
+
+    #[test]
+    fn test_extract_token_metrics_anthropic_cache_read_input_tokens() {
+        let json: serde_json::Value = serde_json::json!({
+            "usage": {
+                "input_tokens": 1500,
+                "output_tokens": 350,
+                "cache_read_input_tokens": 8000
+            }
+        });
+
+        let metrics = extract_token_metrics_from_value(&json);
+        assert_eq!(metrics.cached_tokens, Some(8000));
+        assert_eq!(metrics.input_tokens, Some(1500)); // Already uncached in Anthropic spec
+        assert_eq!(metrics.output_tokens, Some(350));
+    }
+
+    #[test]
+    fn test_extract_token_metrics_ollama_native() {
+        let json: serde_json::Value = serde_json::json!({
+            "prompt_eval_count": 320,
+            "eval_count": 45
+        });
+
+        let metrics = extract_token_metrics_from_value(&json);
+        assert_eq!(metrics.cached_tokens, None);
+        assert_eq!(metrics.input_tokens, Some(320));
+        assert_eq!(metrics.output_tokens, Some(45));
+    }
+
+    #[test]
+    fn test_extract_token_metrics_full_cache_hit_zero_uncached() {
+        let json: serde_json::Value = serde_json::json!({
+            "usage": {
+                "prompt_tokens": 5000,
+                "completion_tokens": 100,
+                "prompt_tokens_details": {
+                    "cached_tokens": 5000
+                }
+            }
+        });
+
+        let metrics = extract_token_metrics_from_value(&json);
+        assert_eq!(metrics.cached_tokens, Some(5000));
+        assert_eq!(metrics.input_tokens, Some(0)); // 5000 - 5000 = 0
+        assert_eq!(metrics.output_tokens, Some(100));
+    }
+
 

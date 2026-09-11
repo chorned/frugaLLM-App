@@ -30,6 +30,67 @@ async fn models() -> Json<Value> {
     }))
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ExtractedTokenMetrics {
+    pub input_tokens: Option<usize>,
+    pub output_tokens: Option<usize>,
+    pub cached_tokens: Option<usize>,
+}
+
+pub fn extract_token_metrics_from_value(json: &Value) -> ExtractedTokenMetrics {
+    let mut metrics = ExtractedTokenMetrics::default();
+
+    // 1. Native Ollama metrics (prompt_eval_count, eval_count)
+    if let Some(prompt_eval) = json.get("prompt_eval_count").and_then(|v| v.as_u64()) {
+        metrics.input_tokens = Some(prompt_eval as usize);
+    }
+    if let Some(eval) = json.get("eval_count").and_then(|v| v.as_u64()) {
+        metrics.output_tokens = Some(eval as usize);
+    }
+
+    // 2. OpenAI / Cloud usage metrics (usage.prompt_tokens, usage.completion_tokens, cached_tokens)
+    if let Some(usage) = json.get("usage").and_then(|u| u.as_object()) {
+        let mut cached_count = 0u64;
+
+        // OpenAI / OpenRouter prompt_tokens_details.cached_tokens
+        if let Some(details) = usage.get("prompt_tokens_details").and_then(|d| d.as_object()) {
+            if let Some(c) = details.get("cached_tokens").and_then(|v| v.as_u64()) {
+                cached_count = cached_count.max(c);
+            }
+        }
+
+        // Top-level cached_tokens (OpenRouter / vLLM)
+        if let Some(c) = usage.get("cached_tokens").and_then(|v| v.as_u64()) {
+            cached_count = cached_count.max(c);
+        }
+
+        // Anthropic Claude cache_read_input_tokens
+        if let Some(c) = usage.get("cache_read_input_tokens").and_then(|v| v.as_u64()) {
+            cached_count = cached_count.max(c);
+        }
+
+        if cached_count > 0 {
+            metrics.cached_tokens = Some(cached_count as usize);
+        }
+
+        if let Some(prompt) = usage.get("prompt_tokens").and_then(|t| t.as_u64()) {
+            // In OpenAI specification, prompt_tokens represents total prompt tokens (cached + uncached).
+            // We separate out uncached input tokens:
+            let uncached = prompt.saturating_sub(cached_count);
+            metrics.input_tokens = Some(uncached as usize);
+        } else if let Some(input) = usage.get("input_tokens").and_then(|t| t.as_u64()) {
+            // In Anthropic specification, input_tokens already represents non-cached tokens:
+            metrics.input_tokens = Some(input as usize);
+        }
+
+        if let Some(completion) = usage.get("completion_tokens").or_else(|| usage.get("output_tokens")).and_then(|t| t.as_u64()) {
+            metrics.output_tokens = Some(completion as usize);
+        }
+    }
+
+    metrics
+}
+
 fn process_stream_chunk_for_tokens(
     chunk_bytes: &[u8],
     drop_guard: &NotifyOnDrop,
@@ -55,22 +116,16 @@ fn process_stream_chunk_for_tokens(
 
             if let Some(json_str) = json_candidate {
                 if let Ok(json) = serde_json::from_str::<Value>(json_str) {
-                    // 1. Native Ollama metrics (prompt_eval_count, eval_count)
-                    if let Some(prompt_eval) = json.get("prompt_eval_count").and_then(|v| v.as_u64()) {
-                        drop_guard.exact_input_tokens.store(prompt_eval as usize, std::sync::atomic::Ordering::Release);
+                    let metrics = extract_token_metrics_from_value(&json);
+                    if let Some(cached) = metrics.cached_tokens {
+                        drop_guard.exact_cached_tokens.store(cached, std::sync::atomic::Ordering::Release);
                     }
-                    if let Some(eval) = json.get("eval_count").and_then(|v| v.as_u64()) {
-                        drop_guard.exact_output_tokens.store(eval as usize, std::sync::atomic::Ordering::Release);
+                    if let Some(input) = metrics.input_tokens {
+                        drop_guard.exact_input_tokens.store(input, std::sync::atomic::Ordering::Release);
+                        drop_guard.has_exact_input.store(true, std::sync::atomic::Ordering::Release);
                     }
-
-                    // 2. OpenAI / Cloud usage metrics (usage.prompt_tokens, usage.completion_tokens)
-                    if let Some(usage) = json.get("usage").and_then(|u| u.as_object()) {
-                        if let Some(prompt) = usage.get("prompt_tokens").and_then(|t| t.as_u64()) {
-                            drop_guard.exact_input_tokens.store(prompt as usize, std::sync::atomic::Ordering::Release);
-                        }
-                        if let Some(completion) = usage.get("completion_tokens").and_then(|t| t.as_u64()) {
-                            drop_guard.exact_output_tokens.store(completion as usize, std::sync::atomic::Ordering::Release);
-                        }
+                    if let Some(output) = metrics.output_tokens {
+                        drop_guard.exact_output_tokens.store(output, std::sync::atomic::Ordering::Release);
                     }
 
                     // 3. Fallback token estimation from content strings (not raw JSON wire bytes!)
@@ -182,6 +237,8 @@ async fn try_ollama(
     let token_estimate = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let exact_output_tokens = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let exact_input_tokens = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let exact_cached_tokens = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let has_exact_input = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let drop_guard = NotifyOnDrop {
         app: app.clone(),
         source: source.to_string(),
@@ -189,6 +246,8 @@ async fn try_ollama(
         token_estimate: token_estimate.clone(),
         exact_output_tokens: exact_output_tokens.clone(),
         exact_input_tokens: exact_input_tokens.clone(),
+        exact_cached_tokens: exact_cached_tokens.clone(),
+        has_exact_input: has_exact_input.clone(),
         input_tokens_estimate: request_body_size,
     };
 
@@ -282,6 +341,7 @@ async fn try_ollama(
             Ok(builder.body(axum::body::Body::from_stream(chained_stream)).unwrap())
         } else {
             let bytes = res.bytes().await.map_err(|e| format!("Ollama network read error: {}", e))?;
+            process_stream_chunk_for_tokens(&bytes, &drop_guard);
             log_event(
                 app,
                 "INFO",
@@ -368,6 +428,8 @@ async fn try_cloud_provider(
     let token_estimate = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let exact_output_tokens = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let exact_input_tokens = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let exact_cached_tokens = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let has_exact_input = Arc::new(std::sync::atomic::AtomicBool::new(false));
     
     let drop_guard = NotifyOnDrop {
         app: app.clone(),
@@ -376,6 +438,8 @@ async fn try_cloud_provider(
         token_estimate: token_estimate.clone(),
         exact_output_tokens: exact_output_tokens.clone(),
         exact_input_tokens: exact_input_tokens.clone(),
+        exact_cached_tokens: exact_cached_tokens.clone(),
+        has_exact_input: has_exact_input.clone(),
         input_tokens_estimate: request_body_size,
     };
 
@@ -479,6 +543,7 @@ async fn try_cloud_provider(
             Ok(builder.body(axum::body::Body::from_stream(chained_stream)).unwrap())
         } else {
             let bytes = res.bytes().await.map_err(|e| format!("Network read error: {}", e))?;
+            process_stream_chunk_for_tokens(&bytes, &drop_guard);
             update_provider_status(app, &cloud_model.provider, "200 OK").await;
             if let Some(health_state) = app.try_state::<ProviderHealthState>() {
                 let mut p_cooldowns = health_state.provider_cooldowns.write().await;

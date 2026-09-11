@@ -42,10 +42,7 @@ fn main() {
     }
 
     let app = tauri::Builder::default()
-        .plugin(tauri_plugin_autostart::init(
-            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            Some(vec!["--silent"])
-        ))
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--silent"])))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_store::Builder::default().build())
@@ -72,6 +69,7 @@ fn main() {
                     if let Ok(mut parsed) = serde_json::from_str::<FrugalConfig>(&json) {
                         parsed.input_tokens_session = 0;
                         parsed.output_tokens_session = 0;
+                        parsed.cached_tokens_session = 0;
                         frugal_config = parsed;
                     }
                 }

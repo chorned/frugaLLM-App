@@ -136,10 +136,12 @@ describe('NodeWidgets Components', () => {
       // Assert: Model name updated
       expect(screen.getByTestId('active-model-name')).toHaveTextContent('gemma4:12b');
 
-      // Act 2: Click info button to open telemetry portal
-      const infoBtn = screen.getByTestId('hardware-info-btn');
-      expect(infoBtn).toHaveStyle({ color: 'var(--zen-text)' });
-      fireEvent.click(infoBtn);
+      // Assert: ( i ) info button removed from Ollama node header (moved to backlog CHO-122)
+      expect(screen.queryByTestId('hardware-info-btn')).not.toBeInTheDocument();
+
+      // Act 2: Click allocation trigger to open telemetry portal
+      const trigger = screen.getByTestId('hardware-telemetry-trigger');
+      fireEvent.click(trigger);
 
       // Assert: Telemetry panel opens in portal
       const panel = screen.getByTestId('hardware-telemetry-panel');
@@ -156,9 +158,12 @@ describe('NodeWidgets Components', () => {
       expect(memoryEl.compareDocumentPosition(loadEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(loadEl.compareDocumentPosition(pipelineEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-      // Act 3: Click benchmark info button inside panel
-      const benchmarkBtn = screen.getByTestId('benchmark-info-btn');
-      fireEvent.click(benchmarkBtn);
+      // Assert: ( i ) benchmark info button removed from telemetry panel (moved to backlog CHO-122)
+      expect(screen.queryByTestId('benchmark-info-btn')).not.toBeInTheDocument();
+
+      // Act 3: Click benchmark toggle inside panel
+      const benchmarkToggle = screen.getByTestId('benchmark-toggle');
+      fireEvent.click(benchmarkToggle);
 
       // Assert: Benchmark panel expands
       expect(screen.getByTestId('benchmark-panel')).toBeInTheDocument();

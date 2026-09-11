@@ -17,6 +17,7 @@ interface UseAppEventsProps {
   cleanupProxyIndicator: () => void;
   setFrugalConfig: (conf: any) => void;
   setPortConflict: (conflict: any) => void;
+  setDaemonError?: (err: string | null) => void;
 }
 
 export function useAppEvents({
@@ -32,6 +33,7 @@ export function useAppEvents({
   cleanupProxyIndicator,
   setFrugalConfig,
   setPortConflict,
+  setDaemonError,
 }: UseAppEventsProps) {
   useEffect(() => {
     const setupTelemetryListener = async () => {
@@ -129,9 +131,20 @@ export function useAppEvents({
         });
       } else if (statusObj?.status === 'Running') {
         setPortConflict(null);
+        setDaemonError?.(null);
+      } else if (statusObj?.status === 'Error') {
+        setDaemonError?.(statusObj.data?.message || 'Daemon failure');
       }
     }).then(unlisten => {
       unlistenStatus = unlisten;
+    }).catch(console.error);
+
+    let unlistenDaemonError: (() => void) | null = null;
+    listen('daemon_error', (event: any) => {
+      const msg = typeof event.payload === 'string' ? event.payload : event.payload?.message || 'Daemon failure';
+      setDaemonError?.(msg);
+    }).then(unlisten => {
+      unlistenDaemonError = unlisten;
     }).catch(console.error);
 
     let unlistenProviderStatus: (() => void) | null = null;
@@ -177,10 +190,13 @@ export function useAppEvents({
       if (unlistenStatus) {
         unlistenStatus();
       }
+      if (unlistenDaemonError) {
+        unlistenDaemonError();
+      }
       if (unlistenProviderStatus) {
         unlistenProviderStatus();
       }
       cleanupProxyIndicator();
     };
-  }, [memoryRef, setLatestTelemetry, setHardwareProfile, setIsOllamaInstalled, setNodes, handleProxyActivityEvent, setExitServices, setShowExitModal, setActiveProcesses, cleanupProxyIndicator, setFrugalConfig, setPortConflict]);
+  }, [memoryRef, setLatestTelemetry, setHardwareProfile, setIsOllamaInstalled, setNodes, handleProxyActivityEvent, setExitServices, setShowExitModal, setActiveProcesses, cleanupProxyIndicator, setFrugalConfig, setPortConflict, setDaemonError]);
 }

@@ -26,7 +26,7 @@ export class HardwareTelemetryPage {
     this.container = page.locator('#node-ollama');
     
     this.headerTitle = this.container.getByText('Ollama', { exact: false }).first();
-    this.toggleButton = this.container.getByTestId('hardware-info-btn');
+    this.toggleButton = this.container.getByTestId('hardware-telemetry-trigger');
     
     // Status light text is inside the header
     this.statusLight = this.container.locator('span').filter({ hasText: /^(Standby|Loading|Thinking|Loaded|llama.*)$/i }).first();
@@ -43,7 +43,7 @@ export class HardwareTelemetryPage {
     
     this.throughputLabel = this.panel.locator('text=Avg. Throughput');
     this.throughputValue = this.panel.getByTestId('live-throughput-stat');
-    this.benchmarkButton = this.panel.getByTestId('benchmark-info-btn');
+    this.benchmarkButton = this.panel.getByTestId('benchmark-toggle');
     this.benchmarkPanel = this.panel.getByTestId('benchmark-panel');
   }
 

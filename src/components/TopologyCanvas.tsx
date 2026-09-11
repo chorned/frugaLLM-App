@@ -4,6 +4,9 @@ import { HardwareNode, InfoField, StatusLight } from './NodeWidgets';
 import { OllamaIcon, getProviderIcon } from './icons/ProviderIcons';
 import { PortConflictBanner } from './PortConflictBanner';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import en from '../locales/en.json';
+import { Tooltip } from './Tooltip';
+import { calculateMoneySaved } from '../utils/pricing';
 
 export interface TopologyCanvasProps {
   canvasRef: React.RefObject<HTMLDivElement | null>;
@@ -165,6 +168,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             icon={<OllamaIcon size={14} />} 
             isSelected={isSelected} 
             lastStatus={node.data.lastStatus}
+            onSettingsClick={() => handleNodeClick(null, node.id)}
           />
         </div>
       );
@@ -279,21 +283,45 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 </div>
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>Session tokens:</span>
+                <Tooltip 
+                  text={en.routingGraph.frugallmNode?.sessionTokensTooltip || en.routingGraph.frugallmNode?.sessionTokensHelp || "Total prompt and completion tokens routed through FrugaLLM since launch. Monitors current workload and resets to zero upon restart."}
+                  triggerTestId="btn-frugallm-session-tokens-info"
+                  ariaLabel="Session tokens: Total prompt and completion tokens routed through FrugaLLM since launch."
+                >
+                  <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>
+                    {en.routingGraph.frugallmNode?.sessionTokens || 'Session tokens:'}
+                  </span>
+                </Tooltip>
                 <span data-testid="frugallm-session-tokens" style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--zen-text)' }}>
-                  {((frugalConfig?.input_tokens_session || 0) + (frugalConfig?.output_tokens_session || 0)).toLocaleString()}
+                  {((frugalConfig?.input_tokens_session || 0) + (frugalConfig?.output_tokens_session || 0) + (frugalConfig?.cached_tokens_session || 0)).toLocaleString()}
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>Total tokens:</span>
+                <Tooltip 
+                  text={en.routingGraph.frugallmNode?.totalTokensTooltip || en.routingGraph.frugallmNode?.totalTokensHelp || "Cumulative lifetime tokens routed through this FrugaLLM instance across all sessions."}
+                  triggerTestId="btn-frugallm-total-tokens-info"
+                  ariaLabel="Total tokens: Cumulative lifetime tokens routed through this FrugaLLM instance."
+                >
+                  <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>
+                    {en.routingGraph.frugallmNode?.totalTokens || 'Total tokens:'}
+                  </span>
+                </Tooltip>
                 <span data-testid="frugallm-total-tokens" style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--zen-text)' }}>
-                  {((frugalConfig?.input_tokens_lifetime || 0) + (frugalConfig?.output_tokens_lifetime || 0)).toLocaleString()}
+                  {((frugalConfig?.input_tokens_lifetime || 0) + (frugalConfig?.output_tokens_lifetime || 0) + (frugalConfig?.cached_tokens_lifetime || 0)).toLocaleString()}
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>$ Saved:</span>
+                <Tooltip 
+                  text={en.routingGraph.frugallmNode?.moneySavedTooltip || en.routingGraph.frugallmNode?.moneySavedHelp || "Estimated cost reduction from local routing and free cloud tiers, benchmarked against Claude Sonnet 5 pricing ($2.00/1M input, $10.00/1M output, and $0.20/1M cached input tokens)."}
+                  triggerTestId="btn-frugallm-money-saved-info"
+                  ariaLabel="Money saved: Estimated cost reduction from local routing and free cloud tiers."
+                >
+                  <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>
+                    {en.routingGraph.frugallmNode?.moneySaved || '$ Saved:'}
+                  </span>
+                </Tooltip>
                 <span data-testid="frugallm-money-saved" style={{ fontSize: '0.78rem', fontWeight: 600, color: '#10B981' }}>
-                  ${((((frugalConfig?.input_tokens_lifetime || 0) * 3.0) + ((frugalConfig?.output_tokens_lifetime || 0) * 15.0)) / 1_000_000).toFixed(2)}
+                  ${calculateMoneySaved(frugalConfig)}
                 </span>
               </div>
             </>

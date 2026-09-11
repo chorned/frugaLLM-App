@@ -31,6 +31,7 @@ export interface AppInitOptions {
   memoryRef: React.MutableRefObject<any>;
   setNodes: React.Dispatch<React.SetStateAction<AppNode[]>>;
   setPortConflict: (conflict: any) => void;
+  setDaemonError?: (err: string | null) => void;
   setIsAppLoaded: (loaded: boolean) => void;
 }
 
@@ -49,6 +50,7 @@ export async function runAppInit({
   memoryRef,
   setNodes,
   setPortConflict,
+  setDaemonError,
   setIsAppLoaded,
 }: AppInitOptions) {
   addLog("Booting FrugaLLM core subsystems...");
@@ -178,6 +180,8 @@ export async function runAppInit({
         port: status.data?.port || 61721,
         message: status.data?.message || `Close the service currently using port [${status.data?.port || 61721}] and restart the app.`
       });
+    } else if (status?.status === 'Error') {
+      setDaemonError?.(status.data?.message || 'Daemon failure');
     }
   } catch (e) {
     console.error("Failed to query server status:", e);

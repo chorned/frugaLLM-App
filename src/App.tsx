@@ -14,7 +14,6 @@ import { NodeConfigPanel } from './components/NodeConfigPanel';
 import { TopologyCanvas } from './components/TopologyCanvas';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
-import { GuidesModal } from './components/GuidesModal';
 import { TerminalOverlays } from './components/TerminalOverlays';
 import { useTopologyWires } from './hooks/useTopologyWires';
 import { useNodeActions } from './hooks/useNodeActions';
@@ -83,8 +82,6 @@ function AppContent() {
     setSelectedNodeId(null);
   });
 
-  const [guidesOpen, setGuidesOpen] = useState(false);
-  const [activeGuide, setActiveGuide] = useState<string | null>(null);
   const [terminalMode, setTerminalMode] = useState<'install-hermes' | 'run-hermes' | 'run-hermes-web' | 'run-hermes-gateway' | 'run-hermes-desktop' | 'install-opencode' | 'run-opencode' | 'run-opencode-web' | 'install-ollama' | 'run-ollama' | 'install-tool-gateway' | 'uninstall-tool-gateway' | null>(null);
   const [isHermesInstalled, setIsHermesInstalled] = useState<boolean>(() => {
     if (import.meta.env.DEV && isScreenshotMode()) return true;
@@ -151,6 +148,7 @@ function AppContent() {
     return '8';
   });
   const [portConflict, setPortConflict] = useState<{ port: number; message: string } | null>(null);
+  const [daemonError, setDaemonError] = useState<string | null>(null);
 
   const { activeProxyState, handleProxyActivityEvent, cleanup: cleanupProxyIndicator } = useProxyActivityIndicator();
 
@@ -168,6 +166,7 @@ function AppContent() {
     cleanupProxyIndicator,
     setFrugalConfig,
     setPortConflict,
+    setDaemonError,
   });
 
   // Node Actions Hook
@@ -249,6 +248,7 @@ function AppContent() {
       memoryRef,
       setNodes,
       setPortConflict,
+      setDaemonError,
       setIsAppLoaded,
     });
     return () => { isMounted = false; };
@@ -277,7 +277,6 @@ function AppContent() {
         headerRef={headerRef}
         isDark={isDark}
         onToggleTheme={handleToggleTheme}
-        onOpenGuides={() => setGuidesOpen(true)}
       />
 
       <TerminalOverlays
@@ -321,7 +320,7 @@ function AppContent() {
         opencodeVersion={opencodeVersion}
       />
 
-      <Footer onOpenGuides={() => setGuidesOpen(true)} />
+      <Footer portConflict={portConflict} daemonError={daemonError} />
 
       {selectedNode && !terminalMode && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.3)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setSelectedNodeId(null)}>
@@ -364,14 +363,6 @@ function AppContent() {
           />
         </div>
       )}
-
-      <GuidesModal
-        guidesOpen={guidesOpen}
-        onCloseGuides={() => setGuidesOpen(false)}
-        activeGuide={activeGuide}
-        onCloseActiveGuide={() => setActiveGuide(null)}
-        onSelectGuide={(key) => setActiveGuide(key)}
-      />
 
       <ExitConfirmationModal
         isOpen={showExitModal}

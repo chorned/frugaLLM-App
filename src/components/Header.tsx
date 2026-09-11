@@ -7,14 +7,12 @@ export interface HeaderProps {
   headerRef?: React.RefObject<HTMLElement | null>;
   isDark: boolean;
   onToggleTheme: () => void;
-  onOpenGuides: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   headerRef,
   isDark,
   onToggleTheme,
-  onOpenGuides,
 }) => {
   return (
     <header 
@@ -67,25 +65,6 @@ export const Header: React.FC<HeaderProps> = ({
           }}
         >
           {isDark ? <Sun size={15} /> : <Moon size={15} />}
-        </button>
-        <button
-          onClick={onOpenGuides}
-          data-testid="header-guides-btn"
-          className="btn-cta btn-cta-secondary"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '6px 14px',
-            border: '1px solid var(--zen-border-subtle)',
-            borderRadius: '9999px',
-            fontSize: '0.75rem',
-            fontWeight: 500,
-            color: 'var(--zen-text)',
-            fontFamily: 'inherit',
-          }}
-        >
-          {en.footer?.guides || 'Quickstart Guides'}
         </button>
       </div>
     </header>

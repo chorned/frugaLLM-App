@@ -272,4 +272,37 @@ describe('Settings Component', () => {
     await screen.findByTestId('btn-view-logs');
     expect(screen.queryByTestId('report-issue-button')).not.toBeInTheDocument();
   });
+
+  it('renders consolidated dotted-underline tooltips for settings toggles and actions', async () => {
+    render(<Settings />);
+    await screen.findByTestId('btn-view-logs');
+
+    // Start on Login
+    const startOnLogin = screen.getByTestId('btn-start-on-login-info');
+    expect(startOnLogin).toBeInTheDocument();
+    expect(startOnLogin.style.textDecoration).toContain('underline dotted');
+
+    // Start Minimized
+    const startMinimized = screen.getByTestId('btn-start-minimized-info');
+    expect(startMinimized).toBeInTheDocument();
+    expect(startMinimized.style.textDecoration).toContain('underline dotted');
+
+    // Global CLI
+    const globalCli = screen.getByTestId('btn-global-cli-info');
+    expect(globalCli).toBeInTheDocument();
+    expect(globalCli.style.textDecoration).toContain('underline dotted');
+
+    // View Logs
+    const viewLogs = screen.getByTestId('btn-view-logs-help');
+    expect(viewLogs).toBeInTheDocument();
+
+    // Verify absence of old dual ( ? ) help icon triggers
+    expect(screen.queryByTestId('btn-start-on-login-help')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('btn-start-minimized-help')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('btn-global-cli-help')).not.toBeInTheDocument();
+
+    // Trigger tooltip on View Logs
+    fireEvent.mouseEnter(viewLogs);
+    expect(screen.getByTestId('view-logs-help-box')).toBeInTheDocument();
+  });
 });

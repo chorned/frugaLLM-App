@@ -137,10 +137,8 @@ test.describe('Main Canvas Dashboard', () => {
     // Verify footer exists and contains hyperlinks
     const footer = page.getByTestId('app-footer');
     await expect(footer).toBeVisible();
-    await expect(page.getByTestId('footer-link-docs')).toBeVisible();
+    await expect(page.getByTestId('footer-link-horned')).toBeVisible();
     await expect(page.getByTestId('footer-link-github')).toBeVisible();
-    await expect(page.getByTestId('footer-link-guides')).toBeVisible();
-    await expect(page.getByTestId('footer-link-privacy')).toBeVisible();
 
     // Verify window scroll height does not exceed window inner height (no viewport height overflow)
     const hasScrollbar = await page.evaluate(() => {

@@ -68,7 +68,6 @@ describe('Typed Tauri IPC Service Layer (CHO-117)', () => {
       'src/App.tsx',
       'src/components/Header.tsx',
       'src/components/Footer.tsx',
-      'src/components/GuidesModal.tsx',
       'src/components/NodeConfigPanel.tsx',
       'src/components/CloudRoutingPanel.tsx',
       'src/components/Settings.tsx',

@@ -4,7 +4,7 @@
       "ollamaLocal": {
         "label": "Ollama",
         "subheader": "Open source",
-        "description": "Your private, local brain! Ollama runs lightweight open-source models right on your machine, keeping your data entirely private and free from cloud costs."
+        "description": "Runs open-weight AI models locally on your machine. Keeps your data completely private, eliminates API costs, and works offline."
       },
       "openRouter": {
         "label": "OpenRouter",
@@ -27,7 +27,7 @@
       "frugallmCore": {
         "label": "FrugaLLM",
         "subheader": "Open source",
-        "description": "The true mastermind of the operation. FrugalLM acts as your central hub, intercepting prompts and dynamically routing them to save you serious money without sacrificing quality!"
+        "description": "Acts as your central intelligence router, dynamically distributing requests across local and cloud models to optimize latency, cost, and reliability."
       },
       "openCode": {
         "label": "Opencode",
@@ -44,58 +44,83 @@
       "inputs": {
         "schemaPath": {
           "label": "SCHEMA PATH",
-          "helpText": "Think of this as the agent's strict instruction manual. By giving it a JSON schema, we force the AI to return data in the exact structure your application expects. No more messy text—just clean data!"
+          "helpText": "Path to a JSON Schema file. Defines strict type and format constraints for model outputs, guaranteeing machine-readable responses.",
+          "tooltip": "Optional JSON schema path to enforce structured output. Leave empty for standard conversational responses.",
+          "outcomeHelp": "Optional. Leave blank for standard text responses. Only supply a .json schema path if your integration expects structured JSON payloads."
         },
         "workingDir": {
           "label": "WORKING DIR (CWD)",
-          "helpText": "Where should the agent live while it works? This is the folder on your computer where the agent will run commands and look for files. It's basically the agent's home base."
+          "helpText": "The project directory (CWD) where the agent executes filesystem operations, terminal commands, and code edits.",
+          "tooltip": "The root directory where the agent runs commands and edits files. Set to your project folder path.",
+          "outcomeHelp": "Set this to your project repository path (e.g. /Users/yourname/projects/my-app) to allow the agent to read and edit your workspace files."
         },
         "executable": {
           "label": "EXECUTABLE (BIN)",
-          "helpText": "Which program is actually doing the heavy lifting? This tells the system what tool to launch under the hood. Usually, it's 'agy' for our Antigravity agent, but you can plug in any CLI tool!"
+          "helpText": "The underlying binary or CLI tool launched for this agent (defaults to 'agy' for Antigravity or the agent CLI).",
+          "tooltip": "The CLI command or binary launched for this agent. Keep the default unless using an alternate path.",
+          "outcomeHelp": "Leave as default unless you have installed a custom agent binary located outside your standard shell PATH."
         },
         "extraArgs": {
           "label": "EXTRA ARGS (CSV)",
-          "helpText": "Want to tweak how the agent runs? You can pass secret flags here (like '--verbose' to see its inner thoughts). Just list them out, separated by commas.",
+          "helpText": "Command-line flags passed directly to the agent runtime process upon initialization.",
+          "tooltip": "Additional startup flags passed to the agent runtime, such as '--verbose' for troubleshooting.",
+          "outcomeHelp": "Add comma-separated arguments to adjust runtime behavior (e.g. '--verbose' for debug logs or '--model claude-3-5-sonnet').",
           "placeholder": "--verbose, --force"
         },
         "prompt": {
           "label": "INSTRUCTION PROMPT",
-          "helpText": "This is your agent's main mission. Tell it exactly what you want it to accomplish. Be as specific as possible—the better the prompt, the better the results!"
+          "helpText": "The foundational system prompt that establishes the agent's persona, operational rules, and project boundaries.",
+          "tooltip": "The core instructions and persona rules governing how the agent reasons, executes tools, and modifies code.",
+          "outcomeHelp": "Provide role context and technical constraints (e.g. 'You are a senior frontend engineer. Follow existing repository patterns and write unit tests for new logic')."
         },
         "ip": {
           "label": "IP ADDRESS / HOST",
-          "helpText": "Where does this service live on the network? Usually, it's right here on your computer ('127.0.0.1' or 'localhost'), but it could be a cloud API halfway across the world!"
+          "helpText": "The host IP address where FrugaLLM listens for requests. '127.0.0.1' (localhost) restricts access to this machine.",
+          "tooltip": "The host IP address where FrugaLLM listens for requests. '127.0.0.1' (localhost) keeps traffic private to this device."
         },
         "port": {
           "label": "PORT",
-          "helpText": "Think of the IP address as the building, and the Port as the specific door to knock on. It's how our hub knows exactly where to send its messages."
+          "helpText": "The network port assigned to FrugaLLM's local proxy (defaults to 8000). Incoming client requests target this endpoint.",
+          "tooltip": "The local port for proxy traffic (defaults to 8000). If another app is using it, switch to 8001 or 8080 to clear the conflict.",
+          "outcomeHelp": "If another process is using this port, change this number (e.g. 8001 or 8080) and click Apply to resolve the conflict."
         },
         "bindAllInterfaces": {
           "label": "Make available everywhere",
-          "helpText": "Allow other computers on your local network (LAN) to connect directly to your FrugaLLM proxy."
+          "helpText": "Binds the proxy to 0.0.0.0, allowing other devices on your local network (Wi-Fi/LAN) to route requests through FrugaLLM.",
+          "tooltip": "Binds to 0.0.0.0 so other devices on your local Wi-Fi can connect using this computer's LAN IP as their API base URL.",
+          "outcomeHelp": "Once enabled, configure external devices on your network to point to this machine's LAN IP address (e.g. http://192.168.1.15:8000) as their API endpoint."
         },
         "startOnLogin": {
           "label": "Start on Login",
-          "helpText": "Automatically start FrugaLLM in the background when you log into your operating system."
+          "helpText": "Registers FrugaLLM as a startup application, ensuring local proxy routing is available immediately upon system boot.",
+          "tooltip": "Registers FrugaLLM to run in the background on startup, keeping proxy endpoints instantly available.",
+          "outcomeHelp": "Enable this to keep your local proxy running continuously in the background without needing to launch FrugaLLM manually each session."
         },
         "startMinimized": {
-          "label": "Start Minimized"
+          "label": "Start Minimized",
+          "helpText": "Launches FrugaLLM directly into the background (menu bar on macOS or system tray on Windows) without displaying the main window.",
+          "tooltip": "Launches quietly into your menu bar or system tray without opening the main window on startup.",
+          "outcomeHelp": "To reopen the interface at any time, click the FrugaLLM icon in your menu bar (macOS) or taskbar notification area (Windows/Linux)."
         },
         "globalCli": {
           "label": "Register CLI commands in system terminal",
-          "helpText": "Allows calling hermes, opencode, and ollama directly from any terminal window.",
-          "tooltip": "Creates shell PATH links for Hermes, OpenCode, and Ollama so you can call them from your external terminal without opening FrugaLLM."
+          "helpText": "Creates system PATH symlinks for bundled tools (hermes, opencode, ollama), enabling direct execution from any terminal.",
+          "tooltip": "Creates shell PATH links for Hermes, OpenCode, and Ollama so you can call them from your external terminal without opening FrugaLLM.",
+          "outcomeHelp": "Allows invoking 'hermes' or 'opencode' directly from iTerm, Terminal, or your IDE's integrated shell without opening FrugaLLM's UI."
         },
         "viewLogs": {
           "label": "VIEW LOGS",
-          "helpText": "Open the FrugaLLM application log file in your system's default text editor."
+          "helpText": "Opens the application log file in your system's default text editor to inspect runtime events and errors.",
+          "tooltip": "Opens runtime logs in your default editor to view request traces, errors, and model events.",
+          "outcomeHelp": "Inspect detailed request traces, upstream provider error codes, or local model load diagnostics."
         },
         "apiPassword": {
           "label": "API PASSWORD",
           "checkboxLabel": "Require API Password",
           "placeholder": "Enter proxy password...",
-          "helpText": "Require a Bearer token / password when clients connect to your FrugaLLM proxy.",
+          "helpText": "Enforces Bearer token authentication on the FrugaLLM endpoint. Incoming requests must include this token in their Authorization header.",
+          "tooltip": "Secures your proxy with Bearer token authentication. Set external tools (Cursor, Continue) to use this password as their API key.",
+          "outcomeHelp": "Configure external tools (Cursor, VS Code Continue, scripts) by setting their API Key field to this password to authenticate requests.",
           "active": "• ACTIVE",
           "buttons": {
             "show": "Show password",
@@ -104,25 +129,50 @@
             "copied": "Copied!"
           }
         },
+        "copyIpAndPort": {
+          "label": "COPY IP & PORT",
+          "tooltip": "Copies http://127.0.0.1:8000/v1 to your clipboard to paste into Cursor or Continue as your OpenAI Base URL.",
+          "outcomeHelp": "In OpenAI-compatible developer tools (e.g. Cursor, Continue, or LangChain), paste this into the 'Base URL' setting (e.g. http://127.0.0.1:8000/v1) to route traffic through FrugaLLM."
+        },
         "openRouterApiKey": {
           "label": "API KEY",
           "placeholder": "Insert key here",
           "configuredPlaceholder": "•••••••••••••••• (Key Configured)",
-          "helpText": "Your OpenRouter API Key. This will be securely saved into your operating system's native Keychain!"
+          "helpText": "Your OpenRouter API key. Stored securely in your operating system's native Keychain or Secret Service.",
+          "tooltip": "Stored securely in your system keychain. Generate a key at openrouter.ai/keys to access diverse cloud models.",
+          "outcomeHelp": "Obtain an API key at openrouter.ai/keys to route requests across multi-provider cloud models with unified billing."
         },
         "googleApiKey": {
           "label": "API KEY",
           "placeholder": "Insert key here",
           "configuredPlaceholder": "•••••••••••••••• (Key Configured)",
-          "helpText": "Your Google AI Studio API Key. This will be securely saved into your operating system's native Keychain!"
+          "helpText": "Your Google AI Studio API key. Stored securely in your operating system's native Keychain or Secret Service.",
+          "tooltip": "Stored securely in your system keychain. Generate a free key at aistudio.google.com to access Gemini models.",
+          "outcomeHelp": "Create an API key at aistudio.google.com using your Google account to access Gemini models with high rate limits on the free tier."
         },
         "vramDetected": {
           "label": "VRAM DETECTED (GB)",
-          "helpText": "We tried to auto-detect your Video RAM, but you can correct this if it's wrong."
+          "helpText": "Dedicated video memory (VRAM) detected on your GPU. Model weights and active context windows are loaded here for fast parallel execution.",
+          "tooltip": "Dedicated GPU memory for model execution. Keep the detected value, or set to 0 to run using system RAM.",
+          "outcomeHelp": "For discrete GPUs (NVIDIA) or Apple Silicon unified memory, use the detected value. On machines without dedicated GPUs, leave at 0 to utilize system RAM."
         },
         "recommendedModel": {
           "label": "RECOMMENDED MODEL",
-          "helpText": "Based on your VRAM, we'll pull this model for you!"
+          "helpText": "Hardware-calibrated local model selection balancing reasoning depth, VRAM allocation, and token generation speed.",
+          "tooltip": "Balances reasoning depth against generation speed. Smaller models (2B–4B) respond rapidly; larger models (26B–31B) deliver deeper reasoning but require substantial VRAM and run slower.",
+          "outcomeHelp": "Select a model based on your workload priorities. Compact local models (2B–4B) stream tokens near-instantly with negligible memory pressure, making them ideal for quick completions and lightweight chat. Larger models (26B–31B) provide noticeably higher reasoning quality and stricter instruction adherence, but demand substantial VRAM and generate at lower token rates. While local inference guarantees privacy, zero token cost, and offline reliability, consumer open-weight models do not match the broad world knowledge, multi-step tool use, and complex problem-solving capabilities of frontier cloud endpoints like Claude 3.5 Sonnet or Gemini 1.5 Pro."
+        },
+        "agentPrerequisite": {
+          "tooltip": "Autonomous agents require an intelligence source. Connect Ollama locally, or add an OpenRouter or Google AI Studio API key.",
+          "outcomeHelp": "Agent execution requires an active LLM backend. Configure Ollama for private local inference, or connect an API key for OpenRouter or Google AI Studio to enable launching."
+        },
+        "providerStatus": {
+          "outcomeHelp": "Indicates upstream provider health. If a provider encounters a rate limit (HTTP 429) or server error, FrugaLLM applies a temporary cooldown and seamlessly fails over to the next healthy model in your pool."
+        },
+        "ollamaMissing": {
+          "helpText": "Ollama manages local model runtimes, allowing open-weight models to run directly on your hardware without transmitting data to external cloud APIs.",
+          "tooltip": "Runs models locally on your GPU/CPU for zero API cost and private, offline inference.",
+          "outcomeHelp": "Install Ollama to run models locally on your GPU/CPU with full privacy, offline availability, and zero per-token API costs."
         },
         "workspace": {
           "label": "WORKSPACE FOLDER"
@@ -167,6 +217,9 @@
         "toolGateway": {
           "title": "TOOL ENFORCING GATEWAY",
           "description": "Runs a lightweight local ONNX language model (Xenova/nli-deberta-v3-small) in WebAssembly to detect empty promises and enforce strict tool execution.",
+          "helpText": "A lightweight local natural-language inference model (DeBERTa-v3 in ONNX/WASM) that monitors agent tool executions. It verifies that function calls actually execute rather than being hallucinated in text output.",
+          "tooltip": "Local ONNX/WASM model that prevents agents from hallucinating tool executions. Runs on CPU (~100MB download).",
+          "outcomeHelp": "Enable this when running autonomous coding agents (Hermes or OpenCode) to guarantee deterministic tool executions. The model (~100MB) downloads once and runs entirely on your local CPU.",
           "checkboxLabel": "Enable Tool Enforcing Gateway",
           "installed": "INSTALLED",
           "notInstalled": "NOT INSTALLED",
@@ -240,6 +293,8 @@
       "ramAllocation": "RAM Allocation",
       "vramAllocation": "VRAM Allocation",
       "throughput": "Throughput",
+      "throughputTooltip": "Tokens per second (t/s) measures generation velocity. For comparison, typical human reading speed is ~5 t/s, while frontier cloud APIs stream around 30–100+ t/s.",
+      "throughputHelp": "If generation speed drops significantly (below 10 t/s), the model may have exceeded available VRAM and spilled into system RAM paging. Switching to a smaller quantized model in Ollama will restore low-latency performance.",
       "avgThroughput": "Avg. Throughput",
       "viewBenchmarks": "View Industry Speed Benchmarks",
       "benchmarkTitle": "Speed Benchmarks",
@@ -269,26 +324,18 @@
       "eta": "ETA",
       "left": "left"
     },
-    "guides": {
-      "quickstartTitle": "FRUGALLM // QUICKSTART GUIDES",
-      "quickstartSubtitle": "Welcome to the FrugalLLM Central Hub. Select a guide below to learn how to configure your neural topology and orchestrate your AI agents:",
-      "jsonSchemasTitle": "Defining JSON Schemas",
-      "jsonSchemasSubtitle": "Learn how to force agents to return strict data formats.",
-      "ollamaTitle": "Connecting Local Ollama",
-      "ollamaSubtitle": "How to run completely private models locally on port 11434.",
-      "openRouterTitle": "Advanced OpenRouter Multiplexing",
-      "openRouterSubtitle": "Route queries dynamically to save costs and avoid rate limits.",
-      "guideTitle": "FRUGALLM // GUIDE"
-    },
     "cloudRoutingPanel": {
       "title": "GLOBAL ROUTING POOL",
+      "infoTooltip": "FrugaLLM evaluates models in order of priority. Requests target the top model first; if it encounters rate limits or errors, traffic instantly fails over to the next healthy tier in your pool.",
+      "outcomeHelp": "Use the arrows to adjust routing priority. Higher-ranked models are prioritized for incoming requests, with lower-ranked models acting as automatic fallbacks.",
+      "modelErrorHelp": "The upstream provider reported an error or rate limit (e.g. HTTP 429 quota exhaustion). FrugaLLM bypassed this model and routed to the next available provider.",
       "refresh": "REFRESH",
       "refreshing": "REFRESHING...",
       "noModels": "When you have connect one or more intelligence sources, all available models will be listed here.",
       "rankTop": "Rank Top",
       "rankUp": "Rank Up",
       "rankDown": "Rank Down",
-      "scorePrefix": "⚡ SCORE: ",
+      "scorePrefix": "SCORE: ",
       "skippedQuota": "SKIPPED: 429 (QUOTA)",
       "skippedError": "SKIPPED: ERROR",
       "skippedTimeout": "SKIPPED: TIMEOUT (COOLDOWN)",
@@ -296,6 +343,20 @@
       "resetButton": "Reset",
       "active": "ACTIVE",
       "contextWindow": "CTX"
+    },
+    "frugallmNode": {
+      "sessionTokens": "Session tokens:",
+      "sessionTokensTooltip": "Total prompt and completion tokens routed through FrugaLLM since launch. Monitors current workload and resets to zero upon restart.",
+      "sessionTokensHelp": "Total prompt and completion tokens routed through FrugaLLM since the application started.",
+      "sessionTokensOutcome": "Monitors current session workload. Resets to zero whenever FrugaLLM restarts.",
+      "totalTokens": "Total tokens:",
+      "totalTokensTooltip": "Cumulative lifetime tokens routed through this FrugaLLM instance across all sessions. Persisted in your local configuration database.",
+      "totalTokensHelp": "Cumulative lifetime input and output tokens routed through this FrugaLLM instance across all sessions.",
+      "totalTokensOutcome": "Persisted in your local configuration database to track long-term routing volume over time.",
+      "moneySaved": "$ Saved:",
+      "moneySavedTooltip": "Estimated cost reduction from local routing and free cloud tiers, benchmarked against Claude Sonnet 5 pricing ($2.00/1M input, $10.00/1M output, and $0.20/1M cached input tokens).",
+      "moneySavedHelp": "Estimated cost savings calculated against Claude Sonnet 5 baseline rates ($2.00/1M input, $10.00/1M output, and $0.20/1M cached input tokens).",
+      "moneySavedOutcome": "Quantifies direct API cost reduction achieved by routing requests to local models and free-tier cloud endpoints."
     }
   },
   "onboarding": {
@@ -332,11 +393,11 @@
     "themeDark": "Switch to dark theme"
   },
   "footer": {
-    "documentation": "Documentation",
-    "github": "GitHub",
-    "guides": "Quickstart Guides",
-    "privacy": "Privacy & Telemetry",
-    "status": "System Ready"
+    "horned": "Horned.se",
+    "github": "Github",
+    "status": "System Ready",
+    "portConflict": "Port Conflict",
+    "daemonFailure": "Daemon Failure"
   },
   "updateNotification": {
     "updateAvailable": "Update Available: FrugaLLM v{{latestVersion}} is out (you have v{{currentVersion}}).",

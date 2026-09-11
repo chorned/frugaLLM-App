@@ -17,8 +17,8 @@ describe('useTheme Hook and Persistence', () => {
     document.documentElement.removeAttribute('data-theme');
   });
 
-  it('defaults to dark mode (Ebony Wood) when localStorage and matchMedia are empty', () => {
-    // Mock matchMedia returning false for dark
+  it('defaults to dark mode (Ebony Wood) on fresh install even when matchMedia prefers light', () => {
+    // Mock matchMedia returning false for dark (i.e. system prefers light)
     window.matchMedia = vi.fn().mockImplementation((query) => ({
       matches: false,
       media: query,
@@ -30,12 +30,11 @@ describe('useTheme Hook and Persistence', () => {
       dispatchEvent: vi.fn(),
     }));
 
-    // But prompt specifies: Step 1 (storage) -> Step 2 (prefers-color-scheme: dark) -> Step 3 (fallback: 'dark')
-    // When prefers-color-scheme is false, matches is false so it returns 'light', or when prefers-color-scheme is undefined returns 'dark'
-    expect(getInitialTheme()).toBe('light');
+    // Fresh install has no localStorage entry; must default to 'dark'
+    expect(getInitialTheme()).toBe('dark');
   });
 
-  it('defaults to dark when matchMedia matches dark preference', () => {
+  it('defaults to dark when matchMedia matches dark preference on fresh install', () => {
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
       matches: query.includes('dark'),
       media: query,
