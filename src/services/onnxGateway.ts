@@ -3,7 +3,7 @@ import { pipeline, env } from '@huggingface/transformers';
 // Configure transformers.js for client-side browser/WebAssembly environment
 if (typeof window !== 'undefined') {
   env.allowLocalModels = false;
-  env.useBrowserCache = true;
+  env.useBrowserCache = typeof caches !== 'undefined';
 }
 
 export const ONNX_MODEL_ID = 'Xenova/nli-deberta-v3-small';

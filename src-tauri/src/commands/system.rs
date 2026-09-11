@@ -160,19 +160,54 @@ pub fn log_event(app: &tauri::AppHandle, level: &str, tag: &str, message: &str) 
     }
 }
 
+pub fn open_file_in_system_viewer(app: &tauri::AppHandle, path: &std::path::Path) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let path_str = path.to_string_lossy();
+    
+    if let Err(e) = app.opener().open_path(path_str.as_ref(), None::<&str>) {
+        log_event(app, "WARN", "OPENER", &format!("app.opener().open_path failed for {}: {}. Attempting fallback.", path.display(), e));
+        
+        #[cfg(target_os = "windows")]
+        {
+            let res = std::process::Command::new("notepad.exe").arg(path).spawn();
+            if let Err(err) = res {
+                let err_msg = format!("Failed to open file in editor: {}", err);
+                log_event(app, "ERROR", "OPENER", &err_msg);
+                return Err(err_msg);
+            }
+            return Ok(());
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let res = std::process::Command::new("open").arg("-t").arg(path).spawn();
+            if let Err(err) = res {
+                let err_msg = format!("Failed to open file in editor: {}", err);
+                log_event(app, "ERROR", "OPENER", &err_msg);
+                return Err(err_msg);
+            }
+            return Ok(());
+        }
+        #[cfg(target_os = "linux")]
+        {
+            let res = std::process::Command::new("xdg-open").arg(path).spawn();
+            if let Err(err) = res {
+                let err_msg = format!("Failed to open file in editor: {}", err);
+                log_event(app, "ERROR", "OPENER", &err_msg);
+                return Err(err_msg);
+            }
+            return Ok(());
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn open_app_logs(app: tauri::AppHandle) -> Result<(), String> {
     let log_path = get_app_log_file_path(&app)?;
     if !log_path.exists() {
         let _ = append_log_entry_to_path(&log_path, "INFO", "INIT", "FrugaLLM log initialized");
     }
-    #[cfg(target_os = "macos")]
-    let _ = std::process::Command::new("open").arg(&log_path).spawn();
-    #[cfg(target_os = "windows")]
-    let _ = std::process::Command::new("cmd").args(["/C", "start", "", &log_path.to_string_lossy()]).spawn();
-    #[cfg(target_os = "linux")]
-    let _ = std::process::Command::new("xdg-open").arg(&log_path).spawn();
-    Ok(())
+    open_file_in_system_viewer(&app, &log_path)
 }
 
 

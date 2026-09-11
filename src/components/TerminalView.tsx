@@ -20,6 +20,15 @@ import { loadOnnxClassifier, clearOnnxCache } from '../services/onnxGateway';
 import { getProviderIcon } from './icons/ProviderIcons';
 import en from '../locales/en.json';
 
+export function isWindowsPlatform(): boolean {
+  if (typeof navigator !== 'undefined') {
+    const platform = (navigator.platform || '').toLowerCase();
+    const userAgent = (navigator.userAgent || '').toLowerCase();
+    return platform.includes('win') || userAgent.includes('windows');
+  }
+  return false;
+}
+
 export interface TerminalViewProps {
   mode: 'install-hermes' | 'run-hermes' | 'run-hermes-web' | 'run-hermes-gateway' | 'run-hermes-desktop' | 'install-opencode' | 'run-opencode' | 'run-opencode-web' | 'install-ollama' | 'run-ollama' | 'install-tool-gateway' | 'uninstall-tool-gateway';
   sessionId: string;
@@ -264,61 +273,102 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
 
         if (!isMounted) return;
         if (onProcessStart) onProcessStart();
-        if (mode === 'install-opencode') {
-          await spawnPty({ sessionId, command: 'bash', args: ['-c', 'export TERM=xterm-256color && curl -fsSL https://opencode.ai/install | bash'] });
-        } else if (mode === 'install-ollama') {
-          const unlisten1 = await listen<{ status: string }>('download_progress', (event) => term.write(event.payload.status));
-          const unlisten2 = await listen<string>('installing_ollama', () => term.writeln('Installing Ollama Engine...'));
-          const unlisten4 = await listen('model_provisioning_started', () => {
-             setIsProvisioningModel(true);
-             setDownloadPercent(0);
-             setDownloadStats({ completed: 0, total: 0, speedBytesPerSec: 0, etaSeconds: 0 });
-          });
-          const unlisten5 = await listen<any>('model_download_progress', (event) => {
-             if (typeof event.payload === 'number') {
-               setDownloadPercent(event.payload);
-             } else if (event.payload && typeof event.payload === 'object') {
-               setDownloadPercent(event.payload.percent ?? 0);
-               setDownloadStats({
-                 completed: event.payload.completed ?? 0,
-                 total: event.payload.total ?? 0,
-                 speedBytesPerSec: event.payload.speed_bytes_per_sec ?? 0,
-                 etaSeconds: event.payload.eta_seconds ?? 0,
-               });
-             }
-          });
-          const unlisten3 = await listen<{ success: boolean; message: string }>('model_deployment_complete', async (event) => {
-            setIsProvisioningModel(false);
-            if (event.payload.success) {
-              setIsOllamaInstalled(true);
-              term.writeln(`\r\n\x1b[32mModel Provisioned successfully.\x1b[0m\r\n`);
-              confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
-              setTimeout(() => { if (isMounted) onExit(); }, 3000);
+        const isWindows = isWindowsPlatform();
+        try {
+          if (mode === 'install-opencode') {
+            if (isWindows) {
+              const script = `
+                $ProgressPreference = 'SilentlyContinue';
+                [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
+                $binDir = Join-Path $HOME '.opencode\\bin';
+                if (!(Test-Path -Path $binDir)) { New-Item -ItemType Directory -Force -Path $binDir | Out-Null };
+                $zipPath = Join-Path $env:TEMP 'opencode-windows-x64.zip';
+                Write-Host 'Downloading OpenCode for Windows...';
+                try {
+                  Invoke-WebRequest -Uri 'https://github.com/anomalyco/opencode/releases/latest/download/opencode-windows-x64.zip' -OutFile $zipPath -UseBasicParsing;
+                  Write-Host 'Extracting OpenCode to' $binDir '...';
+                  Expand-Archive -Path $zipPath -DestinationPath $binDir -Force;
+                  Remove-Item -Force $zipPath -ErrorAction SilentlyContinue;
+                  Write-Host 'OpenCode installed successfully.';
+                } catch {
+                  Write-Warning ('Direct binary download failed: ' + $_.Exception.Message + '. Attempting npm install...');
+                  npm install -g opencode-ai;
+                }
+              `.replace(/\n\s+/g, ' ').trim();
+              await spawnPty({ sessionId, command: 'powershell.exe', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script] });
             } else {
-              console.error(event.payload.message);
-              term.writeln(`\r\n\x1b[31mInstallation failed: ${event.payload.message}\x1b[0m\r\n`);
+              await spawnPty({ sessionId, command: 'bash', args: ['-c', 'export TERM=xterm-256color && curl -fsSL https://opencode.ai/install | bash'] });
             }
-            unlisten1();
-            unlisten2();
-            unlisten3();
-            unlisten4();
-            unlisten5();
-          });
-          
-          deployLocalModel().catch((err) => {
-            console.error(err);
-            setIsProvisioningModel(false);
-            term.writeln(`\r\n\x1b[31mInstallation failed: ${err}\x1b[0m\r\n`);
-            unlisten1();
-            unlisten2();
-            unlisten3();
-            unlisten4();
-            unlisten5();
-          });
-        } else {
-          await spawnPty({ sessionId, command: 'bash', args: ['-c', 'export TERM=xterm-256color && curl -sSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup'] });
+          } else if (mode === 'install-ollama') {
+            const unlisten1 = await listen<{ status: string }>('download_progress', (event) => term.write(event.payload.status));
+            const unlisten2 = await listen<string>('installing_ollama', () => term.writeln('Installing Ollama Engine...'));
+            const unlisten4 = await listen('model_provisioning_started', () => {
+               setIsProvisioningModel(true);
+               setDownloadPercent(0);
+               setDownloadStats({ completed: 0, total: 0, speedBytesPerSec: 0, etaSeconds: 0 });
+            });
+            const unlisten5 = await listen<any>('model_download_progress', (event) => {
+               if (typeof event.payload === 'number') {
+                 setDownloadPercent(event.payload);
+               } else if (event.payload && typeof event.payload === 'object') {
+                 setDownloadPercent(event.payload.percent ?? 0);
+                 setDownloadStats({
+                   completed: event.payload.completed ?? 0,
+                   total: event.payload.total ?? 0,
+                   speedBytesPerSec: event.payload.speed_bytes_per_sec ?? 0,
+                   etaSeconds: event.payload.eta_seconds ?? 0,
+                 });
+               }
+            });
+            const unlisten3 = await listen<{ success: boolean; message: string }>('model_deployment_complete', async (event) => {
+              setIsProvisioningModel(false);
+              if (event.payload.success) {
+                setIsOllamaInstalled(true);
+                term.writeln(`\r\n\x1b[32mModel Provisioned successfully.\x1b[0m\r\n`);
+                confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+                setTimeout(() => { if (isMounted) onExit(); }, 3000);
+              } else {
+                console.error(event.payload.message);
+                term.writeln(`\r\n\x1b[31mInstallation failed: ${event.payload.message}\x1b[0m\r\n`);
+              }
+              unlisten1();
+              unlisten2();
+              unlisten3();
+              unlisten4();
+              unlisten5();
+            });
+            
+            deployLocalModel().catch((err) => {
+              console.error(err);
+              setIsProvisioningModel(false);
+              term.writeln(`\r\n\x1b[31mInstallation failed: ${err}\x1b[0m\r\n`);
+              unlisten1();
+              unlisten2();
+              unlisten3();
+              unlisten4();
+              unlisten5();
+            });
+          } else {
+            if (isWindows) {
+              const script = `
+                $ProgressPreference = 'SilentlyContinue';
+                [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
+                Write-Host 'Downloading and running Hermes Agent installer for Windows...';
+                $installerScript = Invoke-RestMethod -Uri 'https://hermes-agent.nousresearch.com/install.ps1';
+                $installer = [scriptblock]::Create($installerScript);
+                & $installer -SkipSetup;
+              `.replace(/\n\s+/g, ' ').trim();
+              await spawnPty({ sessionId, command: 'powershell.exe', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script] });
+            } else {
+              await spawnPty({ sessionId, command: 'bash', args: ['-c', 'export TERM=xterm-256color && curl -sSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup'] });
+            }
+          }
+          resizePty(sessionId, term.cols, term.rows).catch(console.error);
+        } catch (err: any) {
+          console.error('Failed to spawn PTY process:', err);
+          term.writeln(`\r\n\x1b[31mFailed to launch process: ${err?.message || err}\x1b[0m\r\n`);
+          if (onProcessExit) onProcessExit();
         }
-        resizePty(sessionId, term.cols, term.rows).catch(console.error);
       } else if (mode.startsWith('run')) {
         let runningText = 'Starting...';
         if (mode.startsWith('run-opencode')) runningText = 'Starting OpenCode...';
@@ -346,38 +396,79 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
         
         if (!isMounted) return;
         if (onProcessStart) onProcessStart();
-        const frugalEnv = `export OPENAI_API_BASE="http://${frugalConfig?.ip || '127.0.0.1'}:${frugalConfig?.port || '61721'}/v1" && export OPENAI_API_KEY="${frugalConfig?.api_password || 'frugallm'}"`;
-        const cliPathEnv = 'export PATH="$HOME/.local/bin:$HOME/.hermes/bin:$HOME/.opencode/bin:$HOME/.cargo/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$PATH"';
-        const resolveHermesBin = 'HERMES_BIN="$(command -v hermes 2>/dev/null || ([ -x "$HOME/.local/bin/hermes" ] && echo "$HOME/.local/bin/hermes") || ([ -x "$HOME/.hermes/bin/hermes" ] && echo "$HOME/.hermes/bin/hermes") || ([ -x "$HOME/.cargo/bin/hermes" ] && echo "$HOME/.cargo/bin/hermes") || echo "hermes")"';
-        const resolveOpenCodeBin = 'OPENCODE_BIN="$(command -v opencode 2>/dev/null || ([ -x "$HOME/.local/bin/opencode" ] && echo "$HOME/.local/bin/opencode") || ([ -x "$HOME/.opencode/bin/opencode" ] && echo "$HOME/.opencode/bin/opencode") || ([ -x "$HOME/.cargo/bin/opencode" ] && echo "$HOME/.cargo/bin/opencode") || echo "opencode")"';
-        
-        if (mode === 'run-opencode') {
-          await spawnPty({ sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && ${cliPathEnv} && ${resolveOpenCodeBin} && ${frugalEnv} && "$OPENCODE_BIN" -m litellm/frugallm`] });
-        } else if (mode === 'run-opencode-web') {
-          await spawnPty({ sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && ${cliPathEnv} && ${resolveOpenCodeBin} && ${frugalEnv} && "$OPENCODE_BIN" web`] });
-        } else if (mode === 'run-ollama') {
-          let targetModel = 'frugallm-active';
-          try {
-            const resolved = await getOllamaChatModel();
-            if (resolved) targetModel = resolved;
-          } catch (err) {
-            console.warn('Unable to resolve dynamic ollama chat model:', err);
+        const isWindows = isWindowsPlatform();
+        try {
+          if (isWindows) {
+            const winFrugalEnv = `$env:OPENAI_API_BASE="http://${frugalConfig?.ip || '127.0.0.1'}:${frugalConfig?.port || '61721'}/v1"; $env:OPENAI_API_KEY="${frugalConfig?.api_password || 'frugallm'}";`;
+            const winPathEnv = `$env:PATH="$HOME\\.local\\bin;$HOME\\.hermes\\bin;$HOME\\.opencode\\bin;$HOME\\.cargo\\bin;$env:LOCALAPPDATA\\hermes\\bin;$env:LOCALAPPDATA\\Programs\\opencode;$env:LOCALAPPDATA\\Programs\\Ollama;$env:PATH";`;
+            const winResolveHermes = `$hermesBin = (Get-Command hermes.cmd -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1); if (!$hermesBin) { $hermesBin = (Get-Command hermes.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1) }; if (!$hermesBin) { $hermesBin = (Get-Command hermes -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1) }; if (!$hermesBin) { $candidates = @("$env:LOCALAPPDATA\\hermes\\bin\\hermes.cmd", "$HOME\\.hermes\\bin\\hermes.cmd", "$HOME\\.local\\bin\\hermes.cmd", "$env:LOCALAPPDATA\\hermes\\bin\\hermes.exe", "$HOME\\.hermes\\bin\\hermes.exe", "$HOME\\.local\\bin\\hermes.exe"); foreach ($c in $candidates) { if (Test-Path -Path $c) { $hermesBin = $c; break } } }; if (!$hermesBin) { $hermesBin = 'hermes' };`;
+            const winResolveOpenCode = `$opencodeBin = (Get-Command opencode.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1); if (!$opencodeBin) { $opencodeBin = (Get-Command opencode -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1) }; if (!$opencodeBin) { $candidates = @("$HOME\\.opencode\\bin\\opencode.exe", "$HOME\\.local\\bin\\opencode.exe", "$env:LOCALAPPDATA\\Programs\\opencode\\opencode.exe"); foreach ($c in $candidates) { if (Test-Path -Path $c) { $opencodeBin = $c; break } } }; if (!$opencodeBin) { $opencodeBin = 'opencode' };`;
+
+            if (mode === 'run-opencode') {
+              await spawnPty({ sessionId, command: 'powershell.exe', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', `${winPathEnv} ${winFrugalEnv} ${winResolveOpenCode} & $opencodeBin -m litellm/frugallm`] });
+            } else if (mode === 'run-opencode-web') {
+              await spawnPty({ sessionId, command: 'powershell.exe', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', `${winPathEnv} ${winFrugalEnv} ${winResolveOpenCode} & $opencodeBin web`] });
+            } else if (mode === 'run-ollama') {
+              let targetModel = 'frugallm-active';
+              try {
+                const resolved = await getOllamaChatModel();
+                if (resolved) targetModel = resolved;
+              } catch (err) {
+                console.warn('Unable to resolve dynamic ollama chat model:', err);
+              }
+              await spawnPty({ 
+                sessionId, 
+                command: 'powershell.exe', 
+                args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', `${winPathEnv} ${winFrugalEnv} ollama run "${targetModel}"`] 
+              });
+            } else if (mode === 'run-hermes-web') {
+              await spawnPty({ sessionId, command: 'powershell.exe', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', `${winPathEnv} ${winFrugalEnv} ${winResolveHermes} & $hermesBin dashboard --host 127.0.0.1`] });
+            } else if (mode === 'run-hermes-desktop') {
+              await spawnPty({ sessionId, command: 'powershell.exe', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', `${winPathEnv} ${winFrugalEnv} ${winResolveHermes} & $hermesBin desktop`] });
+            } else if (mode === 'run-hermes-gateway') {
+              await spawnPty({ sessionId, command: 'powershell.exe', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', `${winPathEnv} ${winFrugalEnv} ${winResolveHermes} & $hermesBin gateway --host 127.0.0.1`] });
+            } else {
+              await spawnPty({ sessionId, command: 'powershell.exe', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', `${winPathEnv} ${winFrugalEnv} ${winResolveHermes} & $hermesBin`] });
+            }
+          } else {
+            const frugalEnv = `export OPENAI_API_BASE="http://${frugalConfig?.ip || '127.0.0.1'}:${frugalConfig?.port || '61721'}/v1" && export OPENAI_API_KEY="${frugalConfig?.api_password || 'frugallm'}"`;
+            const cliPathEnv = 'export PATH="$HOME/.local/bin:$HOME/.hermes/bin:$HOME/.opencode/bin:$HOME/.cargo/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$PATH"';
+            const resolveHermesBin = 'HERMES_BIN="$(command -v hermes 2>/dev/null || ([ -x "$HOME/.local/bin/hermes" ] && echo "$HOME/.local/bin/hermes") || ([ -x "$HOME/.hermes/bin/hermes" ] && echo "$HOME/.hermes/bin/hermes") || ([ -x "$HOME/.cargo/bin/hermes" ] && echo "$HOME/.cargo/bin/hermes") || echo "hermes")"';
+            const resolveOpenCodeBin = 'OPENCODE_BIN="$(command -v opencode 2>/dev/null || ([ -x "$HOME/.local/bin/opencode" ] && echo "$HOME/.local/bin/opencode") || ([ -x "$HOME/.opencode/bin/opencode" ] && echo "$HOME/.opencode/bin/opencode") || ([ -x "$HOME/.cargo/bin/opencode" ] && echo "$HOME/.cargo/bin/opencode") || echo "opencode")"';
+            
+            if (mode === 'run-opencode') {
+              await spawnPty({ sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && ${cliPathEnv} && ${resolveOpenCodeBin} && ${frugalEnv} && "$OPENCODE_BIN" -m litellm/frugallm`] });
+            } else if (mode === 'run-opencode-web') {
+              await spawnPty({ sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && ${cliPathEnv} && ${resolveOpenCodeBin} && ${frugalEnv} && "$OPENCODE_BIN" web`] });
+            } else if (mode === 'run-ollama') {
+              let targetModel = 'frugallm-active';
+              try {
+                const resolved = await getOllamaChatModel();
+                if (resolved) targetModel = resolved;
+              } catch (err) {
+                console.warn('Unable to resolve dynamic ollama chat model:', err);
+              }
+              await spawnPty({ 
+                sessionId, 
+                command: 'bash', 
+                args: ['-c', `export TERM=xterm-256color && export PATH="/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/Applications/Ollama.app/Contents/Resources:$PATH" && ${frugalEnv} && TARGET_MODEL="${targetModel}" && if ! ollama list 2>/dev/null | grep -q "^$TARGET_MODEL"; then FALLBACK="$(ollama list 2>/dev/null | awk 'NR>1 {print $1}' | head -n 1)"; if [ -n "$FALLBACK" ]; then TARGET_MODEL="$FALLBACK"; fi; fi && ollama run "$TARGET_MODEL"`] 
+              });
+            } else if (mode === 'run-hermes-web') {
+              await spawnPty({ sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && ${cliPathEnv} && ${resolveHermesBin} && ${frugalEnv} && "$HERMES_BIN" dashboard --host 127.0.0.1`] });
+            } else if (mode === 'run-hermes-desktop') {
+              await spawnPty({ sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && ${cliPathEnv} && ${resolveHermesBin} && ${frugalEnv} && "$HERMES_BIN" desktop`] });
+            } else if (mode === 'run-hermes-gateway') {
+              await spawnPty({ sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && ${cliPathEnv} && ${resolveHermesBin} && ${frugalEnv} && "$HERMES_BIN" gateway --host 127.0.0.1`] });
+            } else {
+              await spawnPty({ sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && ${cliPathEnv} && ${resolveHermesBin} && ${frugalEnv} && "$HERMES_BIN"`] });
+            }
           }
-          await spawnPty({ 
-            sessionId, 
-            command: 'bash', 
-            args: ['-c', `export TERM=xterm-256color && export PATH="/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/Applications/Ollama.app/Contents/Resources:$PATH" && ${frugalEnv} && TARGET_MODEL="${targetModel}" && if ! ollama list 2>/dev/null | grep -q "^$TARGET_MODEL"; then FALLBACK="$(ollama list 2>/dev/null | awk 'NR>1 {print $1}' | head -n 1)"; if [ -n "$FALLBACK" ]; then TARGET_MODEL="$FALLBACK"; fi; fi && ollama run "$TARGET_MODEL"`] 
-          });
-        } else if (mode === 'run-hermes-web') {
-          await spawnPty({ sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && ${cliPathEnv} && ${resolveHermesBin} && ${frugalEnv} && "$HERMES_BIN" dashboard --host 127.0.0.1`] });
-        } else if (mode === 'run-hermes-desktop') {
-          await spawnPty({ sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && ${cliPathEnv} && ${resolveHermesBin} && ${frugalEnv} && "$HERMES_BIN" desktop`] });
-        } else if (mode === 'run-hermes-gateway') {
-          await spawnPty({ sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && ${cliPathEnv} && ${resolveHermesBin} && ${frugalEnv} && "$HERMES_BIN" gateway --host 127.0.0.1`] });
-        } else {
-          await spawnPty({ sessionId, command: 'bash', args: ['-c', `export TERM=xterm-256color && ${cliPathEnv} && ${resolveHermesBin} && ${frugalEnv} && "$HERMES_BIN"`] });
+          resizePty(sessionId, term.cols, term.rows).catch(console.error);
+        } catch (err: any) {
+          console.error('Failed to spawn PTY process:', err);
+          term.writeln(`\r\n\x1b[31mFailed to launch process: ${err?.message || err}\x1b[0m\r\n`);
+          if (onProcessExit) onProcessExit();
         }
-        resizePty(sessionId, term.cols, term.rows).catch(console.error);
         
         const cleanup = unlistenExit;
         unlistenExit = () => {

@@ -138,7 +138,18 @@ pub async fn spawn_hermes_child(
         other => other,
     };
 
-    let mut cmd = tokio::process::Command::new(&hermes_bin);
+    let is_cmd = hermes_bin
+        .extension()
+        .map_or(false, |ext| ext.eq_ignore_ascii_case("cmd") || ext.eq_ignore_ascii_case("bat"));
+
+    let mut cmd = if cfg!(windows) && is_cmd {
+        let mut c = tokio::process::Command::new("cmd.exe");
+        c.arg("/C").arg(&hermes_bin);
+        c
+    } else {
+        tokio::process::Command::new(&hermes_bin)
+    };
+
     cmd.arg(subcmd);
     // Explicitly bind to 127.0.0.1 for local isolation and security
     cmd.args(&["--host", "127.0.0.1"]);
@@ -151,8 +162,14 @@ pub async fn spawn_hermes_child(
     let current_path = std::env::var("PATH").unwrap_or_default();
     let sep = if cfg!(windows) { ";" } else { ":" };
     let new_path = if cfg!(windows) {
+        let local_appdata = std::env::var("LOCALAPPDATA")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| home.join("AppData").join("Local"));
+        let local_appdata_hermes = local_appdata.join("hermes").join("bin");
         format!(
-            "{}{}{}{}{}{}{}",
+            "{}{}{}{}{}{}{}{}{}",
+            local_appdata_hermes.display(),
+            sep,
             local_bin_dir.display(),
             sep,
             hermes_bin_dir.display(),

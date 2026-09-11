@@ -195,30 +195,51 @@ pub fn sync_unix_symlinks(home: &std::path::Path, enable: bool) -> Result<(), St
 pub fn sync_windows_path(home: &std::path::Path, enable: bool) -> Result<(), String> {
     let hermes_bin = home.join(".hermes").join("bin");
     let local_bin = home.join(".local").join("bin");
+    let opencode_bin = home.join(".opencode").join("bin");
+    let local_appdata = std::env::var("LOCALAPPDATA")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| home.join("AppData").join("Local"));
+    let hermes_appdata = local_appdata.join("hermes").join("bin");
+    let opencode_appdata = local_appdata.join("Programs").join("opencode");
+    let ollama_appdata = local_appdata.join("Programs").join("Ollama");
     
-    let hermes_str = hermes_bin.to_string_lossy();
-    let local_str = local_bin.to_string_lossy();
+    let path_entries = [
+        hermes_appdata.to_string_lossy().to_string(),
+        opencode_appdata.to_string_lossy().to_string(),
+        ollama_appdata.to_string_lossy().to_string(),
+        hermes_bin.to_string_lossy().to_string(),
+        local_bin.to_string_lossy().to_string(),
+        opencode_bin.to_string_lossy().to_string(),
+    ];
+
+    let entries_ps_list = path_entries
+        .iter()
+        .map(|e| format!("'{}'", e.replace('\'', "''")))
+        .collect::<Vec<_>>()
+        .join(", ");
 
     let script = if enable {
         format!(
             "$p = [Environment]::GetEnvironmentVariable('Path', 'User'); \
             $paths = $p -split ';' | Where-Object {{ $_ }}; \
+            $targets = @({0}); \
             $added = @(); \
-            if ($paths -notcontains '{0}') {{ $added += '{0}' }}; \
-            if ($paths -notcontains '{1}') {{ $added += '{1}' }}; \
+            foreach ($t in $targets) {{ if ($paths -notcontains $t) {{ $added += $t }} }}; \
             if ($added.Count -gt 0) {{ \
                 $newP = ($paths + $added) -join ';'; \
                 [Environment]::SetEnvironmentVariable('Path', $newP, 'User'); \
             }}",
-            hermes_str, local_str
+            entries_ps_list
         )
     } else {
         format!(
             "$p = [Environment]::GetEnvironmentVariable('Path', 'User'); \
-            $paths = $p -split ';' | Where-Object {{ $_ -and $_ -ne '{0}' -and $_ -ne '{1}' }}; \
-            $newP = $paths -join ';'; \
+            $paths = $p -split ';' | Where-Object {{ $_ }}; \
+            $targets = @({0}); \
+            $filtered = $paths | Where-Object {{ $targets -notcontains $_ }}; \
+            $newP = $filtered -join ';'; \
             [Environment]::SetEnvironmentVariable('Path', $newP, 'User');",
-            hermes_str, local_str
+            entries_ps_list
         )
     };
 

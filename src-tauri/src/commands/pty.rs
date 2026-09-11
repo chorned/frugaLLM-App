@@ -42,8 +42,20 @@ pub fn spawn_pty(
         let current_path = std::env::var("PATH").unwrap_or_default();
         let sep = if cfg!(windows) { ";" } else { ":" };
         let augmented_path = if cfg!(windows) {
+            let local_appdata = std::env::var("LOCALAPPDATA")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|_| home.join("AppData").join("Local"));
+            let hermes_local_appdata = local_appdata.join("hermes").join("bin");
+            let opencode_local_appdata = local_appdata.join("Programs").join("opencode");
+            let ollama_local_appdata = local_appdata.join("Programs").join("Ollama");
             format!(
-                "{}{}{}{}{}{}{}{}{}",
+                "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}",
+                hermes_local_appdata.display(),
+                sep,
+                opencode_local_appdata.display(),
+                sep,
+                ollama_local_appdata.display(),
+                sep,
                 local_bin.display(),
                 sep,
                 hermes_bin.display(),

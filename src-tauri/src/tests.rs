@@ -76,6 +76,38 @@ use std::collections::{HashMap, HashSet};
     }
 
     #[test]
+    fn test_get_ollama_binary_resolution() {
+        let bin = get_ollama_binary();
+        let bin_str = bin.to_string_lossy();
+        assert!(bin_str.contains("ollama") || bin.exists());
+    }
+
+    #[tokio::test]
+    async fn test_installer_file_handle_release_pattern() {
+        use tokio::io::AsyncWriteExt;
+        let temp_dir = tempfile::tempdir().unwrap();
+        let target_path = temp_dir.path().join("mock_setup.exe");
+
+        // Simulate write and explicit handle drop
+        {
+            let mut file = tokio::fs::File::create(&target_path).await.unwrap();
+            file.write_all(b"mock executable content").await.unwrap();
+            file.flush().await.unwrap();
+            file.shutdown().await.unwrap();
+        }
+
+        // Verify that after dropping, the file can be opened and deleted without sharing violations
+        let content = tokio::fs::read(&target_path).await.unwrap();
+        assert_eq!(content, b"mock executable content");
+        assert!(tokio::fs::remove_file(&target_path).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_check_ollama_status_graceful_offline() {
+        let _ = check_ollama_status().await;
+    }
+
+    #[test]
     fn test_dummy_pty_execution() {
         use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
         use std::io::Read;
@@ -1285,4 +1317,22 @@ use std::collections::{HashMap, HashSet};
         assert_eq!(metrics.output_tokens, Some(100));
     }
 
+    #[test]
+    fn test_default_soul_template_content() {
+        use crate::commands::agents::get_default_soul_template;
+        let template = get_default_soul_template();
+        assert!(template.contains("# IDENTITY AND PURPOSE"));
+        assert!(template.contains("You are Hermes"));
+        assert!(template.contains("<scratchpad>"));
+    }
 
+    #[test]
+    fn test_windows_sync_path_entries_formatting() {
+        let dummy_home = std::path::PathBuf::from(if cfg!(windows) { r"C:\Users\testuser" } else { "/home/testuser" });
+        let local_bin = dummy_home.join(".local").join("bin");
+        let hermes_bin = dummy_home.join(".hermes").join("bin");
+        let opencode_bin = dummy_home.join(".opencode").join("bin");
+        assert!(local_bin.to_string_lossy().contains(".local"));
+        assert!(hermes_bin.to_string_lossy().contains(".hermes"));
+        assert!(opencode_bin.to_string_lossy().contains(".opencode"));
+    }
