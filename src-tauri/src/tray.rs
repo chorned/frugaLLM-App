@@ -1,11 +1,12 @@
-use std::sync::Arc;
-use tauri::{Manager, Emitter};
 use crate::proxy::ChildProcessManager;
-
+use std::sync::Arc;
+use tauri::{Emitter, Manager};
 
 pub fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    let toggle_item = tauri::menu::MenuItem::with_id(app, "toggle", "Show/Hide Window", true, None::<&str>)?;
-    let quit_item = tauri::menu::MenuItem::with_id(app, "quit", "Quit FrugaLLM", true, None::<&str>)?;
+    let toggle_item =
+        tauri::menu::MenuItem::with_id(app, "toggle", "Show/Hide Window", true, None::<&str>)?;
+    let quit_item =
+        tauri::menu::MenuItem::with_id(app, "quit", "Quit FrugaLLM", true, None::<&str>)?;
     let tray_menu = tauri::menu::Menu::with_items(app, &[&toggle_item, &quit_item])?;
 
     let mut tray_builder = tauri::tray::TrayIconBuilder::new()
@@ -46,7 +47,8 @@ pub fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Err
                 button: tauri::tray::MouseButton::Left,
                 button_state: tauri::tray::MouseButtonState::Up,
                 ..
-            } = event {
+            } = event
+            {
                 let app = tray.app_handle();
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();

@@ -1,6 +1,6 @@
-use std::sync::{Arc, Mutex};
 use std::collections::{HashMap, HashSet};
-use tauri::{Manager, Emitter};
+use std::sync::{Arc, Mutex};
+use tauri::{Emitter, Manager};
 
 /// Holds the `ollama serve` child process for the lifetime of the application.
 /// Stored in Tauri managed state so the handle is never dropped or leaked.
@@ -32,19 +32,18 @@ impl Default for ProviderHealthState {
     }
 }
 
-pub async fn update_provider_status(
-    app: &tauri::AppHandle,
-    provider: &str,
-    status: &str,
-) {
+pub async fn update_provider_status(app: &tauri::AppHandle, provider: &str, status: &str) {
     if let Some(health_state) = app.try_state::<ProviderHealthState>() {
         let mut statuses = health_state.live_statuses.write().await;
         statuses.insert(provider.to_string(), status.to_string());
     }
-    let _ = app.emit("provider_status", ProviderStatusPayload {
-        provider: provider.to_string(),
-        status: status.to_string(),
-    });
+    let _ = app.emit(
+        "provider_status",
+        ProviderStatusPayload {
+            provider: provider.to_string(),
+            status: status.to_string(),
+        },
+    );
 }
 
 pub const MIN_CONTEXT_WINDOW: u64 = 128_000;
@@ -110,7 +109,13 @@ pub fn partition_candidates(
     let mut cooldown = Vec::new();
 
     for model in chain {
-        match classify_candidate(model, provider_cooldowns, gated_models, model_cooldowns, now) {
+        match classify_candidate(
+            model,
+            provider_cooldowns,
+            gated_models,
+            model_cooldowns,
+            now,
+        ) {
             CandidateTier::Healthy => healthy.push(model.clone()),
             CandidateTier::Cooldown(_) => cooldown.push(model.clone()),
             CandidateTier::CircuitBreakerActive | CandidateTier::PermanentlyGated => {}
@@ -136,7 +141,8 @@ pub fn evaluate_next_call_status(
         }
     }
 
-    let provider_models: Vec<&CloudModel> = chain.iter().filter(|m| m.provider == provider).collect();
+    let provider_models: Vec<&CloudModel> =
+        chain.iter().filter(|m| m.provider == provider).collect();
     if provider_models.is_empty() {
         return last_error_status.unwrap_or("offline").to_string();
     }
@@ -186,7 +192,10 @@ pub async fn refresh_provider_status_for_next_call(
     last_error_status: Option<&str>,
 ) -> String {
     use tauri::Manager;
-    if let (Some(health_state), Some(roster)) = (app.try_state::<ProviderHealthState>(), app.try_state::<DynamicRosterState>()) {
+    if let (Some(health_state), Some(roster)) = (
+        app.try_state::<ProviderHealthState>(),
+        app.try_state::<DynamicRosterState>(),
+    ) {
         let now = std::time::Instant::now();
         let chain_guard = roster.fallback_chain.read().await;
         let p_guard = health_state.provider_cooldowns.read().await;
@@ -276,22 +285,32 @@ impl Default for FrugalConfig {
 #[serde(tag = "status", content = "data")]
 pub enum ServerStatus {
     Starting,
-    Running { port: u16, ip: String },
-    PortConflict { port: u16, ip: String, message: String },
-    Error { message: String },
+    Running {
+        port: u16,
+        ip: String,
+    },
+    PortConflict {
+        port: u16,
+        ip: String,
+        message: String,
+    },
+    Error {
+        message: String,
+    },
 }
 
 pub struct FrugalConfigState {
     pub config: std::sync::Arc<tokio::sync::Mutex<FrugalConfig>>,
-    pub server_abort_handle: std::sync::Arc<tokio::sync::Mutex<Option<tauri::async_runtime::JoinHandle<()>>>>,
+    pub server_abort_handle:
+        std::sync::Arc<tokio::sync::Mutex<Option<tauri::async_runtime::JoinHandle<()>>>>,
     pub is_dirty: std::sync::Arc<std::sync::atomic::AtomicBool>,
     pub server_status: std::sync::Arc<tokio::sync::RwLock<ServerStatus>>,
 }
 
-
 pub struct PtyState {
     pub writer: Arc<Mutex<std::collections::HashMap<String, Box<dyn std::io::Write + Send>>>>,
-    pub master: Arc<Mutex<std::collections::HashMap<String, Box<dyn portable_pty::MasterPty + Send>>>>,
+    pub master:
+        Arc<Mutex<std::collections::HashMap<String, Box<dyn portable_pty::MasterPty + Send>>>>,
 }
 
 impl Default for PtyState {
@@ -302,8 +321,6 @@ impl Default for PtyState {
         }
     }
 }
-
-
 
 #[derive(serde::Serialize, Clone, Debug)]
 pub struct LaunchOptions {
@@ -338,27 +355,42 @@ pub struct NotifyOnDrop {
 }
 impl Drop for NotifyOnDrop {
     fn drop(&mut self) {
-        let _ = self.app.emit("proxy_activity", ProxyActivityPayload {
-            source: self.source.clone(),
-            target: self.target.clone(),
-            is_active: false,
-        });
+        let _ = self.app.emit(
+            "proxy_activity",
+            ProxyActivityPayload {
+                source: self.source.clone(),
+                target: self.target.clone(),
+                is_active: false,
+            },
+        );
 
-        let exact_out = self.exact_output_tokens.load(std::sync::atomic::Ordering::Acquire);
-        let output_tokens = if exact_out > 0 { exact_out } else { self.token_estimate.load(std::sync::atomic::Ordering::Acquire) / 4 };
-        
-        let exact_in = self.exact_input_tokens.load(std::sync::atomic::Ordering::Acquire);
-        let has_exact_in = self.has_exact_input.load(std::sync::atomic::Ordering::Acquire);
-        let input_tokens = if has_exact_in {
-            exact_in
-        } else if exact_in > 0 {
+        let exact_out = self
+            .exact_output_tokens
+            .load(std::sync::atomic::Ordering::Acquire);
+        let output_tokens = if exact_out > 0 {
+            exact_out
+        } else {
+            self.token_estimate
+                .load(std::sync::atomic::Ordering::Acquire)
+                / 4
+        };
+
+        let exact_in = self
+            .exact_input_tokens
+            .load(std::sync::atomic::Ordering::Acquire);
+        let has_exact_in = self
+            .has_exact_input
+            .load(std::sync::atomic::Ordering::Acquire);
+        let input_tokens = if has_exact_in || exact_in > 0 {
             exact_in
         } else {
             self.input_tokens_estimate / 4
         };
 
-        let cached_tokens = self.exact_cached_tokens.load(std::sync::atomic::Ordering::Acquire);
-        
+        let cached_tokens = self
+            .exact_cached_tokens
+            .load(std::sync::atomic::Ordering::Acquire);
+
         if output_tokens > 0 || input_tokens > 0 || cached_tokens > 0 {
             let app_handle = self.app.clone();
             tauri::async_runtime::spawn(async move {
@@ -372,7 +404,9 @@ impl Drop for NotifyOnDrop {
                     config.output_tokens_lifetime += output_tokens as u64;
                     config.cached_tokens_lifetime += cached_tokens as u64;
                 }
-                state.is_dirty.store(true, std::sync::atomic::Ordering::Release);
+                state
+                    .is_dirty
+                    .store(true, std::sync::atomic::Ordering::Release);
                 let _ = app_handle.emit("frugallm_config_updated", ());
             });
         }
@@ -424,7 +458,6 @@ pub struct SubmitIssuePayload {
     pub message: String,
 }
 
-
 #[derive(Debug, Clone, Copy)]
 pub struct ModelProfile {
     pub tag: &'static str,
@@ -438,15 +471,35 @@ pub const GRAPH_OVERHEAD_GB: f64 = 0.5;
 // Sorted largest to smallest
 pub const AVAILABLE_MODELS: &[ModelProfile] = &[
     // 31B Dense (~33G weights + ~10.36G cache)
-    ModelProfile { tag: "gemma4:31b", weights_gb: 33.0, kv_cache_gb: 10.36 },
+    ModelProfile {
+        tag: "gemma4:31b",
+        weights_gb: 33.0,
+        kv_cache_gb: 10.36,
+    },
     // 26B MoE (~28G weights + ~4.16G cache)
-    ModelProfile { tag: "gemma4:26b", weights_gb: 28.0, kv_cache_gb: 4.16 },
+    ModelProfile {
+        tag: "gemma4:26b",
+        weights_gb: 28.0,
+        kv_cache_gb: 4.16,
+    },
     // 12B Unified (~13G weights + ~3.63G cache)
-    ModelProfile { tag: "gemma4:12b", weights_gb: 13.0, kv_cache_gb: 3.63 },
+    ModelProfile {
+        tag: "gemma4:12b",
+        weights_gb: 13.0,
+        kv_cache_gb: 3.63,
+    },
     // 4.5B (~4.9G weights + ~3.10G cache)
-    ModelProfile { tag: "gemma4:e4b", weights_gb: 4.9, kv_cache_gb: 3.10 },
+    ModelProfile {
+        tag: "gemma4:e4b",
+        weights_gb: 4.9,
+        kv_cache_gb: 3.10,
+    },
     // 2.3B (~1.4G weights + ~1.29G cache)
-    ModelProfile { tag: "gemma4:e2b", weights_gb: 1.4, kv_cache_gb: 1.29 },
+    ModelProfile {
+        tag: "gemma4:e2b",
+        weights_gb: 1.4,
+        kv_cache_gb: 1.29,
+    },
 ];
 
 #[derive(serde::Serialize, Clone)]

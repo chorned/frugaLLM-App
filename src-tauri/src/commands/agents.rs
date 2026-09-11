@@ -1,20 +1,31 @@
-use std::sync::Arc;
-use tauri::{Manager, State, Emitter};
-use crate::state::*;
-use crate::proxy::*;
 use crate::commands::*;
-
+use crate::proxy::*;
+use crate::state::*;
+use std::sync::Arc;
+use tauri::{Emitter, Manager, State};
 
 pub fn get_hermes_source_path(home: &std::path::Path) -> Option<std::path::PathBuf> {
-    let p1 = home.join(".local").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" });
+    let p1 = home.join(".local").join("bin").join(if cfg!(windows) {
+        "hermes.exe"
+    } else {
+        "hermes"
+    });
     if p1.exists() {
         return Some(p1);
     }
-    let p2 = home.join(".hermes").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" });
+    let p2 = home.join(".hermes").join("bin").join(if cfg!(windows) {
+        "hermes.exe"
+    } else {
+        "hermes"
+    });
     if p2.exists() {
         return Some(p2);
     }
-    let p3 = home.join(".cargo").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" });
+    let p3 = home.join(".cargo").join("bin").join(if cfg!(windows) {
+        "hermes.exe"
+    } else {
+        "hermes"
+    });
     if p3.exists() {
         return Some(p3);
     }
@@ -42,15 +53,27 @@ pub fn check_hermes_status(app: tauri::AppHandle) -> bool {
 }
 
 pub fn get_opencode_source_path(home: &std::path::Path) -> Option<std::path::PathBuf> {
-    let p1 = home.join(".local").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
+    let p1 = home.join(".local").join("bin").join(if cfg!(windows) {
+        "opencode.exe"
+    } else {
+        "opencode"
+    });
     if p1.exists() {
         return Some(p1);
     }
-    let p2 = home.join(".opencode").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
+    let p2 = home.join(".opencode").join("bin").join(if cfg!(windows) {
+        "opencode.exe"
+    } else {
+        "opencode"
+    });
     if p2.exists() {
         return Some(p2);
     }
-    let p3 = home.join(".cargo").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
+    let p3 = home.join(".cargo").join("bin").join(if cfg!(windows) {
+        "opencode.exe"
+    } else {
+        "opencode"
+    });
     if p3.exists() {
         return Some(p3);
     }
@@ -106,31 +129,34 @@ pub fn is_ollama_in_paths(paths: &[&str]) -> bool {
 #[tauri::command(async)]
 pub async fn check_ollama_status() -> bool {
     // 1. Check if it's currently running via its local API
-    if reqwest::get("http://127.0.0.1:11434/api/version").await.is_ok() {
+    if reqwest::get("http://127.0.0.1:11434/api/version")
+        .await
+        .is_ok()
+    {
         return true;
     }
 
     // 2. Check if the binary is in PATH or common paths
     let bin = get_ollama_binary();
-    if bin != std::path::PathBuf::from("ollama") && bin.exists() {
-        if std::process::Command::new(&bin)
+    if bin != *"ollama"
+        && bin.exists()
+        && std::process::Command::new(&bin)
             .arg("--version")
             .output()
             .map(|o| o.status.success())
             .unwrap_or(false)
-        {
-            return true;
-        }
+    {
+        return true;
     }
-    
+
     // 3. Fallback: check common installation paths
     let paths = [
-        "/usr/local/bin/ollama", 
-        "/opt/homebrew/bin/ollama", 
+        "/usr/local/bin/ollama",
+        "/opt/homebrew/bin/ollama",
         "/usr/bin/ollama",
         "/Applications/Ollama.app/Contents/Resources/ollama",
         "/Applications/Ollama.app/Contents/MacOS/Ollama",
-        "/Applications/Ollama.app"
+        "/Applications/Ollama.app",
     ];
     is_ollama_in_paths(&paths)
 }
@@ -173,22 +199,41 @@ pub fn parse_agent_version(raw: &str) -> Option<String> {
             let clean = word.trim_matches(|c: char| !c.is_alphanumeric() && c != '.' && c != '-');
             if clean.starts_with('v') || clean.starts_with('V') {
                 let rest = &clean[1..];
-                if rest.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) && rest.contains('.') {
+                if rest
+                    .chars()
+                    .next()
+                    .map(|c| c.is_ascii_digit())
+                    .unwrap_or(false)
+                    && rest.contains('.')
+                {
                     return Some(format!("v{}", rest));
                 }
-            } else if clean.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) && clean.contains('.') {
+            } else if clean
+                .chars()
+                .next()
+                .map(|c| c.is_ascii_digit())
+                .unwrap_or(false)
+                && clean.contains('.')
+            {
                 return Some(format!("v{}", clean));
             }
         }
     }
-    raw.lines().next().map(|l| l.trim().to_string()).filter(|s| !s.is_empty())
+    raw.lines()
+        .next()
+        .map(|l| l.trim().to_string())
+        .filter(|s| !s.is_empty())
 }
 
 #[tauri::command(async)]
 pub async fn get_hermes_version(app: tauri::AppHandle) -> String {
     if let Ok(home) = app.path().home_dir() {
         if let Some(hermes_bin) = get_hermes_source_path(&home) {
-            if let Ok(output) = tokio::process::Command::new(&hermes_bin).arg("--version").output().await {
+            if let Ok(output) = tokio::process::Command::new(&hermes_bin)
+                .arg("--version")
+                .output()
+                .await
+            {
                 if output.status.success() {
                     let v = String::from_utf8_lossy(&output.stdout);
                     if let Some(parsed) = parse_agent_version(&v) {
@@ -206,7 +251,11 @@ pub async fn get_hermes_version(app: tauri::AppHandle) -> String {
 pub async fn get_opencode_version(app: tauri::AppHandle) -> String {
     if let Ok(home) = app.path().home_dir() {
         if let Some(opencode_bin) = get_opencode_source_path(&home) {
-            if let Ok(output) = tokio::process::Command::new(&opencode_bin).arg("--version").output().await {
+            if let Ok(output) = tokio::process::Command::new(&opencode_bin)
+                .arg("--version")
+                .output()
+                .await
+            {
                 if output.status.success() {
                     let v = String::from_utf8_lossy(&output.stdout);
                     if let Some(parsed) = parse_agent_version(&v) {
@@ -232,16 +281,28 @@ pub async fn uninstall_ollama(app: tauri::AppHandle) -> Result<(), String> {
     // 2. Terminate system-wide Ollama processes
     #[cfg(target_os = "macos")]
     {
-        let _ = tokio::process::Command::new("pkill").args(["-9", "-f", "ollama"]).output().await;
-        let _ = tokio::process::Command::new("pkill").args(["-9", "-f", "Ollama"]).output().await;
+        let _ = tokio::process::Command::new("pkill")
+            .args(["-9", "-f", "ollama"])
+            .output()
+            .await;
+        let _ = tokio::process::Command::new("pkill")
+            .args(["-9", "-f", "Ollama"])
+            .output()
+            .await;
     }
     #[cfg(target_os = "linux")]
     {
-        let _ = tokio::process::Command::new("pkill").args(["-9", "-f", "ollama"]).output().await;
+        let _ = tokio::process::Command::new("pkill")
+            .args(["-9", "-f", "ollama"])
+            .output()
+            .await;
     }
     #[cfg(target_os = "windows")]
     {
-        let _ = tokio::process::Command::new("taskkill").args(["/F", "/IM", "ollama.exe", "/T"]).output().await;
+        let _ = tokio::process::Command::new("taskkill")
+            .args(["/F", "/IM", "ollama.exe", "/T"])
+            .output()
+            .await;
     }
 
     // 3. Remove application binaries and model directories
@@ -249,19 +310,28 @@ pub async fn uninstall_ollama(app: tauri::AppHandle) -> Result<(), String> {
     {
         let _ = tokio::fs::remove_dir_all("/Applications/Ollama.app").await;
         let _ = tokio::fs::remove_file("/usr/local/bin/ollama").await;
-        let _ = tokio::process::Command::new("rm").args(["-rf", "/Applications/Ollama.app", "/usr/local/bin/ollama"]).output().await;
+        let _ = tokio::process::Command::new("rm")
+            .args(["-rf", "/Applications/Ollama.app", "/usr/local/bin/ollama"])
+            .output()
+            .await;
     }
     #[cfg(target_os = "linux")]
     {
         let _ = tokio::fs::remove_file("/usr/local/bin/ollama").await;
         let _ = tokio::fs::remove_file("/usr/bin/ollama").await;
-        let _ = tokio::process::Command::new("rm").args(["-rf", "/usr/local/bin/ollama", "/usr/bin/ollama"]).output().await;
+        let _ = tokio::process::Command::new("rm")
+            .args(["-rf", "/usr/local/bin/ollama", "/usr/bin/ollama"])
+            .output()
+            .await;
     }
 
     if let Ok(home) = app.path().home_dir() {
         let ollama_home = home.join(".ollama");
         let _ = tokio::fs::remove_dir_all(&ollama_home).await;
-        let _ = tokio::process::Command::new("rm").args(["-rf", &ollama_home.to_string_lossy()]).output().await;
+        let _ = tokio::process::Command::new("rm")
+            .args(["-rf", &ollama_home.to_string_lossy()])
+            .output()
+            .await;
     }
 
     if let Ok(app_dir) = app.path().app_data_dir() {
@@ -276,8 +346,16 @@ pub fn wipe_opencode(home: &std::path::Path) {
     let _ = std::fs::remove_dir_all(home.join(".opencode"));
     let _ = std::fs::remove_dir_all(home.join(".config").join("opencode"));
     let _ = std::fs::remove_dir_all(home.join(".cache").join("opencode"));
-    let _ = std::fs::remove_file(home.join(".local").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" }));
-    let _ = std::fs::remove_file(home.join(".cargo").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" }));
+    let _ = std::fs::remove_file(home.join(".local").join("bin").join(if cfg!(windows) {
+        "opencode.exe"
+    } else {
+        "opencode"
+    }));
+    let _ = std::fs::remove_file(home.join(".cargo").join("bin").join(if cfg!(windows) {
+        "opencode.exe"
+    } else {
+        "opencode"
+    }));
 }
 
 #[tauri::command(async)]
@@ -285,11 +363,17 @@ pub async fn uninstall_opencode(app: tauri::AppHandle) -> Result<(), String> {
     // 1. Terminate running opencode processes
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = tokio::process::Command::new("pkill").args(["-9", "-f", "opencode"]).output().await;
+        let _ = tokio::process::Command::new("pkill")
+            .args(["-9", "-f", "opencode"])
+            .output()
+            .await;
     }
     #[cfg(target_os = "windows")]
     {
-        let _ = tokio::process::Command::new("taskkill").args(["/F", "/IM", "opencode.exe", "/T"]).output().await;
+        let _ = tokio::process::Command::new("taskkill")
+            .args(["/F", "/IM", "opencode.exe", "/T"])
+            .output()
+            .await;
     }
 
     // 2. Remove directories and binary symlinks
@@ -300,9 +384,17 @@ pub async fn uninstall_opencode(app: tauri::AppHandle) -> Result<(), String> {
         let _ = tokio::fs::remove_dir_all(&config_dir).await;
         let cache_dir = home.join(".cache").join("opencode");
         let _ = tokio::fs::remove_dir_all(&cache_dir).await;
-        let local_bin = home.join(".local").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
+        let local_bin = home.join(".local").join("bin").join(if cfg!(windows) {
+            "opencode.exe"
+        } else {
+            "opencode"
+        });
         let _ = tokio::fs::remove_file(&local_bin).await;
-        let cargo_bin = home.join(".cargo").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
+        let cargo_bin = home.join(".cargo").join("bin").join(if cfg!(windows) {
+            "opencode.exe"
+        } else {
+            "opencode"
+        });
         let _ = tokio::fs::remove_file(&cargo_bin).await;
     }
 
@@ -314,11 +406,17 @@ pub async fn uninstall_hermes(app: tauri::AppHandle) -> Result<(), String> {
     // 1. Terminate running hermes processes
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = tokio::process::Command::new("pkill").args(["-9", "-f", "hermes"]).output().await;
+        let _ = tokio::process::Command::new("pkill")
+            .args(["-9", "-f", "hermes"])
+            .output()
+            .await;
     }
     #[cfg(target_os = "windows")]
     {
-        let _ = tokio::process::Command::new("taskkill").args(["/F", "/IM", "hermes.exe", "/T"]).output().await;
+        let _ = tokio::process::Command::new("taskkill")
+            .args(["/F", "/IM", "hermes.exe", "/T"])
+            .output()
+            .await;
     }
 
     // 2. Remove directories and binary symlinks
@@ -329,13 +427,16 @@ pub async fn uninstall_hermes(app: tauri::AppHandle) -> Result<(), String> {
         let _ = tokio::fs::remove_dir_all(&config_dir).await;
         let cache_dir = home.join(".cache").join("hermes");
         let _ = tokio::fs::remove_dir_all(&cache_dir).await;
-        let local_bin = home.join(".local").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" });
+        let local_bin = home.join(".local").join("bin").join(if cfg!(windows) {
+            "hermes.exe"
+        } else {
+            "hermes"
+        });
         let _ = tokio::fs::remove_file(&local_bin).await;
     }
 
     Ok(())
 }
-
 
 #[tauri::command(async)]
 pub async fn check_tool_gateway_status(app: tauri::AppHandle) -> bool {
@@ -365,11 +466,13 @@ pub fn set_tool_gateway_installed(app: tauri::AppHandle, installed: bool) -> Res
         &app,
         "INFO",
         "GATEWAY",
-        &format!("Tool Enforcing Gateway status updated: installed={}", installed),
+        &format!(
+            "Tool Enforcing Gateway status updated: installed={}",
+            installed
+        ),
     );
     Ok(())
 }
-
 
 #[tauri::command(async)]
 pub async fn start_hermes_service(
@@ -412,16 +515,12 @@ pub fn stop_hermes_service(
 }
 
 #[tauri::command]
-pub fn has_active_services(
-    process_state: State<'_, Arc<ChildProcessManager>>,
-) -> bool {
+pub fn has_active_services(process_state: State<'_, Arc<ChildProcessManager>>) -> bool {
     process_state.has_active_services()
 }
 
 #[tauri::command]
-pub fn get_active_services(
-    process_state: State<'_, Arc<ChildProcessManager>>,
-) -> Vec<String> {
+pub fn get_active_services(process_state: State<'_, Arc<ChildProcessManager>>) -> Vec<String> {
     process_state.active_service_names()
 }
 
@@ -434,8 +533,11 @@ pub fn confirm_exit_app(
 ) -> Result<(), String> {
     exit_state.store(true, std::sync::atomic::Ordering::Release);
     process_state.kill_all();
-    
-    if frugal_state.is_dirty.swap(false, std::sync::atomic::Ordering::AcqRel) {
+
+    if frugal_state
+        .is_dirty
+        .swap(false, std::sync::atomic::Ordering::AcqRel)
+    {
         let config_clone = if let Ok(guard) = frugal_state.config.try_lock() {
             guard.clone()
         } else {
@@ -450,7 +552,7 @@ pub fn confirm_exit_app(
             }
         }
     }
-    
+
     app.exit(0);
     Ok(())
 }
@@ -464,16 +566,18 @@ pub fn check_hermes_ready(app: tauri::AppHandle) -> bool {
     }
 }
 
-
 #[tauri::command]
-pub async fn configure_hermes_defaults(app: tauri::AppHandle, state: tauri::State<'_, FrugalConfigState>) -> Result<(), String> {
+pub async fn configure_hermes_defaults(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, FrugalConfigState>,
+) -> Result<(), String> {
     let port = state.config.lock().await.port;
     if let Ok(home) = app.path().home_dir() {
         let hermes_dir = home.join(".hermes");
         if !hermes_dir.exists() {
             std::fs::create_dir_all(&hermes_dir).map_err(|e| e.to_string())?;
         }
-        
+
         let config_path = hermes_dir.join("config.yaml");
         let config_content = format!("model:\n  default: \"frugallm\"\n  provider: \"custom\"\n  base_url: \"http://127.0.0.1:{}/v1\"\n", port);
         std::fs::write(&config_path, config_content).map_err(|e| e.to_string())?;
@@ -508,9 +612,19 @@ You are a turn-based, request-response agent. Once you finish generating a respo
 - You MUST explicitly inform the user of your turn-based nature. 
 - Never state in conversational text that you have "started a background process" or promise to "notify them soon" unless you have explicitly called a specific tool (like a cronjob utility) in the same turn to handle it."#;
             std::fs::write(&soul_path, soul_content).map_err(|e| e.to_string())?;
-            log_event(&app, "INFO", "HERMES", "Created default soul.md in ~/.hermes/soul.md");
+            log_event(
+                &app,
+                "INFO",
+                "HERMES",
+                "Created default soul.md in ~/.hermes/soul.md",
+            );
         } else {
-            log_event(&app, "INFO", "HERMES", "soul.md already exists in ~/.hermes; preserving existing user file");
+            log_event(
+                &app,
+                "INFO",
+                "HERMES",
+                "soul.md already exists in ~/.hermes; preserving existing user file",
+            );
         }
     }
     Ok(())
@@ -532,35 +646,43 @@ pub fn edit_hermes_soul(app: tauri::AppHandle) -> Result<(), String> {
         #[cfg(target_os = "macos")]
         let _ = std::process::Command::new("open").arg(&target_path).spawn();
         #[cfg(target_os = "windows")]
-        let _ = std::process::Command::new("cmd").args(["/C", "start", "", &target_path.to_string_lossy()]).spawn();
+        let _ = std::process::Command::new("cmd")
+            .args(["/C", "start", "", &target_path.to_string_lossy()])
+            .spawn();
         #[cfg(target_os = "linux")]
-        let _ = std::process::Command::new("xdg-open").arg(&target_path).spawn();
+        let _ = std::process::Command::new("xdg-open")
+            .arg(&target_path)
+            .spawn();
     }
     Ok(())
 }
 
-
 pub fn get_ollama_source_path() -> Option<std::path::PathBuf> {
     let bin = get_ollama_binary();
-    if bin != std::path::PathBuf::from("ollama") && bin.exists() {
+    if bin != *"ollama" && bin.exists() {
         return Some(bin);
     }
     None
 }
 
-
 #[tauri::command]
-pub async fn configure_opencode_defaults(app: tauri::AppHandle, state: tauri::State<'_, FrugalConfigState>) -> Result<(), String> {
+pub async fn configure_opencode_defaults(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, FrugalConfigState>,
+) -> Result<(), String> {
     let config = state.config.lock().await;
     let port = config.port;
-    let api_key = config.api_password.clone().unwrap_or_else(|| "frugallm".to_string());
-    
+    let api_key = config
+        .api_password
+        .clone()
+        .unwrap_or_else(|| "frugallm".to_string());
+
     if let Ok(home) = app.path().home_dir() {
         let config_dir = home.join(".config").join("opencode");
         if !config_dir.exists() {
             std::fs::create_dir_all(&config_dir).map_err(|e| e.to_string())?;
         }
-        
+
         let config_path = config_dir.join("opencode.json");
         let config_content = serde_json::json!({
             "provider": {
@@ -578,8 +700,12 @@ pub async fn configure_opencode_defaults(app: tauri::AppHandle, state: tauri::St
             },
             "model": "litellm/frugallm"
         });
-        
-        std::fs::write(&config_path, serde_json::to_string_pretty(&config_content).unwrap()).map_err(|e| e.to_string())?;
+
+        std::fs::write(
+            &config_path,
+            serde_json::to_string_pretty(&config_content).unwrap(),
+        )
+        .map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -603,7 +729,7 @@ pub async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), Strin
             .stderr(std::process::Stdio::piped())
             .spawn()
             .map_err(|e| e.to_string())?;
-            
+
         let app_clone = app.clone();
         if let Some(stdout) = child.stdout.take() {
             use tokio::io::AsyncBufReadExt;
@@ -611,7 +737,12 @@ pub async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), Strin
             let app_inner = app_clone.clone();
             tokio::spawn(async move {
                 while let Ok(Some(line)) = reader.next_line().await {
-                    let _ = app_inner.emit("download_progress", DownloadProgress { status: format!("{}\r\n", line) });
+                    let _ = app_inner.emit(
+                        "download_progress",
+                        DownloadProgress {
+                            status: format!("{}\r\n", line),
+                        },
+                    );
                 }
             });
         }
@@ -622,7 +753,12 @@ pub async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), Strin
             let app_inner = app_clone;
             tokio::spawn(async move {
                 while let Ok(Some(line)) = reader.next_line().await {
-                    let _ = app_inner.emit("download_progress", DownloadProgress { status: format!("{}\r\n", line) });
+                    let _ = app_inner.emit(
+                        "download_progress",
+                        DownloadProgress {
+                            status: format!("{}\r\n", line),
+                        },
+                    );
                 }
             });
         }
@@ -639,15 +775,24 @@ pub async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), Strin
         use tokio::io::AsyncWriteExt;
         let temp_dir = std::env::temp_dir();
         let installer_path = temp_dir.join("OllamaSetup.exe");
-        
+
         let client = reqwest::Client::new();
-        let mut response = client.get("https://ollama.com/download/OllamaSetup.exe").send().await.map_err(|e| e.to_string())?;
-        
+        let mut response = client
+            .get("https://ollama.com/download/OllamaSetup.exe")
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
         if !response.status().is_success() {
-            return Err(format!("Failed to download Ollama installer: HTTP {}", response.status()));
+            return Err(format!(
+                "Failed to download Ollama installer: HTTP {}",
+                response.status()
+            ));
         }
 
-        let mut file = tokio::fs::File::create(&installer_path).await.map_err(|e| e.to_string())?;
+        let mut file = tokio::fs::File::create(&installer_path)
+            .await
+            .map_err(|e| e.to_string())?;
         while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
             file.write_all(&chunk).await.map_err(|e| e.to_string())?;
         }
@@ -658,7 +803,7 @@ pub async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), Strin
             .status()
             .await
             .map_err(|e| e.to_string())?;
-            
+
         if !status.success() {
             return Err("Failed to run Ollama installer".to_string());
         }
@@ -676,10 +821,18 @@ pub async fn start_ollama_daemon(app: &tauri::AppHandle) -> Result<(), String> {
         .build()
         .map_err(|e| e.to_string())?;
 
-    if client.get("http://127.0.0.1:11434/api/tags").send().await.is_ok() {
-        let _ = app.emit("download_progress", DownloadProgress {
-            status: "Ollama daemon already running.".to_string(),
-        });
+    if client
+        .get("http://127.0.0.1:11434/api/tags")
+        .send()
+        .await
+        .is_ok()
+    {
+        let _ = app.emit(
+            "download_progress",
+            DownloadProgress {
+                status: "Ollama daemon already running.".to_string(),
+            },
+        );
         return Ok(());
     }
 
@@ -700,7 +853,7 @@ pub async fn start_ollama_daemon(app: &tauri::AppHandle) -> Result<(), String> {
         let mut reader = tokio::io::BufReader::new(stderr).lines();
         let app_inner = app.clone();
         tokio::spawn(async move {
-            use tokio::time::{Instant, Duration};
+            use tokio::time::{Duration, Instant};
             let mut last_emit = Instant::now();
             while let Ok(Some(line)) = reader.next_line().await {
                 let now = Instant::now();
@@ -720,22 +873,36 @@ pub async fn start_ollama_daemon(app: &tauri::AppHandle) -> Result<(), String> {
     }
 
     // Poll for readiness — 500ms intervals, 10s timeout
-    let _ = app.emit("download_progress", DownloadProgress {
-        status: "Waiting for Ollama daemon to start...".to_string(),
-    });
+    let _ = app.emit(
+        "download_progress",
+        DownloadProgress {
+            status: "Waiting for Ollama daemon to start...".to_string(),
+        },
+    );
 
     for i in 0..20 {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        if client.get("http://127.0.0.1:11434/api/tags").send().await.is_ok() {
-            let _ = app.emit("download_progress", DownloadProgress {
-                status: format!("Ollama daemon ready ({}ms).", (i + 1) * 500),
-            });
+        if client
+            .get("http://127.0.0.1:11434/api/tags")
+            .send()
+            .await
+            .is_ok()
+        {
+            let _ = app.emit(
+                "download_progress",
+                DownloadProgress {
+                    status: format!("Ollama daemon ready ({}ms).", (i + 1) * 500),
+                },
+            );
 
             // Boot buffer: Ollama's GPU discovery on macOS takes additional time
             // after the HTTP endpoint is live. Wait 2s before issuing model commands.
-            let _ = app.emit("download_progress", DownloadProgress {
-                status: "Waiting for GPU backend initialization...".to_string(),
-            });
+            let _ = app.emit(
+                "download_progress",
+                DownloadProgress {
+                    status: "Waiting for GPU backend initialization...".to_string(),
+                },
+            );
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
             return Ok(());
@@ -744,7 +911,6 @@ pub async fn start_ollama_daemon(app: &tauri::AppHandle) -> Result<(), String> {
 
     Err("Timed out waiting for Ollama daemon to start after 10 seconds".into())
 }
-
 
 #[tauri::command(async)]
 pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
@@ -780,7 +946,12 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
             "stream": true
         });
 
-        match client.post("http://127.0.0.1:11434/api/pull").json(&pull_payload).send().await {
+        match client
+            .post("http://127.0.0.1:11434/api/pull")
+            .json(&pull_payload)
+            .send()
+            .await
+        {
             Ok(mut res) => {
                 let mut buffer = Vec::new();
                 let mut last_completed: u64 = 0;
@@ -794,20 +965,30 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
                         buffer.remove(0); // remove the '\n'
                         if let Ok(text) = String::from_utf8(line) {
                             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
-                                if let (Some(completed), Some(total)) = (json.get("completed"), json.get("total")) {
-                                    if let (Some(c), Some(t)) = (completed.as_u64(), total.as_u64()) {
+                                if let (Some(completed), Some(total)) =
+                                    (json.get("completed"), json.get("total"))
+                                {
+                                    if let (Some(c), Some(t)) = (completed.as_u64(), total.as_u64())
+                                    {
                                         if t > 0 {
                                             let percent = ((c as f64 / t as f64) * 100.0) as u32;
                                             let now = tokio::time::Instant::now();
-                                            let elapsed_speed = now.duration_since(last_speed_calc).as_secs_f64();
+                                            let elapsed_speed =
+                                                now.duration_since(last_speed_calc).as_secs_f64();
 
                                             if elapsed_speed >= 0.4 {
-                                                let delta_bytes = if c >= last_completed { c - last_completed } else { c };
-                                                let current_instant_speed = delta_bytes as f64 / elapsed_speed;
+                                                let delta_bytes = if c >= last_completed {
+                                                    c - last_completed
+                                                } else {
+                                                    c
+                                                };
+                                                let current_instant_speed =
+                                                    delta_bytes as f64 / elapsed_speed;
                                                 if smoothed_speed == 0.0 {
                                                     smoothed_speed = current_instant_speed;
                                                 } else {
-                                                    smoothed_speed = 0.65 * smoothed_speed + 0.35 * current_instant_speed;
+                                                    smoothed_speed = 0.65 * smoothed_speed
+                                                        + 0.35 * current_instant_speed;
                                                 }
                                                 last_completed = c;
                                                 last_speed_calc = now;
@@ -820,21 +1001,32 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
                                                 0
                                             };
 
-                                            if now.duration_since(last_emit) > tokio::time::Duration::from_millis(100) || percent == 100 {
-                                                let _ = app_clone.emit("model_download_progress", ModelProgressPayload {
-                                                    percent,
-                                                    completed: c,
-                                                    total: t,
-                                                    speed_bytes_per_sec: smoothed_speed,
-                                                    eta_seconds,
-                                                });
+                                            if now.duration_since(last_emit)
+                                                > tokio::time::Duration::from_millis(100)
+                                                || percent == 100
+                                            {
+                                                let _ = app_clone.emit(
+                                                    "model_download_progress",
+                                                    ModelProgressPayload {
+                                                        percent,
+                                                        completed: c,
+                                                        total: t,
+                                                        speed_bytes_per_sec: smoothed_speed,
+                                                        eta_seconds,
+                                                    },
+                                                );
                                                 last_emit = now;
                                             }
                                         }
                                     }
                                 } else if let Some(status) = json.get("status") {
                                     if let Some(s) = status.as_str() {
-                                        let _ = app_clone.emit("download_progress", DownloadProgress { status: format!("{}\r\n", s) });
+                                        let _ = app_clone.emit(
+                                            "download_progress",
+                                            DownloadProgress {
+                                                status: format!("{}\r\n", s),
+                                            },
+                                        );
                                     }
                                 }
                             }
@@ -843,11 +1035,16 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
                 }
             }
             Err(e) => {
-                let _ = app_clone.emit("model_deployment_complete", DeploymentResult { success: false, message: format!("API pull failed: {}", e) });
+                let _ = app_clone.emit(
+                    "model_deployment_complete",
+                    DeploymentResult {
+                        success: false,
+                        message: format!("API pull failed: {}", e),
+                    },
+                );
                 return;
             }
         }
-
 
         let ollama_bin = get_ollama_binary();
         let child_res = tokio::process::Command::new(ollama_bin)
@@ -863,7 +1060,13 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
         let mut child = match child_res {
             Ok(c) => c,
             Err(e) => {
-                let _ = app_clone.emit("model_deployment_complete", DeploymentResult { success: false, message: e.to_string() });
+                let _ = app_clone.emit(
+                    "model_deployment_complete",
+                    DeploymentResult {
+                        success: false,
+                        message: e.to_string(),
+                    },
+                );
                 return;
             }
         };
@@ -899,24 +1102,41 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
                     "prompt": "",
                     "keep_alive": -1
                 });
-                
-                let _ = client.post("http://127.0.0.1:11434/api/generate")
+
+                let _ = client
+                    .post("http://127.0.0.1:11434/api/generate")
                     .json(&hot_load_payload)
                     .send()
                     .await;
 
-                let _ = app_clone.emit("model_deployment_complete", DeploymentResult { success: true, message: "Success".to_string() });
-            },
+                let _ = app_clone.emit(
+                    "model_deployment_complete",
+                    DeploymentResult {
+                        success: true,
+                        message: "Success".to_string(),
+                    },
+                );
+            }
             Ok(status) => {
-                let _ = app_clone.emit("model_deployment_complete", DeploymentResult { success: false, message: format!("Ollama create failed with status: {}", status) });
-            },
+                let _ = app_clone.emit(
+                    "model_deployment_complete",
+                    DeploymentResult {
+                        success: false,
+                        message: format!("Ollama create failed with status: {}", status),
+                    },
+                );
+            }
             Err(e) => {
-                let _ = app_clone.emit("model_deployment_complete", DeploymentResult { success: false, message: e.to_string() });
+                let _ = app_clone.emit(
+                    "model_deployment_complete",
+                    DeploymentResult {
+                        success: false,
+                        message: e.to_string(),
+                    },
+                );
             }
         }
     });
 
     Ok(())
 }
-
-

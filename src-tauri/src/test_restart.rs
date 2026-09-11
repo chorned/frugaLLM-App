@@ -10,4 +10,3 @@ mod tests {
         let _fn_ptr: fn(&tauri::AppHandle) = super::restart;
     }
 }
-

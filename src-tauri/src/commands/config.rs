@@ -1,9 +1,8 @@
-use std::env;
-use tauri::{Manager, Emitter, State};
-use crate::state::*;
 use crate::commands::*;
 use crate::proxy::*;
-
+use crate::state::*;
+use std::env;
+use tauri::{Emitter, Manager, State};
 
 #[tauri::command]
 pub fn get_launch_options() -> LaunchOptions {
@@ -23,28 +22,35 @@ pub fn get_launch_options() -> LaunchOptions {
             i += 1;
         }
     }
-    
+
     LaunchOptions {
         openrouter_key,
         local_llm_ip,
     }
 }
 
-
 #[tauri::command]
-pub async fn get_frugallm_config(state: State<'_, FrugalConfigState>) -> Result<FrugalConfig, String> {
+pub async fn get_frugallm_config(
+    state: State<'_, FrugalConfigState>,
+) -> Result<FrugalConfig, String> {
     let config = state.config.lock().await;
     Ok(config.clone())
 }
 
 #[tauri::command]
-pub async fn get_frugallm_server_status(state: State<'_, FrugalConfigState>) -> Result<ServerStatus, String> {
+pub async fn get_frugallm_server_status(
+    state: State<'_, FrugalConfigState>,
+) -> Result<ServerStatus, String> {
     let status = state.server_status.read().await;
     Ok(status.clone())
 }
 
 #[tauri::command]
-pub async fn set_frugallm_config(app: tauri::AppHandle, state: State<'_, FrugalConfigState>, new_config: FrugalConfig) -> Result<(), String> {
+pub async fn set_frugallm_config(
+    app: tauri::AppHandle,
+    state: State<'_, FrugalConfigState>,
+    new_config: FrugalConfig,
+) -> Result<(), String> {
     let mut config = state.config.lock().await;
     let mut updated_config = new_config.clone();
     updated_config.input_tokens_lifetime = config.input_tokens_lifetime;
@@ -53,17 +59,19 @@ pub async fn set_frugallm_config(app: tauri::AppHandle, state: State<'_, FrugalC
     updated_config.input_tokens_session = config.input_tokens_session;
     updated_config.output_tokens_session = config.output_tokens_session;
     updated_config.cached_tokens_session = config.cached_tokens_session;
-    
+
     let port_changed = config.port != updated_config.port;
     let ip_changed = config.bind_all_interfaces != updated_config.bind_all_interfaces;
-    
+
     *config = updated_config.clone();
-    
+
     let path = get_config_path(&app)?;
     if let Ok(json) = serde_json::to_string_pretty(&*config) {
         let _ = std::fs::write(path, json);
     }
-    state.is_dirty.store(false, std::sync::atomic::Ordering::Release);
+    state
+        .is_dirty
+        .store(false, std::sync::atomic::Ordering::Release);
 
     if port_changed || ip_changed {
         {
@@ -75,20 +83,17 @@ pub async fn set_frugallm_config(app: tauri::AppHandle, state: State<'_, FrugalC
         if let Some(handle) = state.server_abort_handle.lock().await.take() {
             handle.abort();
         }
-        
+
         let app_clone = app.clone();
         let new_abort = tauri::async_runtime::spawn(async move {
             start_frugallm_server(app_clone).await;
         });
-        
+
         *state.server_abort_handle.lock().await = Some(new_abort);
     }
-    
+
     Ok(())
 }
-
-
-
 
 pub const FRUGALLM_PATH_BLOCK_START: &str = "# >>> FrugaLLM CLI PATH >>>";
 pub const FRUGALLM_PATH_BLOCK_END: &str = "# <<< FrugaLLM CLI PATH <<<";
@@ -195,7 +200,7 @@ pub fn sync_unix_symlinks(home: &std::path::Path, enable: bool) -> Result<(), St
 pub fn sync_windows_path(home: &std::path::Path, enable: bool) -> Result<(), String> {
     let hermes_bin = home.join(".hermes").join("bin");
     let local_bin = home.join(".local").join("bin");
-    
+
     let hermes_str = hermes_bin.to_string_lossy();
     let local_str = local_bin.to_string_lossy();
 
@@ -228,7 +233,6 @@ pub fn sync_windows_path(home: &std::path::Path, enable: bool) -> Result<(), Str
 
     Ok(())
 }
-
 
 #[tauri::command]
 pub fn set_global_cli_commands(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
@@ -285,15 +289,18 @@ pub fn get_global_cli_commands_status(app: tauri::AppHandle) -> Result<bool, Str
     Ok(false)
 }
 
-
 #[tauri::command]
 pub fn is_wipe_mode() -> bool {
     std::env::args().any(|arg| arg == "--wipe")
 }
 
 pub fn check_mock_update_arg(mut args: impl Iterator<Item = String>) -> bool {
-    if std::env::var("MOCK_UPDATE").map(|v| v == "1" || v == "true").unwrap_or(false)
-        || std::env::var("FRUGALLM_MOCK_UPDATE").map(|v| v == "1" || v == "true").unwrap_or(false)
+    if std::env::var("MOCK_UPDATE")
+        .map(|v| v == "1" || v == "true")
+        .unwrap_or(false)
+        || std::env::var("FRUGALLM_MOCK_UPDATE")
+            .map(|v| v == "1" || v == "true")
+            .unwrap_or(false)
     {
         return true;
     }
@@ -304,6 +311,3 @@ pub fn check_mock_update_arg(mut args: impl Iterator<Item = String>) -> bool {
 pub fn is_mock_update_mode() -> bool {
     check_mock_update_arg(std::env::args())
 }
-
-
-

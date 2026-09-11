@@ -19,6 +19,12 @@ pub struct ModelIntelligenceRegistry {
     scores: Arc<RwLock<HashMap<String, ModelScore>>>,
 }
 
+impl Default for ModelIntelligenceRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ModelIntelligenceRegistry {
     #[allow(dead_code)]
     pub fn new() -> Self {
@@ -43,7 +49,6 @@ impl ModelIntelligenceRegistry {
             ("google/gemini-1.5-pro", 76.0),
             ("google/gemini-1.5-flash", 65.0),
             ("google/gemini-1.5-flash-8b", 55.0),
-            
             // Google Gemma Family (Open Weights)
             ("google/gemma-4-31b-it", 63.2),
             ("google/gemma-4-26b-a4b-it", 56.2),
@@ -53,7 +58,6 @@ impl ModelIntelligenceRegistry {
             ("google/gemma-2-27b-it", 61.0),
             ("google/gemma-2-9b-it", 52.0),
             ("google/gemma-2-2b-it", 38.0),
-
             // Anthropic Claude Family
             ("anthropic/claude-3.7-sonnet", 92.0),
             ("anthropic/claude-3.5-sonnet", 85.0),
@@ -61,7 +65,6 @@ impl ModelIntelligenceRegistry {
             ("anthropic/claude-3-opus", 78.0),
             ("anthropic/claude-3-sonnet", 68.0),
             ("anthropic/claude-3-haiku", 48.0),
-
             // OpenAI Frontier & Reasoning Models
             ("openai/o3-mini", 86.0),
             ("openai/o1", 90.0),
@@ -69,12 +72,10 @@ impl ModelIntelligenceRegistry {
             ("openai/gpt-4o", 82.0),
             ("openai/gpt-4o-mini", 60.0),
             ("openai/gpt-4-turbo", 76.0),
-
             // DeepSeek Family
             ("deepseek/deepseek-r1", 89.0),
             ("deepseek/deepseek-chat", 80.0),
             ("deepseek/deepseek-v3", 80.0),
-
             // Meta Llama Family
             ("meta-llama/llama-3.3-70b-instruct", 72.0),
             ("meta-llama/llama-3.1-405b-instruct", 84.0),
@@ -82,19 +83,16 @@ impl ModelIntelligenceRegistry {
             ("meta-llama/llama-3.1-8b-instruct", 52.0),
             ("meta-llama/llama-3.2-3b-instruct", 42.0),
             ("meta-llama/llama-3.2-1b-instruct", 32.0),
-
             // Qwen Family
             ("qwen/qwen-2.5-72b-instruct", 76.0),
             ("qwen/qwen-2.5-coder-32b-instruct", 74.0),
             ("qwen/qwen-2.5-14b-instruct", 62.0),
             ("qwen/qwen-2.5-7b-instruct", 50.0),
-
             // Mistral Family
             ("mistralai/mistral-large-2411", 78.0),
             ("mistralai/codestral-2501", 72.0),
             ("mistralai/mistral-small", 58.0),
             ("mistralai/mistral-7b-instruct", 45.0),
-
             // Specialized & Partner Roster
             ("z-ai/glm-5.2", 52.6),
             ("minimax/minimax-m3", 45.4),
@@ -254,24 +252,22 @@ impl ModelIntelligenceRegistry {
         // 6. Fuzzy match: If the query is "minimax/minimax-m3", it should match "minimax/minimax-m3-20260531"
         for (k, v) in guard.iter() {
             let k_norm = Self::normalize_model_id(k);
-            if k_norm.starts_with(&normalized) {
-                if k_norm.len() == normalized.len()
-                    || k_norm.as_bytes().get(normalized.len()) == Some(&b'-')
-                {
-                    return v.score;
-                }
+            if k_norm.starts_with(&normalized)
+                && (k_norm.len() == normalized.len()
+                    || k_norm.as_bytes().get(normalized.len()) == Some(&b'-'))
+            {
+                return v.score;
             }
         }
 
         // 7. Reverse fuzzy match: If query has date suffix "google/gemma-4-31b-it-20260402", matches "google/gemma-4-31b-it"
         for (k, v) in guard.iter() {
             let k_norm = Self::normalize_model_id(k);
-            if normalized.starts_with(&k_norm) {
-                if normalized.len() == k_norm.len()
-                    || normalized.as_bytes().get(k_norm.len()) == Some(&b'-')
-                {
-                    return v.score;
-                }
+            if normalized.starts_with(&k_norm)
+                && (normalized.len() == k_norm.len()
+                    || normalized.as_bytes().get(k_norm.len()) == Some(&b'-'))
+            {
+                return v.score;
             }
         }
 

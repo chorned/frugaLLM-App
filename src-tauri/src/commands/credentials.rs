@@ -1,1 +1,1 @@
-pub use crate::db::{set_credential, get_credential, delete_credential, wipe_credentials};
+pub use crate::db::{delete_credential, get_credential, set_credential, wipe_credentials};

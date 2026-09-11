@@ -1,6 +1,6 @@
-use tauri::Manager;
-use crate::telemetry::HardwareProfile;
 use crate::state::*;
+use crate::telemetry::HardwareProfile;
+use tauri::Manager;
 
 pub async fn get_hardware_profile() -> Result<HardwareProfile, String> {
     let is_unified: bool;
@@ -14,7 +14,12 @@ pub async fn get_hardware_profile() -> Result<HardwareProfile, String> {
         os_architecture = format!("macos-{}", std::env::consts::ARCH);
 
         // Query total system RAM via sysctl hw.memsize
-        if let Ok(output) = tokio::process::Command::new("sysctl").arg("-n").arg("hw.memsize").output().await {
+        if let Ok(output) = tokio::process::Command::new("sysctl")
+            .arg("-n")
+            .arg("hw.memsize")
+            .output()
+            .await
+        {
             if output.status.success() {
                 if let Ok(s) = String::from_utf8(output.stdout) {
                     if let Ok(bytes) = s.trim().parse::<u64>() {
@@ -31,12 +36,18 @@ pub async fn get_hardware_profile() -> Result<HardwareProfile, String> {
         } else {
             // Intel Mac: Detect discrete GPU via system_profiler
             is_unified = false;
-            if let Ok(output) = tokio::process::Command::new("system_profiler").arg("SPDisplaysDataType").output().await {
+            if let Ok(output) = tokio::process::Command::new("system_profiler")
+                .arg("SPDisplaysDataType")
+                .output()
+                .await
+            {
                 if output.status.success() {
                     if let Ok(prof_str) = String::from_utf8(output.stdout) {
                         let mut max_vram_mb: u64 = 0;
                         for line in prof_str.lines() {
-                            if line.contains("VRAM (Total):") || line.contains("VRAM (Dynamic, Max):") {
+                            if line.contains("VRAM (Total):")
+                                || line.contains("VRAM (Dynamic, Max):")
+                            {
                                 let parts: Vec<&str> = line.split(':').collect();
                                 if parts.len() > 1 {
                                     let val_str = parts[1].trim();
@@ -118,7 +129,6 @@ pub async fn detect_vram() -> Result<u64, String> {
     }
 }
 
-
 pub fn format_log_entry(level: &str, tag: &str, message: &str) -> String {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -127,7 +137,12 @@ pub fn format_log_entry(level: &str, tag: &str, message: &str) -> String {
     format!("[{}] [{}] [{}] {}\n", now, level, tag, message)
 }
 
-pub fn append_log_entry_to_path(path: &std::path::Path, level: &str, tag: &str, message: &str) -> std::io::Result<()> {
+pub fn append_log_entry_to_path(
+    path: &std::path::Path,
+    level: &str,
+    tag: &str,
+    message: &str,
+) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         if !parent.exists() {
             std::fs::create_dir_all(parent)?;
@@ -169,16 +184,24 @@ pub fn open_app_logs(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     let _ = std::process::Command::new("open").arg(&log_path).spawn();
     #[cfg(target_os = "windows")]
-    let _ = std::process::Command::new("cmd").args(["/C", "start", "", &log_path.to_string_lossy()]).spawn();
+    let _ = std::process::Command::new("cmd")
+        .args(["/C", "start", "", &log_path.to_string_lossy()])
+        .spawn();
     #[cfg(target_os = "linux")]
-    let _ = std::process::Command::new("xdg-open").arg(&log_path).spawn();
+    let _ = std::process::Command::new("xdg-open")
+        .arg(&log_path)
+        .spawn();
     Ok(())
 }
 
-
 pub fn sanitize_diagnostic_logs(raw_logs: &str) -> String {
-    let key_regex = regex::Regex::new(r"(sk-[a-zA-Z0-9_\-]{20,}|AIza[a-zA-Z0-9_\-]{16,}|Bearer\s+[a-zA-Z0-9_\.\-]+)").unwrap();
-    key_regex.replace_all(raw_logs, "[REDACTED_API_KEY]").to_string()
+    let key_regex = regex::Regex::new(
+        r"(sk-[a-zA-Z0-9_\-]{20,}|AIza[a-zA-Z0-9_\-]{16,}|Bearer\s+[a-zA-Z0-9_\.\-]+)",
+    )
+    .unwrap();
+    key_regex
+        .replace_all(raw_logs, "[REDACTED_API_KEY]")
+        .to_string()
 }
 
 #[tauri::command]
@@ -262,19 +285,21 @@ pub async fn submit_issue_report(payload: SubmitIssuePayload) -> Result<String, 
 
     let parsed: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
     if parsed.get("success").and_then(|s| s.as_bool()) == Some(false) {
-        let msg = parsed.get("message").and_then(|m| m.as_str()).unwrap_or("Failed to submit issue report.");
+        let msg = parsed
+            .get("message")
+            .and_then(|m| m.as_str())
+            .unwrap_or("Failed to submit issue report.");
         return Err(msg.to_string());
     }
 
     Ok(body)
 }
 
-
 #[tauri::command]
 pub fn get_local_ips() -> Vec<String> {
     let mut ips = vec!["127.0.0.1".to_string()];
     if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") {
-        if let Ok(_) = socket.connect("8.8.8.8:80") {
+        if socket.connect("8.8.8.8:80").is_ok() {
             if let Ok(addr) = socket.local_addr() {
                 let ip = addr.ip().to_string();
                 if ip != "127.0.0.1" && !ips.contains(&ip) {
@@ -290,5 +315,3 @@ pub fn get_local_ips() -> Vec<String> {
 pub fn restart_app(app: tauri::AppHandle) {
     app.restart();
 }
-
-

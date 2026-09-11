@@ -1,9 +1,15 @@
-use std::sync::Arc;
-use tauri::{Manager, Emitter};
 use crate::commands::agents::get_hermes_source_path;
+use std::sync::Arc;
+use tauri::{Emitter, Manager};
 
 pub struct ChildProcessManager {
     processes: Arc<std::sync::Mutex<std::collections::HashMap<String, u32>>>,
+}
+
+impl Default for ChildProcessManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ChildProcessManager {
@@ -68,14 +74,24 @@ impl ChildProcessManager {
 
         #[cfg(not(windows))]
         {
-            let _ = std::process::Command::new("pkill").args(&["-9", "-f", "hermes dashboard"]).status();
-            let _ = std::process::Command::new("pkill").args(&["-9", "-f", "hermes gateway"]).status();
-            let _ = std::process::Command::new("pkill").args(&["-9", "-f", "hermes desktop"]).status();
-            let _ = std::process::Command::new("pkill").args(&["-9", "-f", "hermes serve"]).status();
+            let _ = std::process::Command::new("pkill")
+                .args(["-9", "-f", "hermes dashboard"])
+                .status();
+            let _ = std::process::Command::new("pkill")
+                .args(["-9", "-f", "hermes gateway"])
+                .status();
+            let _ = std::process::Command::new("pkill")
+                .args(["-9", "-f", "hermes desktop"])
+                .status();
+            let _ = std::process::Command::new("pkill")
+                .args(["-9", "-f", "hermes serve"])
+                .status();
         }
         #[cfg(windows)]
         {
-            let _ = std::process::Command::new("taskkill").args(&["/IM", "hermes.exe", "/F", "/T"]).status();
+            let _ = std::process::Command::new("taskkill")
+                .args(&["/IM", "hermes.exe", "/F", "/T"])
+                .status();
         }
     }
 }
@@ -100,25 +116,23 @@ pub fn kill_pid_and_children(pid: u32) {
     {
         // First send SIGTERM to children and parent
         let _ = std::process::Command::new("pkill")
-            .args(&["-TERM", "-P", &pid.to_string()])
+            .args(["-TERM", "-P", &pid.to_string()])
             .status();
         let _ = std::process::Command::new("kill")
-            .args(&["-TERM", &pid.to_string()])
+            .args(["-TERM", &pid.to_string()])
             .status();
 
         std::thread::sleep(std::time::Duration::from_millis(50));
 
         // Follow with SIGKILL
         let _ = std::process::Command::new("pkill")
-            .args(&["-9", "-P", &pid.to_string()])
+            .args(["-9", "-P", &pid.to_string()])
             .status();
         let _ = std::process::Command::new("kill")
-            .args(&["-9", &pid.to_string()])
+            .args(["-9", &pid.to_string()])
             .status();
     }
 }
-
-
 
 pub async fn spawn_hermes_child(
     app: &tauri::AppHandle,
@@ -129,7 +143,11 @@ pub async fn spawn_hermes_child(
 ) -> Result<u32, String> {
     let home = app.path().home_dir().map_err(|e| e.to_string())?;
     let hermes_bin = get_hermes_source_path(&home).unwrap_or_else(|| {
-        std::path::PathBuf::from(if cfg!(windows) { "hermes.exe" } else { "hermes" })
+        std::path::PathBuf::from(if cfg!(windows) {
+            "hermes.exe"
+        } else {
+            "hermes"
+        })
     });
 
     let subcmd = match service {
@@ -141,9 +159,12 @@ pub async fn spawn_hermes_child(
     let mut cmd = tokio::process::Command::new(&hermes_bin);
     cmd.arg(subcmd);
     // Explicitly bind to 127.0.0.1 for local isolation and security
-    cmd.args(&["--host", "127.0.0.1"]);
+    cmd.args(["--host", "127.0.0.1"]);
     cmd.env("OPENAI_API_BASE", format!("http://127.0.0.1:{}/v1", port));
-    cmd.env("OPENAI_API_KEY", api_pwd.unwrap_or_else(|| "frugallm".to_string()));
+    cmd.env(
+        "OPENAI_API_KEY",
+        api_pwd.unwrap_or_else(|| "frugallm".to_string()),
+    );
 
     let hermes_bin_dir = home.join(".hermes").join("bin");
     let local_bin_dir = home.join(".local").join("bin");
@@ -175,8 +196,12 @@ pub async fn spawn_hermes_child(
     cmd.stdout(std::process::Stdio::null());
     cmd.stderr(std::process::Stdio::null());
 
-    let mut child = cmd.spawn().map_err(|e| format!("Failed to spawn hermes {}: {}", subcmd, e))?;
-    let pid = child.id().ok_or_else(|| "Failed to get child PID".to_string())?;
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to spawn hermes {}: {}", subcmd, e))?;
+    let pid = child
+        .id()
+        .ok_or_else(|| "Failed to get child PID".to_string())?;
 
     let service_key = format!("hermes-{}", subcmd);
     process_state.register(service_key.clone(), pid);
@@ -187,9 +212,11 @@ pub async fn spawn_hermes_child(
     tokio::spawn(async move {
         let _ = child.wait().await;
         process_state_clone.unregister(&service_key_clone);
-        let _ = app_clone.emit("service_exit", serde_json::json!({ "service": service_key_clone }));
+        let _ = app_clone.emit(
+            "service_exit",
+            serde_json::json!({ "service": service_key_clone }),
+        );
     });
 
     Ok(pid)
 }
-
