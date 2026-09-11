@@ -1336,3 +1336,45 @@ use std::collections::{HashMap, HashSet};
         assert!(hermes_bin.to_string_lossy().contains(".hermes"));
         assert!(opencode_bin.to_string_lossy().contains(".opencode"));
     }
+
+    #[tokio::test]
+    async fn test_get_hardware_profile() {
+        use crate::commands::system::get_hardware_profile;
+        let profile = get_hardware_profile().await.expect("hardware profile query should succeed");
+        assert!(!profile.os_architecture.is_empty());
+        assert!(profile.execution_ceiling > 0);
+        #[cfg(target_os = "macos")]
+        {
+            assert!(profile.os_architecture.starts_with("macos-"));
+            assert!(profile.system_ram > 0);
+        }
+    }
+
+    #[test]
+    fn test_hermes_config_and_soul_borrowed_writes() {
+        use crate::commands::agents::get_default_soul_template;
+        let temp_dir = tempfile::tempdir().unwrap();
+        let hermes_dir = temp_dir.path().join(".hermes");
+        fs::create_dir_all(&hermes_dir).unwrap();
+
+        let port = 11434;
+        let config_path = hermes_dir.join("config.yaml");
+        let config_content = format!("model:\n  default: \"frugallm\"\n  provider: \"custom\"\n  base_url: \"http://127.0.0.1:{}/v1\"\n", port);
+        fs::write(&config_path, &config_content).unwrap();
+
+        let soul_path = hermes_dir.join("soul.md");
+        let soul_content = get_default_soul_template();
+        fs::write(&soul_path, soul_content).unwrap();
+
+        // Secondary write using the borrowed references (as done on Windows/multi-target)
+        let win_hermes_dir = temp_dir.path().join("localappdata").join("hermes");
+        fs::create_dir_all(&win_hermes_dir).unwrap();
+        fs::write(win_hermes_dir.join("config.yaml"), &config_content).unwrap();
+        fs::write(win_hermes_dir.join("soul.md"), soul_content).unwrap();
+
+        assert_eq!(fs::read_to_string(&config_path).unwrap(), config_content);
+        assert_eq!(fs::read_to_string(&soul_path).unwrap(), soul_content);
+        assert_eq!(fs::read_to_string(win_hermes_dir.join("config.yaml")).unwrap(), config_content);
+        assert_eq!(fs::read_to_string(win_hermes_dir.join("soul.md")).unwrap(), soul_content);
+    }
+
