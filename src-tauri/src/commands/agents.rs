@@ -228,12 +228,14 @@ pub async fn check_ollama_status() -> bool {
     // 2. Check if the binary is found and executes successfully
     let bin = get_ollama_binary();
     if bin.exists() || bin.file_name().is_some() {
-        if std::process::Command::new(&bin)
-            .arg("--version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
+        let mut cmd = std::process::Command::new(&bin);
+        cmd.arg("--version");
+        #[cfg(target_os = "windows")]
         {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000);
+        }
+        if cmd.output().map(|o| o.status.success()).unwrap_or(false) {
             return true;
         }
     }
@@ -830,76 +832,98 @@ pub async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), Strin
 
     #[cfg(target_os = "windows")]
     {
-        use tokio::io::AsyncWriteExt;
-        let temp_dir = std::env::temp_dir();
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis())
-            .unwrap_or(0);
-        let installer_path = temp_dir.join(format!("OllamaSetup_{}_{}.exe", std::process::id(), timestamp));
-        
-        log_event(app, "INFO", "OLLAMA", &format!("Downloading Ollama Windows installer from ollama.com to {:?}", installer_path));
-        
-        let client = reqwest::Client::new();
-        let mut response = client.get("https://ollama.com/download/OllamaSetup.exe")
-            .send()
-            .await
-            .map_err(|e| {
-                let err = format!("Failed to download Ollama installer: {}", e);
-                log_event(app, "ERROR", "OLLAMA", &err);
-                err
-            })?;
-        
-        if !response.status().is_success() {
-            let err = format!("Failed to download Ollama installer: HTTP {}", response.status());
-            log_event(app, "ERROR", "OLLAMA", &err);
-            return Err(err);
-        }
+        use tokio::io::AsyncBufReadExt;
+        #[cfg(target_os = "windows")]
+        use std::os::windows::process::CommandExt;
 
-        // Scope the file handle so it is fully flushed, shut down, and dropped before executing.
-        // In Windows, attempting to execute a binary with an active write handle fails with
-        // ERROR_SHARING_VIOLATION (os error 32).
-        {
-            let mut file = tokio::fs::File::create(&installer_path).await.map_err(|e| {
-                let err = format!("Failed to create temporary installer file {:?}: {}", installer_path, e);
-                log_event(app, "ERROR", "OLLAMA", &err);
-                err
-            })?;
-            while let Some(chunk) = response.chunk().await.map_err(|e| {
-                let err = format!("Error reading installer download stream: {}", e);
-                log_event(app, "ERROR", "OLLAMA", &err);
-                err
-            })? {
-                file.write_all(&chunk).await.map_err(|e| {
-                    let err = format!("Error writing installer data to disk: {}", e);
-                    log_event(app, "ERROR", "OLLAMA", &err);
-                    err
-                })?;
+        log_event(app, "INFO", "OLLAMA", "Preparing seamless Ollama installation for Windows via PowerShell");
+
+        // The PowerShell script ensures:
+        // 1. Any hung or open `ollama app` / `ollama` processes from previous attempts are cleanly stopped.
+        // 2. The official Ollama `%LOCALAPPDATA%\Ollama\upgraded` marker file is created BEFORE installation.
+        //    Ollama's app specifically checks for this marker to know it was installed headlessly/as an upgrade,
+        //    completely suppressing the "Run Ollama" first-time onboarding GUI window.
+        // 3. The installer is downloaded and executed silently via Start-Process with -PassThru and WaitForExit(),
+        //    waiting strictly for the installer itself and NOT child processes, preventing process hangs.
+        // 4. PATH is updated for the user session so `ollama.exe` is immediately available.
+        let script = r#"
+            $ErrorActionPreference = 'Stop';
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
+            $ProgressPreference = 'SilentlyContinue';
+
+            Get-Process -Name 'ollama app', 'ollama' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue;
+
+            $markerDir = Join-Path $env:LOCALAPPDATA 'Ollama';
+            if (!(Test-Path $markerDir)) { New-Item -ItemType Directory -Path $markerDir -Force | Out-Null };
+            New-Item -ItemType File -Path (Join-Path $markerDir 'upgraded') -Force | Out-Null;
+
+            Write-Host '>>> Initializing Ollama installation for Windows...';
+            $tempInstaller = Join-Path $env:TEMP ('OllamaSetup_' + (Get-Random) + '.exe');
+            try {
+                Write-Host '>>> Downloading Ollama installer from ollama.com...';
+                Invoke-WebRequest -Uri 'https://ollama.com/download/OllamaSetup.exe' -OutFile $tempInstaller -UseBasicParsing;
+                Write-Host '>>> Installing Ollama Engine silently...';
+                $proc = Start-Process -FilePath $tempInstaller -ArgumentList '/VERYSILENT /NORESTART /CLOSEAPPLICATIONS /SUPPRESSMSGBOXES' -PassThru;
+                $proc.WaitForExit();
+                if ($proc.ExitCode -ne 0) {
+                    throw ('Installer exited with code ' + $proc.ExitCode);
+                }
+                Write-Host '>>> Ollama Engine installed successfully.';
+            } finally {
+                Remove-Item -Force $tempInstaller -ErrorAction SilentlyContinue;
             }
-            file.flush().await.map_err(|e| {
-                let err = format!("Failed to flush installer file: {}", e);
-                log_event(app, "ERROR", "OLLAMA", &err);
-                err
-            })?;
-            let _ = file.shutdown().await;
+
+            $ollamaProgDir = Join-Path $env:LOCALAPPDATA 'Programs\Ollama';
+            if (Test-Path $ollamaProgDir) {
+                $userPath = [Environment]::GetEnvironmentVariable('Path', 'User');
+                if ($userPath -notlike ('*' + $ollamaProgDir + '*')) {
+                    [Environment]::SetEnvironmentVariable('Path', ($ollamaProgDir + ';' + $userPath), 'User');
+                }
+            }
+            Write-Host '>>> Install complete. Run ''ollama'' from the command line.';
+        "#;
+
+        let mut cmd = tokio::process::Command::new("powershell.exe");
+        cmd.args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script]);
+        cmd.stdout(std::process::Stdio::piped());
+        cmd.stderr(std::process::Stdio::piped());
+        cmd.creation_flags(0x08000000);
+
+        let mut child = cmd.spawn().map_err(|e| {
+            let err = format!("Failed to spawn PowerShell Ollama installer: {}", e);
+            log_event(app, "ERROR", "OLLAMA", &err);
+            err
+        })?;
+
+        let app_clone = app.clone();
+        if let Some(stdout) = child.stdout.take() {
+            let mut reader = tokio::io::BufReader::new(stdout).lines();
+            let app_inner = app_clone.clone();
+            tokio::spawn(async move {
+                while let Ok(Some(line)) = reader.next_line().await {
+                    let _ = app_inner.emit("download_progress", DownloadProgress { status: format!("{}\r\n", line) });
+                }
+            });
         }
 
-        log_event(app, "INFO", "OLLAMA", &format!("Running silent installer at {:?}", installer_path));
+        if let Some(stderr) = child.stderr.take() {
+            let mut reader = tokio::io::BufReader::new(stderr).lines();
+            let app_inner = app_clone;
+            tokio::spawn(async move {
+                while let Ok(Some(line)) = reader.next_line().await {
+                    let _ = app_inner.emit("download_progress", DownloadProgress { status: format!("{}\r\n", line) });
+                }
+            });
+        }
 
-        let status = tokio::process::Command::new(&installer_path)
-            .args(["/VERYSILENT", "/NORESTART", "/CLOSEAPPLICATIONS", "/SUPPRESSMSGBOXES"])
-            .status()
-            .await
-            .map_err(|e| {
-                let err = format!("Failed to execute Ollama installer: {}", e);
-                log_event(app, "ERROR", "OLLAMA", &err);
-                err
-            })?;
-
-        let _ = tokio::fs::remove_file(&installer_path).await;
+        let status = child.wait().await.map_err(|e| {
+            let err = format!("Error waiting for PowerShell Ollama installer: {}", e);
+            log_event(app, "ERROR", "OLLAMA", &err);
+            err
+        })?;
 
         if !status.success() {
-            let err = format!("Ollama installer exited with error code: {:?}", status.code());
+            let err = format!("Ollama installation script failed with status {:?}", status.code());
             log_event(app, "ERROR", "OLLAMA", &err);
             return Err(err);
         }
@@ -947,17 +971,21 @@ pub async fn start_ollama_daemon(app: &tauri::AppHandle) -> Result<(), String> {
     log_event(app, "INFO", "OLLAMA", &format!("Spawning Ollama daemon with binary {:?}", ollama_bin));
 
     // Spawn daemon in background — pipe stderr so we can stream boot logs
-    let mut child = tokio::process::Command::new(ollama_bin)
-        .arg("serve")
+    let mut cmd = tokio::process::Command::new(ollama_bin);
+    cmd.arg("serve")
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::piped())
-        .kill_on_drop(false)
-        .spawn()
-        .map_err(|e| {
-            let err = format!("Failed to spawn Ollama daemon: {}", e);
-            log_event(app, "ERROR", "OLLAMA", &err);
-            err
-        })?;
+        .kill_on_drop(false);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+    }
+    let mut child = cmd.spawn().map_err(|e| {
+        let err = format!("Failed to spawn Ollama daemon: {}", e);
+        log_event(app, "ERROR", "OLLAMA", &err);
+        err
+    })?;
 
     // Stream daemon stderr to the frontend in a detached task (never blocks main flow)
     if let Some(stderr) = child.stderr.take() {
@@ -1129,15 +1157,20 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
 
         let ollama_bin = get_ollama_binary();
         log_event(&app_clone, "INFO", "OLLAMA", &format!("Creating frugallm-active model using binary {:?}", ollama_bin));
-        let child_res = tokio::process::Command::new(ollama_bin)
-            .current_dir(&models_dir)
+        let mut cmd = tokio::process::Command::new(ollama_bin);
+        cmd.current_dir(&models_dir)
             .arg("create")
             .arg("frugallm-active")
             .arg("-f")
             .arg("./Modelfile")
             .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn();
+            .stderr(std::process::Stdio::piped());
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000);
+        }
+        let child_res = cmd.spawn();
 
         let mut child = match child_res {
             Ok(c) => c,

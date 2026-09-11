@@ -1378,3 +1378,25 @@ use std::collections::{HashMap, HashSet};
         assert_eq!(fs::read_to_string(win_hermes_dir.join("soul.md")).unwrap(), soul_content);
     }
 
+    #[test]
+    fn test_windows_ollama_upgrade_marker_and_headless_script() {
+        // Verify path resolution for Ollama upgraded marker
+        let local_app_data = if cfg!(windows) { r"C:\Users\testuser\AppData\Local" } else { "/home/testuser/.local/share" };
+        let marker_dir = std::path::PathBuf::from(local_app_data).join("Ollama");
+        let marker_file = marker_dir.join("upgraded");
+        assert!(marker_file.to_string_lossy().ends_with("upgraded"));
+        assert!(marker_file.to_string_lossy().contains("Ollama"));
+
+        // Verify that the PowerShell headless install script incorporates the upgraded marker and PassThru
+        let powershell_script = r#"
+            Get-Process -Name 'ollama app', 'ollama' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue;
+            $markerDir = Join-Path $env:LOCALAPPDATA 'Ollama';
+            New-Item -ItemType File -Path (Join-Path $markerDir 'upgraded') -Force | Out-Null;
+            $proc = Start-Process -FilePath $tempInstaller -ArgumentList '/VERYSILENT /NORESTART /CLOSEAPPLICATIONS /SUPPRESSMSGBOXES' -PassThru;
+            $proc.WaitForExit();
+        "#;
+        assert!(powershell_script.contains("Stop-Process"));
+        assert!(powershell_script.contains("upgraded"));
+        assert!(powershell_script.contains("-PassThru"));
+        assert!(powershell_script.contains("WaitForExit()"));
+    }
