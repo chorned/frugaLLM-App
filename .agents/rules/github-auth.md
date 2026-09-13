@@ -2,14 +2,41 @@
 
 If the user provides a GitHub token (PAT) for pushing code or creating releases, and standard authentication (e.g. `gh auth login`) fails due to missing scopes like `read:org`, do not fail the workflow. Instead, use the following workarounds:
 
+## Token Location (.env)
+The GitHub Personal Access Token for user `hermeshorned` is stored in the project root [.env](file:///c:/Users/chorned/projects/frugaLLM-App/.env) file (which is strictly `.gitignore`d):
+```env
+GITHUB_USER=hermeshorned
+GITHUB_TOKEN=ghp_...
+GH_TOKEN=ghp_...
+```
+
 1. **For GitHub CLI (`gh`) Commands:** 
-   Bypass authentication by injecting the token directly as an environment variable for the specific command.
-   *Example:* `GH_TOKEN=<token> gh release create ...`
+   Extract and pass `GH_TOKEN` directly from `.env`:
+   
+   *PowerShell (Windows):*
+   ```powershell
+   $env:GH_TOKEN = (Get-Content .env | Select-String '^GH_TOKEN=').Line.Split('=', 2)[1].Trim()
+   gh release create ...
+   ```
+   
+   *Bash (macOS / Linux):*
+   ```bash
+   GH_TOKEN=$(grep '^GH_TOKEN=' .env | cut -d '=' -f2-) gh release create ...
+   ```
 
 2. **For Git Commands (`git push`, etc.):** 
-   Update the repository's remote URL to include the token for basic auth, then execute the push.
-   *Example:* 
+   Inject user `hermeshorned` and the token from `.env` into the remote URL:
+   
+   *PowerShell (Windows):*
+   ```powershell
+   $token = (Get-Content .env | Select-String '^GITHUB_TOKEN=').Line.Split('=', 2)[1].Trim()
+   git remote set-url origin "https://hermeshorned:${token}@github.com/chorned/frugaLLM-App.git"
+   git push origin main
+   ```
+   
+   *Bash (macOS / Linux):*
    ```bash
-   git remote set-url origin https://<username>:<token>@github.com/<owner>/<repo>.git
+   TOKEN=$(grep '^GITHUB_TOKEN=' .env | cut -d '=' -f2-)
+   git remote set-url origin "https://hermeshorned:${TOKEN}@github.com/chorned/frugaLLM-App.git"
    git push origin main
    ```

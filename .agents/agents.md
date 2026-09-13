@@ -18,7 +18,12 @@ We are building a local-first application that MUST run seamlessly across **Wind
 *   **Host Architecture:** The primary developer environment is **macOS running an Intel chip (x86_64)**, NOT Apple Silicon. Do not write scripts assuming `arm64`, `M1/M2/M3`, or `asitop` compatibility.
 *   **OS-Agnostic Code:** Never hardcode file paths (always use native path joining). Never rely on OS-specific shell commands for core logic.
 *   **Hardware Telemetry:** Rely strictly on cross-platform abstraction libraries for polling GPU VRAM and CPU metrics.
+*   **Cross-Platform Architecture & Guidelines:** Refer to [.agents/ARCHITECTURE.md](file:///c:/Users/chorned/projects/frugaLLM-App/.agents/ARCHITECTURE.md) for full subsystem details and the `windows-development` skill ([SKILL.md](file:///c:/Users/chorned/projects/frugaLLM-App/.agents/skills/windows-development/SKILL.md)) for surgical Windows engineering rules.
 *   **Graceful Degradation:** If local daemons (like Ollama) or hardware telemetry APIs are unreachable, the app must gracefully report an "offline" state, not crash.
+*   **Parallel Build Isolation (`target_test`):** When `npm run tauri dev` is running, the `src-tauri/target/` directory is locked by Cargo. Always execute backend tests using `npm run test:rust` (which isolates compilation to `src-tauri/target_test/`) rather than running raw `cargo test` in `src-tauri`.
+*   **ConPTY Stream Non-Blocking:** In Windows pseudo-terminals (`portable_pty`), reading threads must never block synchronously on EOF. Use non-blocking reads or terminate immediately upon child process exit.
+*   **Silent Process Tree Termination:** Never allow `taskkill` to print `ERROR: The process not found` to stderr during shutdown or wipe routines. Route stderr to `Stdio::null()`.
+*   **Whitespace & Path Quoting:** Windows paths frequently contain spaces (e.g. `AppData\Local`). Always quote paths in PowerShell commands and use `std::path::PathBuf` in Rust.
 
 # 3. Frontend Architecture (The V2 Refactor)
 We are undergoing a massive UI redesign using the **Strangler Fig Pattern**.
