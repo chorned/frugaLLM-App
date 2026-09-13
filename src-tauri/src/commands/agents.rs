@@ -501,19 +501,12 @@ pub async fn uninstall_ollama(app: tauri::AppHandle) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
-        let mut k1 = tokio::process::Command::new("taskkill");
-        k1.args(["/F", "/IM", "ollama.exe", "/T"])
+        let mut kill = tokio::process::Command::new("taskkill");
+        kill.args(["/F", "/T", "/IM", "ollama.exe", "/IM", "ollama app.exe", "/IM", "ollama_llama_server.exe"])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .creation_flags(0x08000000);
-        let _ = k1.output().await;
-
-        let mut k2 = tokio::process::Command::new("taskkill");
-        k2.args(["/F", "/IM", "ollama app.exe", "/T"])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .creation_flags(0x08000000);
-        let _ = k2.output().await;
+        let _ = kill.output().await;
 
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
             let p = std::path::PathBuf::from(&local_app_data).join("Programs").join("Ollama");
@@ -1035,7 +1028,7 @@ pub async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), Strin
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
             $ProgressPreference = 'SilentlyContinue';
 
-            Get-Process -Name 'ollama app', 'ollama' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue;
+            Get-Process -Name 'ollama app', 'ollama', 'ollama_llama_server' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue;
 
             $markerDir = Join-Path $env:LOCALAPPDATA 'Ollama';
             if (!(Test-Path $markerDir)) { New-Item -ItemType Directory -Path $markerDir -Force | Out-Null };
@@ -1345,14 +1338,48 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
             }
         }
 
+        // Stage 2: Verification Gate - poll /api/tags to ensure base model is present locally
+        log_event(&app_clone, "INFO", "OLLAMA", &format!("Stage 2: Verifying downloaded base model {} is registered in Ollama", tag_clone));
+        let mut model_verified = false;
+        for attempt in 1..=30 {
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+            if let Ok(tags_res) = client.get("http://127.0.0.1:11434/api/tags").send().await {
+                if let Ok(tags_json) = tags_res.json::<serde_json::Value>().await {
+                    if let Some(models) = tags_json.get("models").and_then(|m| m.as_array()) {
+                        for m in models {
+                            let name = m.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                            let model_name = m.get("model").and_then(|n| n.as_str()).unwrap_or("");
+                            if name == tag_clone || name.starts_with(&format!("{}:", tag_clone)) || model_name == tag_clone || name.contains(&tag_clone) {
+                                model_verified = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            if model_verified {
+                log_event(&app_clone, "INFO", "OLLAMA", &format!("Stage 2: Base model {} verified in local tags on attempt {}", tag_clone, attempt));
+                break;
+            }
+        }
+        if !model_verified {
+            log_event(&app_clone, "WARN", "OLLAMA", &format!("Stage 2: Base model {} not yet detected in tags after 15s; proceeding with creation attempt", tag_clone));
+        }
+
+        // Stage 3: Modelfile Build
         let ollama_bin = get_ollama_binary();
-        log_event(&app_clone, "INFO", "OLLAMA", &format!("Creating frugallm-active model using binary {:?}", ollama_bin));
+        let modelfile_path_str = if cfg!(windows) {
+            modelfile_path.to_string_lossy().replace('\\', "/")
+        } else {
+            modelfile_path.to_string_lossy().to_string()
+        };
+        log_event(&app_clone, "INFO", "OLLAMA", &format!("Stage 3: Creating frugallm-active model using binary {:?} and Modelfile {:?}", ollama_bin, modelfile_path_str));
         let mut cmd = tokio::process::Command::new(ollama_bin);
         cmd.current_dir(&models_dir)
             .arg("create")
             .arg("frugallm-active")
             .arg("-f")
-            .arg("./Modelfile")
+            .arg(&modelfile_path_str)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
         #[cfg(target_os = "windows")]
@@ -1394,19 +1421,30 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
 
         match child.wait().await {
             Ok(status) if status.success() => {
-                log_event(&app_clone, "INFO", "OLLAMA", "frugallm-active model created successfully. Pre-warming model...");
-                // Hot loading dummy API call
+                log_event(&app_clone, "INFO", "OLLAMA", "Stage 4: frugallm-active created successfully. Pre-warming and locking in VRAM for 60m...");
                 let client = reqwest::Client::new();
-                let hot_load_payload = serde_json::json!({
+                let warmup_payload = serde_json::json!({
                     "model": "frugallm-active",
-                    "prompt": "",
-                    "keep_alive": -1
+                    "prompt": "hi",
+                    "keep_alive": "60m"
                 });
                 
-                let _ = client.post("http://127.0.0.1:11434/api/generate")
-                    .json(&hot_load_payload)
+                let warmup_res = client.post("http://127.0.0.1:11434/api/generate")
+                    .json(&warmup_payload)
                     .send()
                     .await;
+
+                match warmup_res {
+                    Ok(res) if res.status().is_success() => {
+                        log_event(&app_clone, "INFO", "OLLAMA", "Warmup successful, frugallm-active locked in VRAM");
+                    },
+                    Ok(res) => {
+                        log_event(&app_clone, "WARN", "OLLAMA", &format!("Warmup returned non-success status: {}", res.status()));
+                    },
+                    Err(e) => {
+                        log_event(&app_clone, "WARN", "OLLAMA", &format!("Warmup request error: {}", e));
+                    }
+                }
 
                 log_event(&app_clone, "INFO", "OLLAMA", "Local model deployment complete and ready for inference");
                 let _ = app_clone.emit("model_deployment_complete", DeploymentResult { success: true, message: "Success".to_string() });

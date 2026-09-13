@@ -1363,6 +1363,26 @@ use std::collections::{HashMap, HashSet};
             assert!(profile.os_architecture.starts_with("macos-"));
             assert!(profile.system_ram > 0);
         }
+        #[cfg(target_os = "windows")]
+        {
+            assert!(profile.os_architecture.starts_with("windows-"));
+            assert!(!profile.is_unified);
+            assert!(profile.system_ram > 0);
+        }
+    }
+
+    #[test]
+    fn test_parse_registry_vram_output() {
+        use crate::commands::system::parse_registry_vram_output;
+        let sample = r#"
+HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\0000
+    HardwareInformation.qwMemorySize    REG_QWORD    0x100000000
+
+HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\0001
+    HardwareInformation.qwMemorySize    REG_QWORD    0x3fb700000
+"#;
+        let vram = parse_registry_vram_output(sample);
+        assert_eq!(vram, 17103323136); // Max QWORD ~16 GB (0x3fb700000)
     }
 
     #[test]

@@ -4,6 +4,7 @@ use crate::state::*;
 
 pub async fn get_hardware_profile() -> Result<HardwareProfile, String> {
     let is_unified: bool;
+    #[allow(unused_assignments)]
     let mut dedicated_vram: u64 = 0;
     #[allow(unused_mut)]
     let mut system_ram: u64;
@@ -63,7 +64,19 @@ pub async fn get_hardware_profile() -> Result<HardwareProfile, String> {
         }
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        os_architecture = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
+        is_unified = false;
+
+        let mut sys = sysinfo::System::new_all();
+        sys.refresh_memory();
+        system_ram = sys.total_memory();
+
+        dedicated_vram = detect_windows_discrete_vram().await;
+    }
+
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
     {
         os_architecture = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
         is_unified = false;
@@ -118,6 +131,106 @@ pub async fn detect_vram() -> Result<u64, String> {
     } else {
         Ok(profile.system_ram / 1024 / 1024)
     }
+}
+
+pub fn parse_registry_vram_output(output: &str) -> u64 {
+    let mut max_bytes = 0u64;
+    for line in output.lines() {
+        if line.contains("REG_QWORD") || line.contains("REG_DWORD") {
+            if let Some(val_str) = line.split_whitespace().last() {
+                let hex_str = val_str.trim().trim_start_matches("0x").trim_start_matches("0X");
+                if let Ok(bytes) = u64::from_str_radix(hex_str, 16) {
+                    if bytes > max_bytes {
+                        max_bytes = bytes;
+                    }
+                }
+            }
+        }
+    }
+    max_bytes
+}
+
+#[cfg(target_os = "windows")]
+pub async fn detect_windows_discrete_vram() -> u64 {
+    // Tier 1: Try NVIDIA NVML first
+    use nvml_wrapper::Nvml;
+    if let Ok(nvml) = Nvml::init() {
+        if let Ok(device) = nvml.device_by_index(0) {
+            if let Ok(memory) = device.memory_info() {
+                if memory.total > 0 {
+                    return memory.total;
+                }
+            }
+        }
+    }
+
+    // Tier 2: Query 64-bit HardwareInformation.qwMemorySize from Windows Registry (NVIDIA, AMD Radeon, Intel Arc)
+    if let Ok(output) = tokio::process::Command::new("reg")
+        .args([
+            "query",
+            r"HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}",
+            "/s",
+            "/v",
+            "HardwareInformation.qwMemorySize",
+        ])
+        .creation_flags(0x08000000)
+        .output()
+        .await
+    {
+        if output.status.success() {
+            if let Ok(stdout) = String::from_utf8(output.stdout) {
+                let max_bytes = parse_registry_vram_output(&stdout);
+                if max_bytes > 0 {
+                    return max_bytes;
+                }
+            }
+        }
+    }
+
+    // Tier 3: Query nvidia-smi if available in PATH
+    if let Ok(output) = tokio::process::Command::new("nvidia-smi")
+        .args(["--query-gpu=memory.total", "--format=csv,noheader,nounits"])
+        .creation_flags(0x08000000)
+        .output()
+        .await
+    {
+        if output.status.success() {
+            if let Ok(stdout) = String::from_utf8(output.stdout) {
+                for line in stdout.lines() {
+                    if let Ok(mib) = line.trim().parse::<u64>() {
+                        if mib > 0 {
+                            return mib * 1024 * 1024;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Tier 4: Fallback to PowerShell CIM Win32_VideoController AdapterRAM
+    if let Ok(output) = tokio::process::Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Measure-Object -Property AdapterRAM -Maximum).Maximum",
+        ])
+        .creation_flags(0x08000000)
+        .output()
+        .await
+    {
+        if output.status.success() {
+            if let Ok(stdout) = String::from_utf8(output.stdout) {
+                if let Ok(bytes) = stdout.trim().parse::<u64>() {
+                    if bytes > 0 {
+                        return bytes;
+                    }
+                }
+            }
+        }
+    }
+
+    0
 }
 
 
