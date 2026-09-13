@@ -5,6 +5,7 @@ use crate::state::*;
 pub async fn get_hardware_profile() -> Result<HardwareProfile, String> {
     let is_unified: bool;
     let mut dedicated_vram: u64 = 0;
+    #[allow(unused_mut)]
     let mut system_ram: u64;
     let os_architecture: String;
 

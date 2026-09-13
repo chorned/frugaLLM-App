@@ -75,7 +75,13 @@ impl ChildProcessManager {
         }
         #[cfg(windows)]
         {
-            let _ = std::process::Command::new("taskkill").args(&["/IM", "hermes.exe", "/F", "/T"]).status();
+            use std::os::windows::process::CommandExt;
+            let mut cmd = std::process::Command::new("taskkill");
+            cmd.args(&["/IM", "hermes.exe", "/F", "/T"])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .creation_flags(0x08000000);
+            let _ = cmd.status();
         }
     }
 }
@@ -92,9 +98,13 @@ pub fn kill_pid_and_children(pid: u32) {
     }
     #[cfg(windows)]
     {
-        let _ = std::process::Command::new("taskkill")
-            .args(&["/F", "/T", "/PID", &pid.to_string()])
-            .status();
+        use std::os::windows::process::CommandExt;
+        let mut cmd = std::process::Command::new("taskkill");
+        cmd.args(&["/F", "/T", "/PID", &pid.to_string()])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .creation_flags(0x08000000);
+        let _ = cmd.status();
     }
     #[cfg(not(windows))]
     {
@@ -191,6 +201,11 @@ pub async fn spawn_hermes_child(
 
     cmd.stdout(std::process::Stdio::null());
     cmd.stderr(std::process::Stdio::null());
+
+    #[cfg(target_os = "windows")]
+    {
+        cmd.creation_flags(0x08000000);
+    }
 
     let mut child = cmd.spawn().map_err(|e| format!("Failed to spawn hermes {}: {}", subcmd, e))?;
     let pid = child.id().ok_or_else(|| "Failed to get child PID".to_string())?;

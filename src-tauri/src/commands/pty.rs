@@ -48,13 +48,25 @@ pub fn spawn_pty(
             let hermes_local_appdata = local_appdata.join("hermes").join("bin");
             let opencode_local_appdata = local_appdata.join("Programs").join("opencode");
             let ollama_local_appdata = local_appdata.join("Programs").join("Ollama");
+            let appdata = std::env::var("APPDATA")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|_| home.join("AppData").join("Roaming"));
+            let npm_appdata = appdata.join("npm");
+            let prog_files = std::env::var("ProgramFiles")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|_| std::path::PathBuf::from("C:\\Program Files"));
+            let ollama_prog_files = prog_files.join("Ollama");
             format!(
-                "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}",
+                "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}",
                 hermes_local_appdata.display(),
                 sep,
                 opencode_local_appdata.display(),
                 sep,
+                npm_appdata.display(),
+                sep,
                 ollama_local_appdata.display(),
+                sep,
+                ollama_prog_files.display(),
                 sep,
                 local_bin.display(),
                 sep,

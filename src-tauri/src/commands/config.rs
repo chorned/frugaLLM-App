@@ -272,10 +272,10 @@ pub fn set_global_cli_commands(app: tauri::AppHandle, enabled: bool) -> Result<(
 }
 
 #[tauri::command]
-pub fn get_global_cli_commands_status(app: tauri::AppHandle) -> Result<bool, String> {
+pub fn get_global_cli_commands_status(_app: tauri::AppHandle) -> Result<bool, String> {
     #[cfg(unix)]
     {
-        let home = app.path().home_dir().map_err(|e| e.to_string())?;
+        let home = _app.path().home_dir().map_err(|e| e.to_string())?;
         let local_bin_hermes = home.join(".local").join("bin").join("hermes");
         if local_bin_hermes.exists() || local_bin_hermes.symlink_metadata().is_ok() {
             return Ok(true);

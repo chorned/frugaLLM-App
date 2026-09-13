@@ -293,7 +293,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                   </span>
                 </Tooltip>
                 <span data-testid="frugallm-session-tokens" style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--zen-text)' }}>
-                  {((frugalConfig?.input_tokens_session || 0) + (frugalConfig?.output_tokens_session || 0) + (frugalConfig?.cached_tokens_session || 0)).toLocaleString()}
+                  {((frugalConfig?.input_tokens_session || 0) + (frugalConfig?.output_tokens_session || 0) + (frugalConfig?.cached_tokens_session || 0)).toLocaleString('en-US')}
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -307,7 +307,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                   </span>
                 </Tooltip>
                 <span data-testid="frugallm-total-tokens" style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--zen-text)' }}>
-                  {((frugalConfig?.input_tokens_lifetime || 0) + (frugalConfig?.output_tokens_lifetime || 0) + (frugalConfig?.cached_tokens_lifetime || 0)).toLocaleString()}
+                  {((frugalConfig?.input_tokens_lifetime || 0) + (frugalConfig?.output_tokens_lifetime || 0) + (frugalConfig?.cached_tokens_lifetime || 0)).toLocaleString('en-US')}
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

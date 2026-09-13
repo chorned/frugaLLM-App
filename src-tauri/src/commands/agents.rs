@@ -8,16 +8,15 @@ use crate::commands::*;
 pub fn get_hermes_source_path(home: &std::path::Path) -> Option<std::path::PathBuf> {
     #[cfg(target_os = "windows")]
     {
-        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-            let win_bin = std::path::PathBuf::from(local_app_data).join("hermes").join("bin");
-            let cmd = win_bin.join("hermes.cmd");
-            if cmd.exists() {
-                return Some(cmd);
-            }
-            let exe = win_bin.join("hermes.exe");
-            if exe.exists() {
-                return Some(exe);
-            }
+        let home_local_appdata = home.join("AppData").join("Local");
+        let win_bin = home_local_appdata.join("hermes").join("bin");
+        let cmd = win_bin.join("hermes.cmd");
+        if cmd.exists() {
+            return Some(cmd);
+        }
+        let exe = win_bin.join("hermes.exe");
+        if exe.exists() {
+            return Some(exe);
         }
         let home_bin = home.join(".hermes").join("bin");
         let cmd = home_bin.join("hermes.cmd");
@@ -49,22 +48,49 @@ pub fn get_hermes_source_path(home: &std::path::Path) -> Option<std::path::PathB
     if usr_local_hermes.exists() {
         return Some(usr_local_hermes);
     }
-    if let Some(path_var) = std::env::var_os("PATH") {
-        for dir in std::env::split_paths(&path_var) {
-            #[cfg(target_os = "windows")]
-            {
-                let cmd = dir.join("hermes.cmd");
+
+    let is_live_home = if cfg!(windows) {
+        std::env::var_os("USERPROFILE")
+            .map(|u| std::path::PathBuf::from(u) == home)
+            .unwrap_or(true)
+    } else {
+        std::env::var_os("HOME")
+            .map(|h| std::path::PathBuf::from(h) == home)
+            .unwrap_or(true)
+    };
+
+    if is_live_home {
+        #[cfg(target_os = "windows")]
+        {
+            if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+                let win_bin = std::path::PathBuf::from(local_app_data).join("hermes").join("bin");
+                let cmd = win_bin.join("hermes.cmd");
                 if cmd.exists() {
                     return Some(cmd);
                 }
-                let exe = dir.join("hermes.exe");
+                let exe = win_bin.join("hermes.exe");
                 if exe.exists() {
                     return Some(exe);
                 }
             }
-            let bin = dir.join("hermes");
-            if bin.exists() {
-                return Some(bin);
+        }
+        if let Some(path_var) = std::env::var_os("PATH") {
+            for dir in std::env::split_paths(&path_var) {
+                #[cfg(target_os = "windows")]
+                {
+                    let cmd = dir.join("hermes.cmd");
+                    if cmd.exists() {
+                        return Some(cmd);
+                    }
+                    let exe = dir.join("hermes.exe");
+                    if exe.exists() {
+                        return Some(exe);
+                    }
+                }
+                let bin = dir.join("hermes");
+                if bin.exists() {
+                    return Some(bin);
+                }
             }
         }
     }
@@ -84,13 +110,48 @@ pub fn check_hermes_status(app: tauri::AppHandle) -> bool {
 }
 
 pub fn get_opencode_source_path(home: &std::path::Path) -> Option<std::path::PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        let home_local_appdata = home.join("AppData").join("Local");
+        let p_app = home_local_appdata.join("Programs").join("opencode").join("opencode.exe");
+        if p_app.exists() {
+            return Some(p_app);
+        }
+        let p_cmd = home_local_appdata.join("Programs").join("opencode").join("opencode.cmd");
+        if p_cmd.exists() {
+            return Some(p_cmd);
+        }
+        let home_roaming_npm = home.join("AppData").join("Roaming").join("npm");
+        let p_npm_cmd = home_roaming_npm.join("opencode.cmd");
+        if p_npm_cmd.exists() {
+            return Some(p_npm_cmd);
+        }
+        let p_npm_exe = home_roaming_npm.join("opencode.exe");
+        if p_npm_exe.exists() {
+            return Some(p_npm_exe);
+        }
+    }
     let p1 = home.join(".local").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
     if p1.exists() {
         return Some(p1);
     }
+    #[cfg(target_os = "windows")]
+    {
+        let p1_cmd = home.join(".local").join("bin").join("opencode.cmd");
+        if p1_cmd.exists() {
+            return Some(p1_cmd);
+        }
+    }
     let p2 = home.join(".opencode").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
     if p2.exists() {
         return Some(p2);
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let p2_cmd = home.join(".opencode").join("bin").join("opencode.cmd");
+        if p2_cmd.exists() {
+            return Some(p2_cmd);
+        }
     }
     let p3 = home.join(".cargo").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
     if p3.exists() {
@@ -98,11 +159,9 @@ pub fn get_opencode_source_path(home: &std::path::Path) -> Option<std::path::Pat
     }
     #[cfg(target_os = "windows")]
     {
-        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-            let p_app = std::path::PathBuf::from(local_app_data).join("Programs").join("opencode").join("opencode.exe");
-            if p_app.exists() {
-                return Some(p_app);
-            }
+        let p3_cmd = home.join(".cargo").join("bin").join("opencode.cmd");
+        if p3_cmd.exists() {
+            return Some(p3_cmd);
         }
     }
     let brew_opencode = std::path::PathBuf::from("/opt/homebrew/bin/opencode");
@@ -113,18 +172,59 @@ pub fn get_opencode_source_path(home: &std::path::Path) -> Option<std::path::Pat
     if usr_local_opencode.exists() {
         return Some(usr_local_opencode);
     }
-    if let Some(path_var) = std::env::var_os("PATH") {
-        for dir in std::env::split_paths(&path_var) {
-            #[cfg(target_os = "windows")]
-            {
-                let exe = dir.join("opencode.exe");
-                if exe.exists() {
-                    return Some(exe);
+
+    let is_live_home = if cfg!(windows) {
+        std::env::var_os("USERPROFILE")
+            .map(|u| std::path::PathBuf::from(u) == home)
+            .unwrap_or(true)
+    } else {
+        std::env::var_os("HOME")
+            .map(|h| std::path::PathBuf::from(h) == home)
+            .unwrap_or(true)
+    };
+
+    if is_live_home {
+        #[cfg(target_os = "windows")]
+        {
+            if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+                let p_app = std::path::PathBuf::from(&local_app_data).join("Programs").join("opencode").join("opencode.exe");
+                if p_app.exists() {
+                    return Some(p_app);
+                }
+                let p_cmd = std::path::PathBuf::from(&local_app_data).join("Programs").join("opencode").join("opencode.cmd");
+                if p_cmd.exists() {
+                    return Some(p_cmd);
                 }
             }
-            let bin = dir.join("opencode");
-            if bin.exists() {
-                return Some(bin);
+            if let Ok(app_data) = std::env::var("APPDATA") {
+                let p_npm_cmd = std::path::PathBuf::from(&app_data).join("npm").join("opencode.cmd");
+                if p_npm_cmd.exists() {
+                    return Some(p_npm_cmd);
+                }
+                let p_npm_exe = std::path::PathBuf::from(&app_data).join("npm").join("opencode.exe");
+                if p_npm_exe.exists() {
+                    return Some(p_npm_exe);
+                }
+            }
+        }
+
+        if let Some(path_var) = std::env::var_os("PATH") {
+            for dir in std::env::split_paths(&path_var) {
+                #[cfg(target_os = "windows")]
+                {
+                    let cmd = dir.join("opencode.cmd");
+                    if cmd.exists() {
+                        return Some(cmd);
+                    }
+                    let exe = dir.join("opencode.exe");
+                    if exe.exists() {
+                        return Some(exe);
+                    }
+                }
+                let bin = dir.join("opencode");
+                if bin.exists() {
+                    return Some(bin);
+                }
             }
         }
     }
@@ -332,6 +432,10 @@ pub async fn get_hermes_version(app: tauri::AppHandle) -> String {
             } else {
                 tokio::process::Command::new(&hermes_bin)
             };
+            #[cfg(target_os = "windows")]
+            {
+                cmd.creation_flags(0x08000000);
+            }
             if let Ok(output) = cmd.arg("--version").output().await {
                 if output.status.success() {
                     let v = String::from_utf8_lossy(&output.stdout);
@@ -350,7 +454,19 @@ pub async fn get_hermes_version(app: tauri::AppHandle) -> String {
 pub async fn get_opencode_version(app: tauri::AppHandle) -> String {
     if let Ok(home) = app.path().home_dir() {
         if let Some(opencode_bin) = get_opencode_source_path(&home) {
-            if let Ok(output) = tokio::process::Command::new(&opencode_bin).arg("--version").output().await {
+            let is_cmd = opencode_bin.extension().map(|e| e.eq_ignore_ascii_case("cmd") || e.eq_ignore_ascii_case("bat")).unwrap_or(false);
+            let mut cmd = if cfg!(windows) && is_cmd {
+                let mut c = tokio::process::Command::new("cmd.exe");
+                c.args(["/C", &opencode_bin.to_string_lossy()]);
+                c
+            } else {
+                tokio::process::Command::new(&opencode_bin)
+            };
+            #[cfg(target_os = "windows")]
+            {
+                cmd.creation_flags(0x08000000);
+            }
+            if let Ok(output) = cmd.arg("--version").output().await {
                 if output.status.success() {
                     let v = String::from_utf8_lossy(&output.stdout);
                     if let Some(parsed) = parse_agent_version(&v) {
@@ -385,11 +501,25 @@ pub async fn uninstall_ollama(app: tauri::AppHandle) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
-        let _ = tokio::process::Command::new("taskkill").args(["/F", "/IM", "ollama.exe", "/T"]).output().await;
-        let _ = tokio::process::Command::new("taskkill").args(["/F", "/IM", "ollama app.exe", "/T"]).output().await;
+        let mut k1 = tokio::process::Command::new("taskkill");
+        k1.args(["/F", "/IM", "ollama.exe", "/T"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .creation_flags(0x08000000);
+        let _ = k1.output().await;
+
+        let mut k2 = tokio::process::Command::new("taskkill");
+        k2.args(["/F", "/IM", "ollama app.exe", "/T"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .creation_flags(0x08000000);
+        let _ = k2.output().await;
+
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-            let p = std::path::PathBuf::from(local_app_data).join("Programs").join("Ollama");
+            let p = std::path::PathBuf::from(&local_app_data).join("Programs").join("Ollama");
             let _ = tokio::fs::remove_dir_all(&p).await;
+            let p_data = std::path::PathBuf::from(&local_app_data).join("Ollama");
+            let _ = tokio::fs::remove_dir_all(&p_data).await;
         }
     }
 
@@ -429,6 +559,15 @@ pub fn wipe_opencode(home: &std::path::Path) {
     let _ = std::fs::remove_dir_all(home.join(".cache").join("opencode"));
     let _ = std::fs::remove_file(home.join(".local").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" }));
     let _ = std::fs::remove_file(home.join(".cargo").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" }));
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::fs::remove_file(home.join(".local").join("bin").join("opencode.cmd"));
+        let _ = std::fs::remove_file(home.join(".cargo").join("bin").join("opencode.cmd"));
+        let _ = std::fs::remove_dir_all(home.join("AppData").join("Local").join("Programs").join("opencode"));
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let _ = std::fs::remove_dir_all(std::path::PathBuf::from(local_app_data).join("Programs").join("opencode"));
+        }
+    }
 }
 
 #[tauri::command(async)]
@@ -440,7 +579,12 @@ pub async fn uninstall_opencode(app: tauri::AppHandle) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
-        let _ = tokio::process::Command::new("taskkill").args(["/F", "/IM", "opencode.exe", "/T"]).output().await;
+        let mut kill = tokio::process::Command::new("taskkill");
+        kill.args(["/F", "/IM", "opencode.exe", "/T"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .creation_flags(0x08000000);
+        let _ = kill.output().await;
     }
 
     // 2. Remove directories and binary symlinks
@@ -455,6 +599,29 @@ pub async fn uninstall_opencode(app: tauri::AppHandle) -> Result<(), String> {
         let _ = tokio::fs::remove_file(&local_bin).await;
         let cargo_bin = home.join(".cargo").join("bin").join(if cfg!(windows) { "opencode.exe" } else { "opencode" });
         let _ = tokio::fs::remove_file(&cargo_bin).await;
+        #[cfg(target_os = "windows")]
+        {
+            let local_cmd = home.join(".local").join("bin").join("opencode.cmd");
+            let _ = tokio::fs::remove_file(&local_cmd).await;
+            let cargo_cmd = home.join(".cargo").join("bin").join("opencode.cmd");
+            let _ = tokio::fs::remove_file(&cargo_cmd).await;
+            let home_opencode = home.join("AppData").join("Local").join("Programs").join("opencode");
+            let _ = tokio::fs::remove_dir_all(&home_opencode).await;
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let prog_opencode = std::path::PathBuf::from(local_app_data).join("Programs").join("opencode");
+            let _ = tokio::fs::remove_dir_all(&prog_opencode).await;
+        }
+        let mut npm_uninstall = tokio::process::Command::new("cmd.exe");
+        npm_uninstall.args(["/C", "npm", "uninstall", "-g", "opencode-ai"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .creation_flags(0x08000000);
+        let _ = npm_uninstall.output().await;
     }
 
     Ok(())
@@ -469,7 +636,12 @@ pub async fn uninstall_hermes(app: tauri::AppHandle) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
-        let _ = tokio::process::Command::new("taskkill").args(["/F", "/IM", "hermes.exe", "/T"]).output().await;
+        let mut kill = tokio::process::Command::new("taskkill");
+        kill.args(["/F", "/IM", "hermes.exe", "/T"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .creation_flags(0x08000000);
+        let _ = kill.output().await;
     }
 
     // 2. Remove directories and binary symlinks
@@ -482,6 +654,21 @@ pub async fn uninstall_hermes(app: tauri::AppHandle) -> Result<(), String> {
         let _ = tokio::fs::remove_dir_all(&cache_dir).await;
         let local_bin = home.join(".local").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" });
         let _ = tokio::fs::remove_file(&local_bin).await;
+        #[cfg(target_os = "windows")]
+        {
+            let local_cmd = home.join(".local").join("bin").join("hermes.cmd");
+            let _ = tokio::fs::remove_file(&local_cmd).await;
+            let home_local_hermes = home.join("AppData").join("Local").join("hermes");
+            let _ = tokio::fs::remove_dir_all(&home_local_hermes).await;
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let win_hermes = std::path::PathBuf::from(local_app_data).join("hermes");
+            let _ = tokio::fs::remove_dir_all(&win_hermes).await;
+        }
     }
 
     Ok(())
@@ -832,8 +1019,6 @@ pub async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), Strin
     #[cfg(target_os = "windows")]
     {
         use tokio::io::AsyncBufReadExt;
-        #[cfg(target_os = "windows")]
-        use std::os::windows::process::CommandExt;
 
         log_event(app, "INFO", "OLLAMA", "Preparing seamless Ollama installation for Windows via PowerShell");
 
@@ -977,7 +1162,6 @@ pub async fn start_ollama_daemon(app: &tauri::AppHandle) -> Result<(), String> {
         .kill_on_drop(false);
     #[cfg(target_os = "windows")]
     {
-        use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x08000000);
     }
     let mut child = cmd.spawn().map_err(|e| {
@@ -1099,6 +1283,13 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
                         buffer.remove(0); // remove the '\n'
                         if let Ok(text) = String::from_utf8(line) {
                             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
+                                if let Some(err_val) = json.get("error") {
+                                    if let Some(err_msg) = err_val.as_str() {
+                                        log_event(&app_clone, "ERROR", "OLLAMA", &format!("Ollama pull error: {}", err_msg));
+                                        let _ = app_clone.emit("model_deployment_complete", DeploymentResult { success: false, message: err_msg.to_string() });
+                                        return;
+                                    }
+                                }
                                 if let (Some(completed), Some(total)) = (json.get("completed"), json.get("total")) {
                                     if let (Some(c), Some(t)) = (completed.as_u64(), total.as_u64()) {
                                         if t > 0 {
@@ -1166,7 +1357,6 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
             .stderr(std::process::Stdio::piped());
         #[cfg(target_os = "windows")]
         {
-            use std::os::windows::process::CommandExt;
             cmd.creation_flags(0x08000000);
         }
         let child_res = cmd.spawn();

@@ -400,9 +400,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
         try {
           if (isWindows) {
             const winFrugalEnv = `$env:OPENAI_API_BASE="http://${frugalConfig?.ip || '127.0.0.1'}:${frugalConfig?.port || '61721'}/v1"; $env:OPENAI_API_KEY="${frugalConfig?.api_password || 'frugallm'}";`;
-            const winPathEnv = `$env:PATH="$HOME\\.local\\bin;$HOME\\.hermes\\bin;$HOME\\.opencode\\bin;$HOME\\.cargo\\bin;$env:LOCALAPPDATA\\hermes\\bin;$env:LOCALAPPDATA\\Programs\\opencode;$env:LOCALAPPDATA\\Programs\\Ollama;$env:PATH";`;
+            const winPathEnv = `$env:PATH="$HOME\\.local\\bin;$HOME\\.hermes\\bin;$HOME\\.opencode\\bin;$HOME\\.cargo\\bin;$env:LOCALAPPDATA\\hermes\\bin;$env:LOCALAPPDATA\\Programs\\opencode;$env:APPDATA\\npm;$env:LOCALAPPDATA\\Programs\\Ollama;$env:ProgramFiles\\Ollama;$env:PATH";`;
             const winResolveHermes = `$hermesBin = (Get-Command hermes.cmd -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1); if (!$hermesBin) { $hermesBin = (Get-Command hermes.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1) }; if (!$hermesBin) { $hermesBin = (Get-Command hermes -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1) }; if (!$hermesBin) { $candidates = @("$env:LOCALAPPDATA\\hermes\\bin\\hermes.cmd", "$HOME\\.hermes\\bin\\hermes.cmd", "$HOME\\.local\\bin\\hermes.cmd", "$env:LOCALAPPDATA\\hermes\\bin\\hermes.exe", "$HOME\\.hermes\\bin\\hermes.exe", "$HOME\\.local\\bin\\hermes.exe"); foreach ($c in $candidates) { if (Test-Path -Path $c) { $hermesBin = $c; break } } }; if (!$hermesBin) { $hermesBin = 'hermes' };`;
-            const winResolveOpenCode = `$opencodeBin = (Get-Command opencode.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1); if (!$opencodeBin) { $opencodeBin = (Get-Command opencode -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1) }; if (!$opencodeBin) { $candidates = @("$HOME\\.opencode\\bin\\opencode.exe", "$HOME\\.local\\bin\\opencode.exe", "$env:LOCALAPPDATA\\Programs\\opencode\\opencode.exe"); foreach ($c in $candidates) { if (Test-Path -Path $c) { $opencodeBin = $c; break } } }; if (!$opencodeBin) { $opencodeBin = 'opencode' };`;
+            const winResolveOpenCode = `$opencodeBin = (Get-Command opencode.cmd -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1); if (!$opencodeBin) { $opencodeBin = (Get-Command opencode.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1) }; if (!$opencodeBin) { $opencodeBin = (Get-Command opencode -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1) }; if (!$opencodeBin) { $candidates = @("$env:APPDATA\\npm\\opencode.cmd", "$env:LOCALAPPDATA\\Programs\\opencode\\opencode.cmd", "$HOME\\.opencode\\bin\\opencode.exe", "$HOME\\.local\\bin\\opencode.exe", "$env:LOCALAPPDATA\\Programs\\opencode\\opencode.exe"); foreach ($c in $candidates) { if (Test-Path -Path $c) { $opencodeBin = $c; break } } }; if (!$opencodeBin) { $opencodeBin = 'opencode' };`;
 
             if (mode === 'run-opencode') {
               await spawnPty({ sessionId, command: 'powershell.exe', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', `${winPathEnv} ${winFrugalEnv} ${winResolveOpenCode} & $opencodeBin -m litellm/frugallm`] });
@@ -416,10 +416,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
               } catch (err) {
                 console.warn('Unable to resolve dynamic ollama chat model:', err);
               }
+              const winOllamaRun = `$t = "${targetModel}"; $l = @(ollama list 2>$null | Select-Object -Skip 1 | ForEach-Object { ($_ -split '\\s+')[0] } | Where-Object { $_ }); if ($l -notcontains $t -and $l.Count -gt 0) { $t = $l[0] }; ollama run $t;`;
               await spawnPty({ 
                 sessionId, 
                 command: 'powershell.exe', 
-                args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', `${winPathEnv} ${winFrugalEnv} ollama run "${targetModel}"`] 
+                args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', `${winPathEnv} ${winFrugalEnv} ${winOllamaRun}`] 
               });
             } else if (mode === 'run-hermes-web') {
               await spawnPty({ sessionId, command: 'powershell.exe', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', `${winPathEnv} ${winFrugalEnv} ${winResolveHermes} & $hermesBin dashboard --host 127.0.0.1`] });
