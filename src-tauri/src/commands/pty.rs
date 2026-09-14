@@ -117,6 +117,7 @@ pub fn spawn_pty(
     }
 
     let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
+    #[allow(unused_mut)]
     let mut writer = pair.master.take_writer().map_err(|e| e.to_string())?;
 
     #[cfg(windows)]

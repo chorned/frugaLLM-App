@@ -137,10 +137,10 @@ use std::collections::{HashMap, HashSet};
         drop(pair.slave); // close slave so reader gets EOF when child exits
 
         let mut reader = pair.master.try_clone_reader().unwrap();
-        let mut writer = pair.master.take_writer().unwrap();
         #[cfg(windows)]
         {
             use std::io::Write;
+            let mut writer = pair.master.take_writer().unwrap();
             let _ = writer.write_all(b"\x1b[1;1R");
             let _ = writer.flush();
         }
@@ -201,10 +201,10 @@ use std::collections::{HashMap, HashSet};
         drop(pair.slave);
 
         let mut reader = pair.master.try_clone_reader().unwrap();
-        let mut writer = pair.master.take_writer().unwrap();
         #[cfg(windows)]
         {
             use std::io::Write;
+            let mut writer = pair.master.take_writer().unwrap();
             let _ = writer.write_all(b"\x1b[1;1R");
             let _ = writer.flush();
         }
