@@ -1393,8 +1393,9 @@ HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bf
         fs::create_dir_all(&hermes_dir).unwrap();
 
         let port = 11434;
+        let api_key = "frugallm";
         let config_path = hermes_dir.join("config.yaml");
-        let config_content = format!("model:\n  default: \"frugallm\"\n  provider: \"custom\"\n  base_url: \"http://127.0.0.1:{}/v1\"\n", port);
+        let config_content = format!("model:\n  default: \"frugallm\"\n  provider: \"custom\"\n  base_url: \"http://127.0.0.1:{}/v1\"\n  api_key: \"{}\"\n", port, api_key);
         fs::write(&config_path, &config_content).unwrap();
 
         let soul_path = hermes_dir.join("soul.md");
@@ -1403,14 +1404,85 @@ HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bf
 
         // Secondary write using the borrowed references (as done on Windows/multi-target)
         let win_hermes_dir = temp_dir.path().join("localappdata").join("hermes");
+        let win_roaming_hermes_dir = temp_dir.path().join("appdata").join("hermes");
         fs::create_dir_all(&win_hermes_dir).unwrap();
+        fs::create_dir_all(&win_roaming_hermes_dir).unwrap();
         fs::write(win_hermes_dir.join("config.yaml"), &config_content).unwrap();
         fs::write(win_hermes_dir.join("soul.md"), soul_content).unwrap();
+        fs::write(win_roaming_hermes_dir.join("config.yaml"), &config_content).unwrap();
+        fs::write(win_roaming_hermes_dir.join("soul.md"), soul_content).unwrap();
 
         assert_eq!(fs::read_to_string(&config_path).unwrap(), config_content);
         assert_eq!(fs::read_to_string(&soul_path).unwrap(), soul_content);
         assert_eq!(fs::read_to_string(win_hermes_dir.join("config.yaml")).unwrap(), config_content);
         assert_eq!(fs::read_to_string(win_hermes_dir.join("soul.md")).unwrap(), soul_content);
+        assert_eq!(fs::read_to_string(win_roaming_hermes_dir.join("config.yaml")).unwrap(), config_content);
+        assert_eq!(fs::read_to_string(win_roaming_hermes_dir.join("soul.md")).unwrap(), soul_content);
+    }
+
+    #[test]
+    fn test_opencode_multi_target_config_writes() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let port = 61721;
+        let api_key = "test-key";
+        let config_json = serde_json::json!({
+            "provider": {
+                "litellm": {
+                    "npm": "@ai-sdk/openai-compatible",
+                    "name": "LiteLLM",
+                    "options": {
+                        "baseURL": format!("http://127.0.0.1:{}/v1", port),
+                        "apiKey": api_key
+                    },
+                    "models": {
+                        "frugallm": { "name": "FrugaLLM" }
+                    }
+                }
+            },
+            "model": "litellm/frugallm"
+        });
+        let config_str = serde_json::to_string_pretty(&config_json).unwrap();
+
+        let dot_config = temp_dir.path().join(".config").join("opencode");
+        let win_roaming = temp_dir.path().join("AppData").join("Roaming").join("opencode");
+        fs::create_dir_all(&dot_config).unwrap();
+        fs::create_dir_all(&win_roaming).unwrap();
+
+        fs::write(dot_config.join("opencode.json"), &config_str).unwrap();
+        fs::write(win_roaming.join("opencode.json"), &config_str).unwrap();
+
+        assert_eq!(fs::read_to_string(dot_config.join("opencode.json")).unwrap(), config_str);
+        assert_eq!(fs::read_to_string(win_roaming.join("opencode.json")).unwrap(), config_str);
+    }
+
+    #[test]
+    fn test_wipe_opencode_cleans_roaming_and_local() {
+        use crate::commands::agents::wipe_opencode;
+        let temp_dir = tempfile::tempdir().unwrap();
+        let fake_home = temp_dir.path().join("home");
+        let opencode_dir = fake_home.join(".opencode");
+        let config_dir = fake_home.join(".config").join("opencode");
+        let roaming_dir = fake_home.join("AppData").join("Roaming").join("opencode");
+        let local_dir = fake_home.join("AppData").join("Local").join("Programs").join("opencode");
+
+        fs::create_dir_all(&opencode_dir).unwrap();
+        fs::create_dir_all(&config_dir).unwrap();
+        fs::create_dir_all(&roaming_dir).unwrap();
+        fs::create_dir_all(&local_dir).unwrap();
+
+        fs::write(opencode_dir.join("test.txt"), "data").unwrap();
+        fs::write(config_dir.join("opencode.json"), "{}").unwrap();
+        fs::write(roaming_dir.join("opencode.json"), "{}").unwrap();
+        fs::write(local_dir.join("opencode.exe"), "bin").unwrap();
+
+        wipe_opencode(&fake_home);
+
+        assert!(!opencode_dir.exists());
+        assert!(!config_dir.exists());
+        if cfg!(windows) {
+            assert!(!roaming_dir.exists());
+            assert!(!local_dir.exists());
+        }
     }
 
     #[test]

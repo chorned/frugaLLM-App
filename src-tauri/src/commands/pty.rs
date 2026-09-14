@@ -91,6 +91,20 @@ pub fn spawn_pty(
         cmd.env("PATH", augmented_path);
     }
 
+    let (port, api_key) = if let Some(frugal_state) = app.try_state::<FrugalConfigState>() {
+        if let Ok(config) = frugal_state.config.try_lock() {
+            (config.port, config.api_password.clone().unwrap_or_else(|| "frugallm".to_string()))
+        } else {
+            (61721, "frugallm".to_string())
+        }
+    } else {
+        (61721, "frugallm".to_string())
+    };
+    let endpoint = format!("http://127.0.0.1:{}/v1", port);
+    cmd.env("OPENAI_BASE_URL", &endpoint);
+    cmd.env("OPENAI_API_BASE", &endpoint);
+    cmd.env("OPENAI_API_KEY", &api_key);
+
     if let Some(a) = args {
         cmd.args(&a);
     }

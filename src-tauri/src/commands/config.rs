@@ -84,6 +84,12 @@ pub async fn set_frugallm_config(app: tauri::AppHandle, state: State<'_, FrugalC
         });
         
         *state.server_abort_handle.lock().await = Some(new_abort);
+    } else {
+        crate::commands::agents::sync_all_agent_configs(
+            &app,
+            config.port,
+            &config.api_password.clone().unwrap_or_else(|| "frugallm".to_string()),
+        );
     }
     
     Ok(())

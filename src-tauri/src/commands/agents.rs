@@ -557,8 +557,12 @@ pub fn wipe_opencode(home: &std::path::Path) {
         let _ = std::fs::remove_file(home.join(".local").join("bin").join("opencode.cmd"));
         let _ = std::fs::remove_file(home.join(".cargo").join("bin").join("opencode.cmd"));
         let _ = std::fs::remove_dir_all(home.join("AppData").join("Local").join("Programs").join("opencode"));
+        let _ = std::fs::remove_dir_all(home.join("AppData").join("Roaming").join("opencode"));
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
             let _ = std::fs::remove_dir_all(std::path::PathBuf::from(local_app_data).join("Programs").join("opencode"));
+        }
+        if let Ok(app_data) = std::env::var("APPDATA") {
+            let _ = std::fs::remove_dir_all(std::path::PathBuf::from(app_data).join("opencode"));
         }
     }
 }
@@ -600,6 +604,8 @@ pub async fn uninstall_opencode(app: tauri::AppHandle) -> Result<(), String> {
             let _ = tokio::fs::remove_file(&cargo_cmd).await;
             let home_opencode = home.join("AppData").join("Local").join("Programs").join("opencode");
             let _ = tokio::fs::remove_dir_all(&home_opencode).await;
+            let home_roaming_opencode = home.join("AppData").join("Roaming").join("opencode");
+            let _ = tokio::fs::remove_dir_all(&home_roaming_opencode).await;
         }
     }
 
@@ -608,6 +614,10 @@ pub async fn uninstall_opencode(app: tauri::AppHandle) -> Result<(), String> {
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
             let prog_opencode = std::path::PathBuf::from(local_app_data).join("Programs").join("opencode");
             let _ = tokio::fs::remove_dir_all(&prog_opencode).await;
+        }
+        if let Ok(app_data) = std::env::var("APPDATA") {
+            let roaming_opencode = std::path::PathBuf::from(app_data).join("opencode");
+            let _ = tokio::fs::remove_dir_all(&roaming_opencode).await;
         }
         let mut npm_uninstall = tokio::process::Command::new("cmd.exe");
         npm_uninstall.args(["/C", "npm", "uninstall", "-g", "opencode-ai"])
@@ -653,6 +663,8 @@ pub async fn uninstall_hermes(app: tauri::AppHandle) -> Result<(), String> {
             let _ = tokio::fs::remove_file(&local_cmd).await;
             let home_local_hermes = home.join("AppData").join("Local").join("hermes");
             let _ = tokio::fs::remove_dir_all(&home_local_hermes).await;
+            let home_roaming_hermes = home.join("AppData").join("Roaming").join("hermes");
+            let _ = tokio::fs::remove_dir_all(&home_roaming_hermes).await;
         }
     }
 
@@ -662,9 +674,48 @@ pub async fn uninstall_hermes(app: tauri::AppHandle) -> Result<(), String> {
             let win_hermes = std::path::PathBuf::from(local_app_data).join("hermes");
             let _ = tokio::fs::remove_dir_all(&win_hermes).await;
         }
+        if let Ok(app_data) = std::env::var("APPDATA") {
+            let win_roaming_hermes = std::path::PathBuf::from(app_data).join("hermes");
+            let _ = tokio::fs::remove_dir_all(&win_roaming_hermes).await;
+        }
     }
 
     Ok(())
+}
+
+pub async fn execute_deep_wipe(app: &tauri::AppHandle) {
+    let _ = delete_local_model(app.clone()).await;
+    let _ = uninstall_ollama(app.clone()).await;
+    let _ = uninstall_opencode(app.clone()).await;
+    let _ = uninstall_hermes(app.clone()).await;
+
+    if let Ok(home) = app.path().home_dir() {
+        wipe_opencode(&home);
+        let _ = tokio::fs::remove_dir_all(home.join(".hermes")).await;
+        let _ = tokio::fs::remove_dir_all(home.join(".ollama")).await;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let p = std::path::PathBuf::from(&local_app_data);
+            let _ = tokio::fs::remove_dir_all(p.join("hermes")).await;
+            let _ = tokio::fs::remove_dir_all(p.join("Ollama")).await;
+            let _ = tokio::fs::remove_dir_all(p.join("Programs").join("Ollama")).await;
+            let _ = tokio::fs::remove_dir_all(p.join("Programs").join("opencode")).await;
+        }
+        if let Ok(app_data) = std::env::var("APPDATA") {
+            let p = std::path::PathBuf::from(&app_data);
+            let _ = tokio::fs::remove_dir_all(p.join("opencode")).await;
+            let _ = tokio::fs::remove_dir_all(p.join("hermes")).await;
+        }
+    }
+
+    if let Ok(app_dir) = app.path().app_data_dir() {
+        let _ = tokio::fs::remove_file(app_dir.join("tool_gateway_installed")).await;
+        let _ = tokio::fs::remove_dir_all(app_dir.join("models")).await;
+        let _ = tokio::fs::remove_file(app_dir.join("frugal_config.json")).await;
+    }
 }
 
 
@@ -825,30 +876,30 @@ You are a turn-based, request-response agent. Once you finish generating a respo
 - Never state in conversational text that you have "started a background process" or promise to "notify them soon" unless you have explicitly called a specific tool (like a cronjob utility) in the same turn to handle it."#
 }
 
-#[tauri::command]
-pub async fn configure_hermes_defaults(app: tauri::AppHandle, state: tauri::State<'_, FrugalConfigState>) -> Result<(), String> {
-    let port = state.config.lock().await.port;
+pub fn sync_hermes_config(app: &tauri::AppHandle, port: u16, api_key: &str) -> Result<(), String> {
+    let config_content = format!(
+        "model:\n  default: \"frugallm\"\n  provider: \"custom\"\n  base_url: \"http://127.0.0.1:{}/v1\"\n  api_key: \"{}\"\n",
+        port, api_key
+    );
+    let soul_content = get_default_soul_template();
+
     if let Ok(home) = app.path().home_dir() {
         let hermes_dir = home.join(".hermes");
-        if !hermes_dir.exists() {
-            std::fs::create_dir_all(&hermes_dir).map_err(|e| e.to_string())?;
-        }
-        
-        let config_path = hermes_dir.join("config.yaml");
-        let config_content = format!("model:\n  default: \"frugallm\"\n  provider: \"custom\"\n  base_url: \"http://127.0.0.1:{}/v1\"\n", port);
-        std::fs::write(&config_path, &config_content).map_err(|e| e.to_string())?;
+        let _ = std::fs::create_dir_all(&hermes_dir);
+        let _ = std::fs::write(hermes_dir.join("config.yaml"), &config_content);
 
         let soul_path = hermes_dir.join("soul.md");
         let soul_upper = hermes_dir.join("SOUL.md");
-        let soul_content = get_default_soul_template();
         if !soul_path.exists() && !soul_upper.exists() {
-            std::fs::write(&soul_path, soul_content).map_err(|e| e.to_string())?;
-            log_event(&app, "INFO", "HERMES", "Created default soul.md in ~/.hermes/soul.md");
+            let _ = std::fs::write(&soul_path, soul_content);
+            log_event(app, "INFO", "HERMES", "Created default soul.md in ~/.hermes/soul.md");
         } else {
-            log_event(&app, "INFO", "HERMES", "soul.md already exists in ~/.hermes; preserving existing user file");
+            log_event(app, "INFO", "HERMES", "soul.md already exists in ~/.hermes; preserving existing user file");
         }
+    }
 
-        #[cfg(target_os = "windows")]
+    #[cfg(target_os = "windows")]
+    {
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
             let win_hermes_dir = std::path::PathBuf::from(local_app_data).join("hermes");
             let _ = std::fs::create_dir_all(&win_hermes_dir);
@@ -857,8 +908,27 @@ pub async fn configure_hermes_defaults(app: tauri::AppHandle, state: tauri::Stat
                 let _ = std::fs::write(win_hermes_dir.join("soul.md"), soul_content);
             }
         }
+        if let Ok(app_data) = std::env::var("APPDATA") {
+            let win_roaming_hermes = std::path::PathBuf::from(app_data).join("hermes");
+            let _ = std::fs::create_dir_all(&win_roaming_hermes);
+            let _ = std::fs::write(win_roaming_hermes.join("config.yaml"), &config_content);
+            if !win_roaming_hermes.join("soul.md").exists() && !win_roaming_hermes.join("SOUL.md").exists() {
+                let _ = std::fs::write(win_roaming_hermes.join("soul.md"), soul_content);
+            }
+        }
     }
+
+    log_event(app, "INFO", "HERMES", &format!("Hermes default configuration synchronized to port {}", port));
     Ok(())
+}
+
+#[tauri::command]
+pub async fn configure_hermes_defaults(app: tauri::AppHandle, state: tauri::State<'_, FrugalConfigState>) -> Result<(), String> {
+    let (port, api_key) = {
+        let config = state.config.lock().await;
+        (config.port, config.api_password.clone().unwrap_or_else(|| "frugallm".to_string()))
+    };
+    sync_hermes_config(&app, port, &api_key)
 }
 
 #[tauri::command]
@@ -912,40 +982,61 @@ pub fn get_ollama_source_path() -> Option<std::path::PathBuf> {
     None
 }
 
+pub fn sync_opencode_config(app: &tauri::AppHandle, port: u16, api_key: &str) -> Result<(), String> {
+    let config_content = serde_json::json!({
+        "provider": {
+            "litellm": {
+                "npm": "@ai-sdk/openai-compatible",
+                "name": "LiteLLM",
+                "options": {
+                    "baseURL": format!("http://127.0.0.1:{}/v1", port),
+                    "apiKey": api_key
+                },
+                "models": {
+                    "frugallm": { "name": "FrugaLLM" }
+                }
+            }
+        },
+        "model": "litellm/frugallm"
+    });
+    let config_str = serde_json::to_string_pretty(&config_content).unwrap_or_default();
+
+    if let Ok(home) = app.path().home_dir() {
+        let config_dir = home.join(".config").join("opencode");
+        let _ = std::fs::create_dir_all(&config_dir);
+        let _ = std::fs::write(config_dir.join("opencode.json"), &config_str);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(app_data) = std::env::var("APPDATA") {
+            let win_config_dir = std::path::PathBuf::from(app_data).join("opencode");
+            let _ = std::fs::create_dir_all(&win_config_dir);
+            let _ = std::fs::write(win_config_dir.join("opencode.json"), &config_str);
+        }
+        if let Ok(home) = app.path().home_dir() {
+            let roaming_dir = home.join("AppData").join("Roaming").join("opencode");
+            let _ = std::fs::create_dir_all(&roaming_dir);
+            let _ = std::fs::write(roaming_dir.join("opencode.json"), &config_str);
+        }
+    }
+
+    log_event(app, "INFO", "OPENCODE", &format!("OpenCode default configuration synchronized to port {}", port));
+    Ok(())
+}
+
+pub fn sync_all_agent_configs(app: &tauri::AppHandle, port: u16, api_key: &str) {
+    let _ = sync_hermes_config(app, port, api_key);
+    let _ = sync_opencode_config(app, port, api_key);
+}
 
 #[tauri::command]
 pub async fn configure_opencode_defaults(app: tauri::AppHandle, state: tauri::State<'_, FrugalConfigState>) -> Result<(), String> {
-    let config = state.config.lock().await;
-    let port = config.port;
-    let api_key = config.api_password.clone().unwrap_or_else(|| "frugallm".to_string());
-    
-    if let Ok(home) = app.path().home_dir() {
-        let config_dir = home.join(".config").join("opencode");
-        if !config_dir.exists() {
-            std::fs::create_dir_all(&config_dir).map_err(|e| e.to_string())?;
-        }
-        
-        let config_path = config_dir.join("opencode.json");
-        let config_content = serde_json::json!({
-            "provider": {
-                "litellm": {
-                    "npm": "@ai-sdk/openai-compatible",
-                    "name": "LiteLLM",
-                    "options": {
-                        "baseURL": format!("http://127.0.0.1:{}/v1", port),
-                        "apiKey": api_key
-                    },
-                    "models": {
-                        "frugallm": { "name": "FrugaLLM" }
-                    }
-                }
-            },
-            "model": "litellm/frugallm"
-        });
-        
-        std::fs::write(&config_path, serde_json::to_string_pretty(&config_content).unwrap()).map_err(|e| e.to_string())?;
-    }
-    Ok(())
+    let (port, api_key) = {
+        let config = state.config.lock().await;
+        (config.port, config.api_password.clone().unwrap_or_else(|| "frugallm".to_string()))
+    };
+    sync_opencode_config(&app, port, &api_key)
 }
 
 pub async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), String> {

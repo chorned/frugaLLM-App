@@ -1805,6 +1805,13 @@ pub async fn start_frugallm_server(app: tauri::AppHandle) {
             }
             let _ = app.emit("frugallm_server_status", running_status);
 
+            let api_key = {
+                let state = app.state::<FrugalConfigState>();
+                let config = state.config.lock().await;
+                config.api_password.clone().unwrap_or_else(|| "frugallm".to_string())
+            };
+            crate::commands::agents::sync_all_agent_configs(&app, actual_port, &api_key);
+
             let is_tool_gateway_active = check_tool_gateway_status(app.clone()).await;
             log_event(
                 &app,

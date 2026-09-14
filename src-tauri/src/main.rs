@@ -34,10 +34,13 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     
     if args.contains(&"--wipe".to_string()) {
-        println!("Wiping credentials, store, and opencode...");
+        println!("Wiping credentials, store, and agent configurations...");
         let _ = wipe_credentials();
         if let Ok(h) = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")) {
-            wipe_opencode(std::path::Path::new(&h));
+            let p = std::path::Path::new(&h);
+            wipe_opencode(p);
+            let _ = std::fs::remove_dir_all(p.join(".hermes"));
+            let _ = std::fs::remove_dir_all(p.join(".ollama"));
         }
     }
 
@@ -56,14 +59,12 @@ fn main() {
             let app_handle = app.handle().clone();
             let mut frugal_config = FrugalConfig::default();
             if env::args().any(|arg| arg == "--wipe") {
-                if let Ok(home) = app_handle.path().home_dir() {
-                    wipe_opencode(&home);
-                }
-                if let Ok(app_dir) = app_handle.path().app_data_dir() {
-                    let _ = std::fs::remove_file(app_dir.join("tool_gateway_installed"));
-                    let _ = std::fs::remove_dir_all(app_dir.join("models"));
-                    let _ = std::fs::remove_file(app_dir.join("frugal_config.json"));
-                }
+                println!("--wipe requested: executing deep uninstall of models, Ollama, OpenCode, Hermes, and application cache...");
+                let app_handle_wipe = app_handle.clone();
+                tauri::async_runtime::block_on(async move {
+                    execute_deep_wipe(&app_handle_wipe).await;
+                });
+                println!("--wipe: all components, credentials, and configurations successfully purged.");
             } else if let Ok(path) = get_config_path(&app_handle) {
                 if let Ok(json) = std::fs::read_to_string(path) {
                     if let Ok(mut parsed) = serde_json::from_str::<FrugalConfig>(&json) {
