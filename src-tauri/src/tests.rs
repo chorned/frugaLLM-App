@@ -1486,6 +1486,46 @@ HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bf
     }
 
     #[test]
+    fn test_wipe_hermes_and_ollama_paths() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let fake_home = temp_dir.path().join("home");
+        let hermes_dir = fake_home.join(".hermes");
+        let ollama_dir = fake_home.join(".ollama");
+        let local_hermes = fake_home.join("AppData").join("Local").join("hermes");
+        let roaming_hermes = fake_home.join("AppData").join("Roaming").join("hermes");
+        let local_ollama = fake_home.join("AppData").join("Local").join("Ollama");
+        let prog_ollama = fake_home.join("AppData").join("Local").join("Programs").join("Ollama");
+
+        fs::create_dir_all(&hermes_dir).unwrap();
+        fs::create_dir_all(&ollama_dir).unwrap();
+        fs::create_dir_all(&local_hermes).unwrap();
+        fs::create_dir_all(&roaming_hermes).unwrap();
+        fs::create_dir_all(&local_ollama).unwrap();
+        fs::create_dir_all(&prog_ollama).unwrap();
+
+        fs::write(hermes_dir.join("config.yaml"), "model: test").unwrap();
+        fs::write(ollama_dir.join("server.log"), "log").unwrap();
+        fs::write(local_hermes.join("soul.md"), "soul").unwrap();
+        fs::write(roaming_hermes.join("config.yaml"), "model: test").unwrap();
+        fs::write(local_ollama.join("upgraded"), "").unwrap();
+        fs::write(prog_ollama.join("ollama.exe"), "bin").unwrap();
+
+        let _ = fs::remove_dir_all(&hermes_dir);
+        let _ = fs::remove_dir_all(&ollama_dir);
+        let _ = fs::remove_dir_all(&local_hermes);
+        let _ = fs::remove_dir_all(&roaming_hermes);
+        let _ = fs::remove_dir_all(&local_ollama);
+        let _ = fs::remove_dir_all(&prog_ollama);
+
+        assert!(!hermes_dir.exists());
+        assert!(!ollama_dir.exists());
+        assert!(!local_hermes.exists());
+        assert!(!roaming_hermes.exists());
+        assert!(!local_ollama.exists());
+        assert!(!prog_ollama.exists());
+    }
+
+    #[test]
     fn test_windows_ollama_upgrade_marker_and_headless_script() {
         // Verify path resolution for Ollama upgraded marker
         let local_app_data = if cfg!(windows) { r"C:\Users\testuser\AppData\Local" } else { "/home/testuser/.local/share" };
