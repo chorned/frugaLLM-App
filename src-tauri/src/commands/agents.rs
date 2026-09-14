@@ -1037,7 +1037,7 @@ pub async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), Strin
             Write-Host '>>> Initializing Ollama installation for Windows...';
             $tempInstaller = Join-Path $env:TEMP ('OllamaSetup_' + (Get-Random) + '.exe');
             try {
-                Write-Host '>>> Downloading Ollama installer from ollama.com...';
+                Write-Host '>>> [1/4] Downloading Ollama installer from ollama.com...';
                 $oldEap = $ErrorActionPreference;
                 $ErrorActionPreference = 'Continue';
                 $installerUrl = 'https://ollama.com/download/OllamaSetup.exe';
@@ -1052,17 +1052,21 @@ pub async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), Strin
 
                 $proc = Start-Process -FilePath $tempInstaller -ArgumentList '/VERYSILENT /NORESTART /CLOSEAPPLICATIONS /SUPPRESSMSGBOXES' -PassThru;
                 $sp = @('|', '/', '-', '\');
+                $sw = [System.Diagnostics.Stopwatch]::StartNew();
                 $i = 0;
-                while (Get-Process -Name 'OllamaSetup' -ErrorAction SilentlyContinue) {
-                    Write-Host -NoNewline ("`r>>> Installing Ollama Engine silently... [" + $sp[$i % 4] + "]");
+                while (-not $proc.HasExited) {
+                    $sec = [math]::Floor($sw.Elapsed.TotalSeconds);
+                    $char = $sp[$i % 4];
+                    Write-Host -NoNewline ("`r>>> [2/4] Extracting & installing Ollama engine... (" + $sec + "s elapsed) [" + $char + "]   ");
                     Start-Sleep -Milliseconds 250;
                     $i++;
                 }
+                $sw.Stop();
                 $proc.WaitForExit();
                 if ($proc.ExitCode -ne 0) {
                     throw ('Installer exited with code ' + $proc.ExitCode);
                 }
-                Write-Host "`r>>> Ollama Engine installed successfully!               ";
+                Write-Host ("`r>>> [2/4] Ollama engine extraction complete! (" + [math]::Floor($sw.Elapsed.TotalSeconds) + "s)                    ");
             } finally {
                 Remove-Item -Force $tempInstaller -ErrorAction SilentlyContinue;
             }
@@ -1074,7 +1078,6 @@ pub async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), Strin
                     [Environment]::SetEnvironmentVariable('Path', ($ollamaProgDir + ';' + $userPath), 'User');
                 }
             }
-            Write-Host '>>> Install complete. Run ''ollama'' from the command line.';
         "#;
 
         let mut cmd = tokio::process::Command::new("powershell.exe");
@@ -1226,12 +1229,15 @@ pub async fn start_ollama_daemon(app: &tauri::AppHandle) -> Result<(), String> {
 
     // Healthcheck against Ollama API with active in-terminal spinner and 40s total timeout
     let spinner_chars = ['|', '/', '-', '\\'];
-    let total_seconds = 40;
+    let max_sec: u64 = 40;
     let mut is_ready = false;
+    let start_time = std::time::Instant::now();
+    let mut i: usize = 0;
 
-    for elapsed in 1..=total_seconds {
-        let sp = spinner_chars[(elapsed as usize) % spinner_chars.len()];
-        let status_msg = format!("\r>>> Waiting for Ollama daemon to initialize... ({}/{}s) [{}]", elapsed, total_seconds, sp);
+    while start_time.elapsed().as_secs() < max_sec {
+        let sec = start_time.elapsed().as_secs();
+        let char = spinner_chars[i % spinner_chars.len()];
+        let status_msg = format!("\r>>> [3/4] Initializing daemon & GPU discovery... ({}s/{}s) [{}]   ", sec, max_sec, char);
         let _ = app.emit("download_progress", DownloadProgress {
             status: status_msg,
         });
@@ -1248,13 +1254,18 @@ pub async fn start_ollama_daemon(app: &tauri::AppHandle) -> Result<(), String> {
             }
         }
 
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        i += 1;
     }
 
     if is_ready {
+        let elapsed_sec = start_time.elapsed().as_secs();
         log_event(app, "INFO", "OLLAMA", "Ollama daemon online and ready");
         let _ = app.emit("download_progress", DownloadProgress {
-            status: "\r>>> Ollama daemon online and ready!                                \r\n".to_string(),
+            status: format!(
+                "\r>>> [3/4] Ollama daemon is online and responsive! ({}s)                    \r\n>>> [4/4] Ollama setup completed successfully! Ready for use.\r\n\r\n",
+                elapsed_sec
+            ),
         });
 
         // Boot buffer: Ollama's GPU discovery on macOS/Windows takes additional time
@@ -1267,8 +1278,11 @@ pub async fn start_ollama_daemon(app: &tauri::AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
-    let err = format!("Timed out waiting for Ollama daemon to start after {} seconds", total_seconds);
+    let err = format!("Timed out waiting for Ollama daemon to start after {} seconds", max_sec);
     log_event(app, "ERROR", "OLLAMA", &err);
+    let _ = app.emit("download_progress", DownloadProgress {
+        status: format!("\r\n>>> [ERROR] Ollama daemon failed to respond within {} seconds.\r\n", max_sec),
+    });
     Err(err)
 }
 
