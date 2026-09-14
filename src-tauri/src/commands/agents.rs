@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use tauri::{Manager, State, Emitter};
+use tauri_plugin_store::StoreExt;
 use crate::state::*;
 use crate::proxy::*;
 use crate::commands::*;
@@ -163,6 +164,48 @@ pub fn get_opencode_source_path(home: &std::path::Path) -> Option<std::path::Pat
         if p3_cmd.exists() {
             return Some(p3_cmd);
         }
+        // Check for .cmd shims in local directories
+        let cmd1 = home.join(".local").join("bin").join("opencode.cmd");
+        if cmd1.exists() {
+            return Some(cmd1);
+        }
+        let cmd2 = home.join(".opencode").join("bin").join("opencode.cmd");
+        if cmd2.exists() {
+            return Some(cmd2);
+        }
+        // Check %APPDATA%\npm and shim node_modules/opencode-ai/bin/opencode.exe if present
+        let app_data = std::env::var("APPDATA")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| home.join("AppData").join("Roaming"));
+        let npm_dir = app_data.join("npm");
+        let npm_cmd = npm_dir.join("opencode.cmd");
+        if npm_cmd.exists() {
+            let npm_exe = npm_dir.join("node_modules").join("opencode-ai").join("bin").join("opencode.exe");
+            let local_exe = home.join(".local").join("bin").join("opencode.exe");
+            if npm_exe.exists() {
+                if !local_exe.exists() {
+                    if let Some(parent) = local_exe.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    let _ = std::fs::copy(&npm_exe, &local_exe);
+                }
+                if local_exe.exists() {
+                    return Some(local_exe);
+                }
+            }
+            return Some(npm_cmd);
+        }
+        let npm_bin = npm_dir.join("opencode");
+        if npm_bin.exists() {
+            return Some(npm_bin);
+        }
+
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let p_app = std::path::PathBuf::from(local_app_data).join("Programs").join("opencode").join("opencode.exe");
+            if p_app.exists() {
+                return Some(p_app);
+            }
+        }
     }
     let brew_opencode = std::path::PathBuf::from("/opt/homebrew/bin/opencode");
     if brew_opencode.exists() {
@@ -194,6 +237,10 @@ pub fn get_opencode_source_path(home: &std::path::Path) -> Option<std::path::Pat
                 let p_cmd = std::path::PathBuf::from(&local_app_data).join("Programs").join("opencode").join("opencode.cmd");
                 if p_cmd.exists() {
                     return Some(p_cmd);
+                }
+                let cmd = dir.join("opencode.cmd");
+                if cmd.exists() {
+                    return Some(cmd);
                 }
             }
             if let Ok(app_data) = std::env::var("APPDATA") {
@@ -316,6 +363,104 @@ pub fn is_ollama_in_paths(paths: &[&str]) -> bool {
         }
     }
     false
+}
+
+pub fn is_ollama_process_running() -> bool {
+    let sys = sysinfo::System::new_all();
+    for (_pid, process) in sys.processes() {
+        let name = process.name().to_string_lossy().to_lowercase();
+        if name == "ollama.exe" || name == "ollama app.exe" || name == "ollama" {
+            return true;
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let mut cmd = std::process::Command::new("tasklist");
+        cmd.args(["/NH", "/FO", "CSV"]);
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+        if let Ok(output) = cmd.output() {
+            let stdout = String::from_utf8_lossy(&output.stdout).to_lowercase();
+            if stdout.contains("ollama.exe") || stdout.contains("ollama app.exe") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+pub fn is_base_model_in_tags(tags_json: &serde_json::Value, target_tag: &str) -> bool {
+    if let Some(models) = tags_json.get("models").and_then(|m| m.as_array()) {
+        let target_clean = target_tag.trim().to_lowercase();
+        let target_base = target_clean.split(':').next().unwrap_or(&target_clean);
+        for m in models {
+            let name = m.get("name").and_then(|n| n.as_str()).unwrap_or("").to_lowercase();
+            let model = m.get("model").and_then(|n| n.as_str()).unwrap_or("").to_lowercase();
+            if name == target_clean || model == target_clean {
+                return true;
+            }
+            if name.starts_with(&format!("{}:", target_clean)) || model.starts_with(&format!("{}:", target_clean)) {
+                return true;
+            }
+            if !target_base.is_empty() && (name == target_base || model == target_base || name.starts_with(&format!("{}:", target_base))) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+pub fn get_windows_ollama_uninstaller() -> Option<std::path::PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let default_unins = std::path::PathBuf::from(&local_app_data).join("Programs").join("Ollama").join("unins000.exe");
+            if default_unins.exists() {
+                return Some(default_unins);
+            }
+        }
+
+        let mut reg_cmd = std::process::Command::new("powershell.exe");
+        reg_cmd.args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "(Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Ollama_is1' -ErrorAction SilentlyContinue).UninstallString",
+        ]);
+        use std::os::windows::process::CommandExt;
+        reg_cmd.creation_flags(0x08000000);
+        if let Ok(output) = reg_cmd.output() {
+            let unins_str = String::from_utf8_lossy(&output.stdout).trim().trim_matches('"').to_string();
+            if !unins_str.is_empty() {
+                let p = std::path::PathBuf::from(unins_str);
+                if p.exists() {
+                    return Some(p);
+                }
+            }
+        }
+    }
+    None
+}
+
+pub fn clean_windows_user_path_ollama() -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let clean_path_script = r#"
+            $target = Join-Path $env:LOCALAPPDATA 'Programs\Ollama';
+            $p = [Environment]::GetEnvironmentVariable('Path', 'User');
+            if ($p) {
+                $parts = $p -split ';' | Where-Object { $_ -and $_ -ne $target -and $_ -notlike ($target + '\*') -and $_ -notlike ('*' + $target + '*') };
+                $newP = $parts -join ';';
+                [Environment]::SetEnvironmentVariable('Path', $newP, 'User');
+            }
+        "#;
+        let mut ps_cmd = std::process::Command::new("powershell.exe");
+        ps_cmd.args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", clean_path_script]);
+        use std::os::windows::process::CommandExt;
+        ps_cmd.creation_flags(0x08000000);
+        let _ = ps_cmd.output().map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 #[tauri::command(async)]
@@ -482,14 +627,17 @@ pub async fn get_opencode_version(app: tauri::AppHandle) -> String {
 
 #[tauri::command(async)]
 pub async fn uninstall_ollama(app: tauri::AppHandle) -> Result<(), String> {
+    log_event(&app, "INFO", "OLLAMA", "Initiating complete uninstallation of Ollama");
+
     // 1. Kill daemon child process if managed by app
     let daemon_state = app.state::<OllamaDaemonState>();
     let mut child_guard = daemon_state.child.lock().await;
     if let Some(mut child) = child_guard.take() {
         let _ = child.kill().await;
     }
+    drop(child_guard);
 
-    // 2. Terminate system-wide Ollama processes
+    // 1b. Terminate system-wide Ollama processes and wait for exit to release file locks
     #[cfg(target_os = "macos")]
     {
         let _ = tokio::process::Command::new("pkill").args(["-9", "-f", "ollama"]).output().await;
@@ -510,15 +658,55 @@ pub async fn uninstall_ollama(app: tauri::AppHandle) -> Result<(), String> {
 
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
-        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-            let p = std::path::PathBuf::from(&local_app_data).join("Programs").join("Ollama");
-            let _ = tokio::fs::remove_dir_all(&p).await;
-            let p_data = std::path::PathBuf::from(&local_app_data).join("Ollama");
-            let _ = tokio::fs::remove_dir_all(&p_data).await;
+        if let Some(unins) = get_windows_ollama_uninstaller() {
+            log_event(&app, "INFO", "OLLAMA", &format!("Executing Inno Setup uninstaller: {:?}", unins));
+            let mut unins_cmd = tokio::process::Command::new(unins);
+            unins_cmd.args(["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .creation_flags(0x08000000);
+            if let Ok(mut child) = unins_cmd.spawn() {
+                let _ = child.wait().await;
+            }
         }
     }
 
-    // 3. Remove application binaries and model directories
+    // 3. Reclaim Disk Space & Delete Leftover Storage
+    // 3a. User model store: ~/.ollama (reclaims 10-50+ GB)
+    if let Ok(home) = app.path().home_dir() {
+        let ollama_home = home.join(".ollama");
+        let _ = tokio::fs::remove_dir_all(&ollama_home).await;
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = tokio::process::Command::new("rm").args(["-rf", &ollama_home.to_string_lossy()]).output().await;
+        }
+    }
+
+    // 3b. Local AppData cache and residual files on Windows
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let local_base = std::path::PathBuf::from(&local_app_data);
+            let app_data_cache = local_base.join("Ollama");
+            let _ = tokio::fs::remove_dir_all(&app_data_cache).await;
+
+            let prog_ollama = local_base.join("Programs").join("Ollama");
+            let _ = tokio::fs::remove_dir_all(&prog_ollama).await;
+        }
+
+        if let Ok(app_data) = std::env::var("APPDATA") {
+            let appdata_cache = std::path::PathBuf::from(app_data).join("com.chorned.frugallm-app").join("models");
+            let _ = tokio::fs::remove_dir_all(&appdata_cache).await;
+        }
+    }
+
+    // 3c. FrugaLLM model cache
+    if let Ok(app_dir) = app.path().app_data_dir() {
+        let models_dir = app_dir.join("models");
+        let _ = tokio::fs::remove_dir_all(&models_dir).await;
+    }
+
+    // 3d. Unix application binaries
     #[cfg(target_os = "macos")]
     {
         let _ = tokio::fs::remove_dir_all("/Applications/Ollama.app").await;
@@ -532,18 +720,19 @@ pub async fn uninstall_ollama(app: tauri::AppHandle) -> Result<(), String> {
         let _ = tokio::process::Command::new("rm").args(["-rf", "/usr/local/bin/ollama", "/usr/bin/ollama"]).output().await;
     }
 
-    if let Ok(home) = app.path().home_dir() {
-        let ollama_home = home.join(".ollama");
-        let _ = tokio::fs::remove_dir_all(&ollama_home).await;
-        let _ = tokio::process::Command::new("rm").args(["-rf", &ollama_home.to_string_lossy()]).output().await;
+    // 4. Clean the User Environment PATH on Windows
+    let _ = clean_windows_user_path_ollama();
+
+    // 5. Reset App State & Notify Frontend
+    if let Ok(store) = app.store("store.json") {
+        store.delete("local_model");
+        store.delete("ollama_installed");
+        store.delete("ollama_model");
+        let _ = store.save();
     }
 
-    if let Ok(app_dir) = app.path().app_data_dir() {
-        let models_dir = app_dir.join("models");
-        let _ = tokio::fs::remove_dir_all(&models_dir).await;
-    }
-
-    log_event(&app, "INFO", "OLLAMA", "Ollama uninstalled and associated processes terminated");
+    let _ = app.emit("ollama_uninstalled", ());
+    log_event(&app, "INFO", "OLLAMA", "Ollama uninstalled, registry purged, leftover storage removed, and state reset successfully");
 
     Ok(())
 }
@@ -557,6 +746,7 @@ pub fn wipe_opencode(home: &std::path::Path) {
     #[cfg(target_os = "windows")]
     {
         let _ = std::fs::remove_file(home.join(".local").join("bin").join("opencode.cmd"));
+        let _ = std::fs::remove_file(home.join(".opencode").join("bin").join("opencode.cmd"));
         let _ = std::fs::remove_file(home.join(".cargo").join("bin").join("opencode.cmd"));
         let _ = std::fs::remove_dir_all(home.join("AppData").join("Local").join("Programs").join("opencode"));
         let _ = std::fs::remove_dir_all(home.join("AppData").join("Roaming").join("opencode"));
@@ -616,6 +806,8 @@ pub async fn uninstall_opencode(app: tauri::AppHandle) -> Result<(), String> {
         {
             let local_cmd = home.join(".local").join("bin").join("opencode.cmd");
             let _ = tokio::fs::remove_file(&local_cmd).await;
+            let opencode_cmd = home.join(".opencode").join("bin").join("opencode.cmd");
+            let _ = tokio::fs::remove_file(&opencode_cmd).await;
             let cargo_cmd = home.join(".cargo").join("bin").join("opencode.cmd");
             let _ = tokio::fs::remove_file(&cargo_cmd).await;
             let home_opencode = home.join("AppData").join("Local").join("Programs").join("opencode");
@@ -1422,13 +1614,15 @@ pub async fn start_ollama_daemon(app: &tauri::AppHandle) -> Result<(), String> {
     }
 
     let err = format!("Timed out waiting for Ollama daemon to start after {} seconds", max_sec);
+=======
+    let err = "Timed out waiting for Ollama daemon to start after 120 seconds".to_string();
+>>>>>>> main
     log_event(app, "ERROR", "OLLAMA", &err);
     let _ = app.emit("download_progress", DownloadProgress {
         status: format!("\r\n>>> [ERROR] Ollama daemon failed to respond within {} seconds.\r\n", max_sec),
     });
     Err(err)
 }
-
 
 #[tauri::command(async)]
 pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
@@ -1437,6 +1631,7 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
         log_event(&app, "ERROR", "OLLAMA", &format!("ensure_ollama_installed failed: {}", e));
         e
     })?;
+
     start_ollama_daemon(&app).await.map_err(|e| {
         log_event(&app, "ERROR", "OLLAMA", &format!("start_ollama_daemon failed: {}", e));
         e
@@ -1452,9 +1647,7 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
 
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let models_dir = app_data_dir.join("models");
-    if !models_dir.exists() {
-        std::fs::create_dir_all(&models_dir).map_err(|e| e.to_string())?;
-    }
+    std::fs::create_dir_all(&models_dir).map_err(|e| e.to_string())?;
 
     // Generate Modelfile
     let modelfile_path = models_dir.join("Modelfile");
@@ -1466,7 +1659,7 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
     let tag_clone = tag.clone();
     tauri::async_runtime::spawn(async move {
         let _ = app_clone.emit("model_provisioning_started", ());
-        log_event(&app_clone, "INFO", "OLLAMA", &format!("Pulling model {} from Ollama registry", tag_clone));
+        log_event(&app_clone, "INFO", "OLLAMA", &format!("Stage 1: Pulling base model {} from Ollama registry", tag_clone));
 
         let client = reqwest::Client::new();
         let pull_payload = serde_json::json!({
@@ -1481,6 +1674,7 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
                 let mut last_speed_calc = tokio::time::Instant::now();
                 let mut smoothed_speed: f64 = 0.0;
                 let mut last_emit = tokio::time::Instant::now();
+                let mut stream_error: Option<String> = None;
                 while let Ok(Some(chunk)) = res.chunk().await {
                     buffer.extend_from_slice(&chunk);
                     while let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
@@ -1542,6 +1736,11 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
                         }
                     }
                 }
+                if let Some(err_msg) = stream_error {
+                    log_event(&app_clone, "ERROR", "OLLAMA", &format!("Ollama pull reported error: {}", err_msg));
+                    let _ = app_clone.emit("model_deployment_complete", DeploymentResult { success: false, message: format!("Model pull error: {}", err_msg) });
+                    return;
+                }
             }
             Err(e) => {
                 log_event(&app_clone, "ERROR", "OLLAMA", &format!("API pull failed: {}", e));
@@ -1557,15 +1756,9 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
             tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
             if let Ok(tags_res) = client.get("http://127.0.0.1:11434/api/tags").send().await {
                 if let Ok(tags_json) = tags_res.json::<serde_json::Value>().await {
-                    if let Some(models) = tags_json.get("models").and_then(|m| m.as_array()) {
-                        for m in models {
-                            let name = m.get("name").and_then(|n| n.as_str()).unwrap_or("");
-                            let model_name = m.get("model").and_then(|n| n.as_str()).unwrap_or("");
-                            if name == tag_clone || name.starts_with(&format!("{}:", tag_clone)) || model_name == tag_clone || name.contains(&tag_clone) {
-                                model_verified = true;
-                                break;
-                            }
-                        }
+                    if is_base_model_in_tags(&tags_json, &tag_clone) {
+                        model_verified = true;
+                        break;
                     }
                 }
             }
@@ -1633,33 +1826,43 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
 
         match child.wait().await {
             Ok(status) if status.success() => {
-                log_event(&app_clone, "INFO", "OLLAMA", "Stage 4: frugallm-active created successfully. Pre-warming and locking in VRAM for 60m...");
-                let client = reqwest::Client::new();
-                let warmup_payload = serde_json::json!({
+                log_event(&app_clone, "INFO", "OLLAMA", "frugallm-active model created successfully. Stage 4: Pre-warming and locking in VRAM for 60m...");
+                let _ = app_clone.emit("download_progress", DownloadProgress {
+                    status: "Pre-warming model and confirming CUDA/GPU execution...\r\n".to_string(),
+                });
+
+                // Stage 4: Test inference request to /api/generate to pre-warm the model and lock in VRAM for 60m
+                let client = reqwest::Client::builder()
+                    .timeout(std::time::Duration::from_secs(60))
+                    .build()
+                    .unwrap_or_default();
+                let prewarm_payload = serde_json::json!({
                     "model": "frugallm-active",
-                    "prompt": "hi",
+                    "prompt": "ping",
+                    "stream": false,
                     "keep_alive": "60m"
                 });
-                
-                let warmup_res = client.post("http://127.0.0.1:11434/api/generate")
-                    .json(&warmup_payload)
-                    .send()
-                    .await;
 
-                match warmup_res {
-                    Ok(res) if res.status().is_success() => {
-                        log_event(&app_clone, "INFO", "OLLAMA", "Warmup successful, frugallm-active locked in VRAM");
+                match client.post("http://127.0.0.1:11434/api/generate")
+                    .json(&prewarm_payload)
+                    .send()
+                    .await {
+                    Ok(resp) if resp.status().is_success() => {
+                        log_event(&app_clone, "INFO", "OLLAMA", "Local model pre-warmed and locked in VRAM for 60m successfully");
+                        let _ = app_clone.emit("model_deployment_complete", DeploymentResult { success: true, message: "Success".to_string() });
                     },
-                    Ok(res) => {
-                        log_event(&app_clone, "WARN", "OLLAMA", &format!("Warmup returned non-success status: {}", res.status()));
+                    Ok(resp) => {
+                        let err_text = resp.text().await.unwrap_or_default();
+                        let msg = format!("Model pre-warming response: {}", err_text);
+                        log_event(&app_clone, "WARN", "OLLAMA", &msg);
+                        let _ = app_clone.emit("model_deployment_complete", DeploymentResult { success: true, message: "Success".to_string() });
                     },
                     Err(e) => {
-                        log_event(&app_clone, "WARN", "OLLAMA", &format!("Warmup request error: {}", e));
+                        let msg = format!("Model pre-warming network error: {}", e);
+                        log_event(&app_clone, "WARN", "OLLAMA", &msg);
+                        let _ = app_clone.emit("model_deployment_complete", DeploymentResult { success: true, message: "Success".to_string() });
                     }
                 }
-
-                log_event(&app_clone, "INFO", "OLLAMA", "Local model deployment complete and ready for inference");
-                let _ = app_clone.emit("model_deployment_complete", DeploymentResult { success: true, message: "Success".to_string() });
             },
             Ok(status) => {
                 let msg = format!("Ollama create failed with status: {}", status);

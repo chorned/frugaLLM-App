@@ -171,6 +171,14 @@ export function useAppEvents({
       unlistenProviderStatus = unlisten;
     }).catch(console.error);
 
+    let unlistenOllamaUninstalled: (() => void) | null = null;
+    listen('ollama_uninstalled', () => {
+      setIsOllamaInstalled(false);
+      setNodes(nds => nds.map(n => n.id === 'node-ollama' ? { ...n, data: { ...n.data, status: 'ready' } } : n));
+    }).then(unlisten => {
+      unlistenOllamaUninstalled = unlisten;
+    }).catch(console.error);
+
     return () => {
       if (unlistenTelemetry) {
         unlistenTelemetry();
@@ -198,6 +206,9 @@ export function useAppEvents({
       }
       if (unlistenProviderStatus) {
         unlistenProviderStatus();
+      }
+      if (unlistenOllamaUninstalled) {
+        unlistenOllamaUninstalled();
       }
       cleanupProxyIndicator();
     };

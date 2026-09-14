@@ -45,13 +45,13 @@ pub fn spawn_pty(
             let local_appdata = std::env::var("LOCALAPPDATA")
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|_| home.join("AppData").join("Local"));
-            let hermes_local_appdata = local_appdata.join("hermes").join("bin");
-            let opencode_local_appdata = local_appdata.join("Programs").join("opencode");
-            let ollama_local_appdata = local_appdata.join("Programs").join("Ollama");
             let appdata = std::env::var("APPDATA")
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|_| home.join("AppData").join("Roaming"));
-            let npm_appdata = appdata.join("npm");
+            let npm_bin = appdata.join("npm");
+            let hermes_local_appdata = local_appdata.join("hermes").join("bin");
+            let opencode_local_appdata = local_appdata.join("Programs").join("opencode");
+            let ollama_local_appdata = local_appdata.join("Programs").join("Ollama");
             let prog_files = std::env::var("ProgramFiles")
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|_| std::path::PathBuf::from("C:\\Program Files"));
@@ -62,7 +62,7 @@ pub fn spawn_pty(
                 sep,
                 opencode_local_appdata.display(),
                 sep,
-                npm_appdata.display(),
+                npm_bin.display(),
                 sep,
                 ollama_local_appdata.display(),
                 sep,
@@ -139,29 +139,41 @@ pub fn spawn_pty(
     let session_id_clone = session_id.clone();
     let process_state_clone = process_state.inner().clone();
     std::thread::spawn(move || {
-        if let Ok(status) = child.wait() {
-            process_state_clone.unregister(&session_id_clone);
-            let exit_code = if status.success() { 0 } else { 1 };
-            #[derive(serde::Serialize, Clone)]
-            struct ExitPayload {
-                session_id: String,
-                exit_code: u32,
+        let exit_code = match child.wait() {
+            Ok(status) => if status.success() { 0 } else { 1 },
+            Err(e) => {
+                eprintln!("[pty] process wait error on session {}: {}", session_id_clone, e);
+                1
             }
-            let _ = app_clone.emit("pty_exit", ExitPayload { session_id: session_id_clone, exit_code });
+        };
+        process_state_clone.unregister(&session_id_clone);
+        #[derive(serde::Serialize, Clone)]
+        struct ExitPayload {
+            session_id: String,
+            exit_code: u32,
         }
+        let _ = app_clone.emit("pty_exit", ExitPayload { session_id: session_id_clone, exit_code });
     });
 
     std::thread::spawn(move || {
-        let mut buf = [0u8; 1024];
-        while let Ok(n) = reader.read(&mut buf) {
-            if n == 0 { break; }
-            let s = String::from_utf8_lossy(&buf[..n]);
-            #[derive(serde::Serialize, Clone)]
-            struct OutputPayload {
-                session_id: String,
-                data: String,
+        let mut buf = [0u8; 16384];
+        loop {
+            match reader.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    let s = String::from_utf8_lossy(&buf[..n]);
+                    #[derive(serde::Serialize, Clone)]
+                    struct OutputPayload {
+                        session_id: String,
+                        data: String,
+                    }
+                    let _ = app.emit("pty_output", OutputPayload { session_id: session_id.clone(), data: s.into_owned() });
+                }
+                Err(e) => {
+                    eprintln!("[pty] output reader error on session {}: {}", session_id, e);
+                    break;
+                }
             }
-            let _ = app.emit("pty_output", OutputPayload { session_id: session_id.clone(), data: s.into_owned() });
         }
     });
 

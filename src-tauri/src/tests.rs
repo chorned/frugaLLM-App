@@ -62,6 +62,51 @@ use std::collections::{HashMap, HashSet};
     }
 
     #[test]
+    fn test_opencode_wipe_mocked() {
+        use crate::commands::agents::wipe_opencode;
+        let temp_dir = tempfile::tempdir().unwrap();
+        let home = temp_dir.path();
+        
+        let opencode_dir = home.join(".opencode");
+        let config_dir = home.join(".config").join("opencode");
+        let local_bin = home.join(".local").join("bin");
+        fs::create_dir_all(&opencode_dir).unwrap();
+        fs::create_dir_all(&config_dir).unwrap();
+        fs::create_dir_all(&local_bin).unwrap();
+        
+        let exe_name = if cfg!(windows) { "opencode.exe" } else { "opencode" };
+        let exe_file = local_bin.join(exe_name);
+        fs::File::create(&exe_file).unwrap();
+        
+        assert!(exe_file.exists());
+        assert!(opencode_dir.exists());
+        
+        wipe_opencode(home);
+        
+        assert!(!exe_file.exists());
+        assert!(!opencode_dir.exists());
+        assert!(!config_dir.exists());
+    }
+
+    #[test]
+    fn test_pty_exit_payload_structure() {
+        #[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
+        struct ExitPayload {
+            session_id: String,
+            exit_code: u32,
+        }
+
+        let payload = ExitPayload {
+            session_id: "test-session-123".to_string(),
+            exit_code: 0,
+        };
+
+        let json = serde_json::to_string(&payload).unwrap();
+        let parsed: ExitPayload = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, payload);
+    }
+
+    #[test]
     fn test_is_ollama_in_paths() {
         let temp_dir = tempfile::tempdir().unwrap();
         
@@ -1695,4 +1740,65 @@ HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bf
             assert_eq!(guard[1].provider, "openrouter");
         }
         assert!(!state.fallback_chain.read().await.is_empty());
+    }
+
+    #[test]
+    fn test_is_base_model_in_tags() {
+        let sample_tags = serde_json::json!({
+            "models": [
+                {
+                    "name": "gemma2:2b",
+                    "model": "gemma2:2b",
+                    "size": 1630138980,
+                    "digest": "abc12345"
+                },
+                {
+                    "name": "qwen2.5:7b-instruct",
+                    "model": "qwen2.5:7b-instruct",
+                    "size": 4700000000u64,
+                    "digest": "def67890"
+                }
+            ]
+        });
+
+        // Exact match
+        assert!(is_base_model_in_tags(&sample_tags, "gemma2:2b"));
+        // Case-insensitive
+        assert!(is_base_model_in_tags(&sample_tags, "GEMMA2:2B"));
+        // Base name match
+        assert!(is_base_model_in_tags(&sample_tags, "gemma2"));
+        // Prefix match
+        assert!(is_base_model_in_tags(&sample_tags, "qwen2.5:7b"));
+        // Non-existent model
+        assert!(!is_base_model_in_tags(&sample_tags, "llama3:8b"));
+        // Empty tags
+        let empty_tags = serde_json::json!({ "models": [] });
+        assert!(!is_base_model_in_tags(&empty_tags, "gemma2:2b"));
+        // Malformed json
+        let null_tags = serde_json::json!({});
+        assert!(!is_base_model_in_tags(&null_tags, "gemma2:2b"));
+    }
+
+    #[test]
+    fn test_ollama_process_detection_resilience() {
+        // Must execute cleanly across OS without panics
+        let running = is_ollama_process_running();
+        let _ = running;
+    }
+
+    #[test]
+    fn test_windows_uninstaller_resolution_safety() {
+        // Verify helper executes safely without throwing or panicking
+        let uninstaller = get_windows_ollama_uninstaller();
+        #[cfg(not(target_os = "windows"))]
+        assert!(uninstaller.is_none());
+        #[cfg(target_os = "windows")]
+        let _ = uninstaller;
+    }
+
+    #[test]
+    fn test_clean_windows_user_path_ollama_safety() {
+        // Verify function executes without errors
+        let res = clean_windows_user_path_ollama();
+        assert!(res.is_ok());
     }

@@ -72,12 +72,13 @@ impl ChildProcessManager {
             let _ = std::process::Command::new("pkill").args(&["-9", "-f", "hermes gateway"]).status();
             let _ = std::process::Command::new("pkill").args(&["-9", "-f", "hermes desktop"]).status();
             let _ = std::process::Command::new("pkill").args(&["-9", "-f", "hermes serve"]).status();
+            let _ = std::process::Command::new("pkill").args(&["-9", "-f", "opencode"]).status();
         }
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
             let mut cmd = std::process::Command::new("taskkill");
-            cmd.args(&["/IM", "hermes.exe", "/F", "/T"])
+            cmd.args(&["/IM", "hermes.exe", "/IM", "opencode.exe", "/F", "/T"])
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
                 .creation_flags(0x08000000);

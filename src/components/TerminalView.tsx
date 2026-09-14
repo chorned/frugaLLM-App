@@ -243,6 +243,21 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
           term.writeln('>>> Target directory: ~/.hermes/bin');
         }
         
+        let hermesProgressTimer: any = null;
+        if (mode === 'install-hermes') {
+          term.writeln('\x1b[36mInitializing Hermes Agent environment...\x1b[0m');
+          term.writeln('\x1b[90mHermes provisions uv, git repositories, and a dedicated Python venv (typically takes 2-4 minutes).\x1b[0m\r\n');
+          let elapsed = 0;
+          hermesProgressTimer = setInterval(() => {
+            elapsed += 30;
+            if (elapsed < 360) {
+              term.writeln(`\r\n\x1b[33m[Hermes Provisioning] Still configuring Python virtualenv & dependencies (${Math.floor(elapsed / 60)}m ${elapsed % 60}s elapsed)...\x1b[0m`);
+            } else {
+              term.writeln(`\r\n\x1b[33m[Hermes Provisioning] Installation taking longer than expected (${Math.floor(elapsed / 60)}m elapsed). Still awaiting completion...\x1b[0m`);
+            }
+          }, 30000);
+        }
+
         unlistenOutput = await listen<{ session_id: string, data: string }>('pty_output', (event) => {
           if (event.payload.session_id === sessionId) {
             term.write(event.payload.data);
@@ -252,6 +267,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
         unlistenExit = await listen<{ session_id: string, exit_code: number }>('pty_exit', async (event) => {
           if (event.payload.session_id !== sessionId) return;
           setIsProvisioningModel(false);
+          if (hermesProgressTimer) {
+            clearInterval(hermesProgressTimer);
+            hermesProgressTimer = null;
+          }
           if (onProcessExit) onProcessExit();
           if (event.payload.exit_code === 0) {
             if (mode === 'install-opencode') {
@@ -289,7 +308,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
           }
         });
 
-        if (!isMounted) return;
+        if (!isMounted) {
+          if (hermesProgressTimer) clearInterval(hermesProgressTimer);
+          return;
+        }
         if (onProcessStart) onProcessStart();
         const isWindows = isWindowsPlatform();
         try {
@@ -413,11 +435,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
                   Write-Host '';
                 }
                 Write-Host '>>> [2/3] Installing Hermes Agent...';
-                & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$installer" -SkipSetup;
+                & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$installer" -SkipSetup -NonInteractive;
                 $hermesPaths = @(
-                  (Join-Path $env:LOCALAPPDATA 'hermes\\bin'),
-                  (Join-Path $HOME '.hermes\\bin'),
-                  (Join-Path $HOME '.local\\bin')
+                  (Join-Path $env:LOCALAPPDATA 'hermes\bin'),
+                  (Join-Path $HOME '.hermes\bin'),
+                  (Join-Path $HOME '.local\bin')
                 );
                 foreach ($p in $hermesPaths) {
                   if (Test-Path $p) {
@@ -456,11 +478,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
               `.replace(/\n\s+/g, ' ').trim();
               await spawnPty({ sessionId, command: 'powershell.exe', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', `& { ${script} }`] });
             } else {
-              await spawnPty({ sessionId, command: 'bash', args: ['-c', 'export TERM=xterm-256color && curl -sSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup'] });
+              await spawnPty({ sessionId, command: 'bash', args: ['-c', 'export TERM=xterm-256color && echo "[Stage 1/3] Fetching Hermes Agent installer..." && curl -sSL https://hermes-agent.nousresearch.com/install.sh | { echo "[Stage 2/3] Provisioning uv and Python environment (2-4 min)..."; bash -s -- --skip-setup; } && echo "[Stage 3/3] Hermes Agent installation complete."'] });
             }
           }
           resizePty(sessionId, term.cols, term.rows).catch(console.error);
         } catch (err: any) {
+          if (hermesProgressTimer) {
+            clearInterval(hermesProgressTimer);
+            hermesProgressTimer = null;
+          }
           console.error('Failed to spawn PTY process:', err);
           term.writeln(`\r\n\x1b[31mFailed to launch process: ${err?.message || err}\x1b[0m\r\n`);
           if (onProcessExit) onProcessExit();
@@ -510,7 +536,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
             const winFrugalEnv = `$env:OPENAI_BASE_URL="http://${frugalConfig?.ip || '127.0.0.1'}:${frugalConfig?.port || '61721'}/v1"; $env:OPENAI_API_BASE="http://${frugalConfig?.ip || '127.0.0.1'}:${frugalConfig?.port || '61721'}/v1"; $env:OPENAI_API_KEY="${frugalConfig?.api_password || 'frugallm'}";`;
             const winPathEnv = `$env:PATH="$HOME\\.local\\bin;$HOME\\.hermes\\bin;$HOME\\.opencode\\bin;$HOME\\.cargo\\bin;$env:LOCALAPPDATA\\hermes\\bin;$env:LOCALAPPDATA\\Programs\\opencode;$env:APPDATA\\npm;$env:LOCALAPPDATA\\Programs\\Ollama;$env:ProgramFiles\\Ollama;$env:PATH";`;
             const winResolveHermes = `$hermesBin = (Get-Command hermes.cmd -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1); if (!$hermesBin) { $hermesBin = (Get-Command hermes.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1) }; if (!$hermesBin) { $hermesBin = (Get-Command hermes -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1) }; if (!$hermesBin) { $candidates = @("$env:LOCALAPPDATA\\hermes\\bin\\hermes.cmd", "$HOME\\.hermes\\bin\\hermes.cmd", "$HOME\\.local\\bin\\hermes.cmd", "$env:LOCALAPPDATA\\hermes\\bin\\hermes.exe", "$HOME\\.hermes\\bin\\hermes.exe", "$HOME\\.local\\bin\\hermes.exe"); foreach ($c in $candidates) { if (Test-Path -Path $c) { $hermesBin = $c; break } } }; if (!$hermesBin) { $hermesBin = 'hermes' };`;
-            const winResolveOpenCode = `$opencodeBin = (Get-Command opencode.cmd -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1); if (!$opencodeBin) { $opencodeBin = (Get-Command opencode.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1) }; if (!$opencodeBin) { $opencodeBin = (Get-Command opencode -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1) }; if (!$opencodeBin) { $candidates = @("$env:APPDATA\\npm\\opencode.cmd", "$env:LOCALAPPDATA\\Programs\\opencode\\opencode.cmd", "$HOME\\.opencode\\bin\\opencode.exe", "$HOME\\.local\\bin\\opencode.exe", "$env:LOCALAPPDATA\\Programs\\opencode\\opencode.exe"); foreach ($c in $candidates) { if (Test-Path -Path $c) { $opencodeBin = $c; break } } }; if (!$opencodeBin) { $opencodeBin = 'opencode' };`;
+            const winResolveOpenCode = `$opencodeBin = (Get-Command opencode.cmd -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1); if (!$opencodeBin) { $opencodeBin = (Get-Command opencode.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1) }; if (!$opencodeBin) { $opencodeBin = (Get-Command opencode -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1) }; if (!$opencodeBin) { $candidates = @("$env:APPDATA\\npm\\opencode.cmd", "$HOME\\.local\\bin\\opencode.cmd", "$HOME\\.opencode\\bin\\opencode.cmd", "$env:LOCALAPPDATA\\Programs\\opencode\\opencode.cmd", "$HOME\\.opencode\\bin\\opencode.exe", "$HOME\\.local\\bin\\opencode.exe", "$env:LOCALAPPDATA\\Programs\\opencode\\opencode.exe"); foreach ($c in $candidates) { if (Test-Path -Path $c) { $opencodeBin = $c; break } } }; if (!$opencodeBin) { $opencodeBin = 'opencode' };`;
 
             if (mode === 'run-opencode') {
               await spawnPty({ sessionId, command: 'powershell.exe', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', `${winPathEnv} ${winFrugalEnv} ${winResolveOpenCode} & $opencodeBin -m litellm/frugallm`] });
