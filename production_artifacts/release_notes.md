@@ -1,28 +1,28 @@
-# FrugaLLM v0.0.14 Release Notes
+# FrugaLLM v0.0.15 Release Notes
 
 ### 🚀 Features
-- **Native Windows OpenCode & Hermes Installers:** Integrated automated PowerShell provisioning workflows directly into Terminal Runner. OpenCode automatically downloads and extracts official Windows binaries (`opencode-windows-x64.zip`) into `$HOME\.opencode\bin` with npm fallback; Hermes invokes Nous Research's official `install.ps1 -SkipSetup`.
-- **Unified Cross-Platform System File Opener:** Replaced brittle shell command invocations with native `tauri_plugin_opener` integration for opening application logs and soul configuration across Windows (`ShellExecuteW` with `notepad.exe` fallback), macOS (`open -t`), and Linux (`xdg-open`).
-- **Auto-Provisioned Hermes Soul Template:** Clicking "EDIT SOUL.MD" automatically provisions the complete default Hermes system prompt and scratchpad instructions on disk if not yet initialized.
+- **Full Windows Gemma 4 Zero-Spillover Parity:** Complete native Windows integration for local Gemma 4 model deployment with automatic VRAM fitting, discrete GPU telemetry, and 60-minute VRAM memory locking.
+- **Deep Clean Agent Uninstallation & Wiping:** Introduced a deep `--wipe` routine for uninstallation and lifecycle management, safely stripping local models, roaming application state, registry entries, and orphaned binaries for Ollama, OpenCode, and Hermes.
+- **Real-Time Download Progress & Diagnostics:** Added real-time download streaming with instantaneous transfer rate calculation, remaining ETA, and dedicated daemon log redirection (`server.log`) to prevent console bleed.
+- **Automated Windows Lifecycle Management:** Comprehensive handling for background daemons, automated process tree termination, and robust PowerShell runner routines across all supported agents.
 
 ### 🐛 Fixes
-- **Startup Dynamic Routing Roster & Silent Daemon Failure:** Populated `DynamicRosterState.fallback_chain` immediately in `.setup()` and introduced on-demand self-healing in `/v1/chat/completions` and periodic health check loops, eliminating `HTTP 500: All upstream providers failed:` on cold boot or headless (`--silent`) execution.
-- **macOS False-Positive Ollama Detection:** Removed bare `/Applications/Ollama.app` bundle directory fallback checks so orphaned or incomplete app folders do not suppress installation or cause `No such file or directory` during daemon startup.
-- **Windows Ollama Seamless Headless Provisioning:** Injected the `%LOCALAPPDATA%\Ollama\upgraded` marker prior to running `OllamaSetup.exe` to suppress the onboarding GUI window, isolated installer process execution via PowerShell `Start-Process -PassThru` to prevent subprocess hangs, and streamed real-time stdout/stderr into the terminal view.
-- **Terminal Runner Silent Timeouts:** Guarded all PTY process spawns with resilient error boundaries, surfacing actionable ANSI diagnostic errors immediately in the terminal view rather than hanging when dependencies or system executables are missing.
+- **Silent Process Tree Termination:** Silenced `taskkill` stderr output (`Stdio::null()`) during shutdown and wipe routines to prevent noisy process cleanup errors when terminating child processes.
+- **ConPTY Non-Blocking Streams:** Hardened pseudo-terminal execution on Windows to prevent EOF read thread blocking, ensuring snappy terminal launch and teardown.
+- **Ollama Daemon Startup Stability:** Increased startup timeout to 120 seconds with robust process table polling and suppressed background log noise.
+- **Dual OpenAI Base URL Configuration:** Enhanced agent configuration to provide both `OPENAI_BASE_URL` and `OPENAI_API_BASE` environment variables for full compatibility with older and newer agent CLI frameworks.
+- **Cross-Platform Compiler Warning Cleanups:** Resolved non-Windows variable warnings and ensured zero compiler warnings across all platforms.
 
 ### 🔧 Under the Hood
-- **Persistent Windows PATH Synchronization:** Synchronized `%LOCALAPPDATA%\hermes\bin`, `%LOCALAPPDATA%\Programs\opencode`, `%LOCALAPPDATA%\Programs\Ollama`, and `$HOME\.opencode\bin` into user-level Windows registry PATH settings when toggling global CLI commands.
-- **Robust WebView ONNX Caching:** Guarded browser `CacheStorage` checks in `onnxGateway.ts` to support restricted WebKitGTK and WebView2 contexts safely without breaking local ONNX session initialization.
-- **Modular Architectural Boundaries (CHO-118):** Refactored `src-tauri/src/main.rs` to maintain 226 lines (< 250 lines) while supporting dynamic startup hooks.
-- **Automated macOS Code Signing & Apple Notarization:** Configured Developer ID Application certificate signing with Hardened Runtime (`Entitlements.plist`) and App Store Connect API notarization pipeline via GitHub Actions for seamless Gatekeeper compliance.
-- **Cross-Platform Verification & Test Pyramid:** All 67 Rust unit tests and 232 Vitest tests passing green.
+- **Windows Engineering Skill & Architecture Manifesto:** Added comprehensive documentation (`.agents/ARCHITECTURE.md` and `windows-development` skill) enforcing strict isolation of OS-specific logic behind conditional compilation flags (`#[cfg(target_os = "windows")]`).
+- **Expanded Test Coverage:** Added 5 new Rust unit tests (now 78 passing backend tests) and 7 new Vitest unit tests (now 239 passing frontend tests) verifying cross-platform terminal, process lifecycle, and memory allocation edge cases.
+- **Automated Multi-Platform Release Pipeline:** Configured GitHub Actions matrix for macOS (Universal Apple Silicon & Intel), Windows (x64 setup installer), Ubuntu (Debian `.deb`), and SteamOS (`.AppImage`).
 
 ### 📦 Downloads & Installation
 
 | Platform | Variant / Architecture | Direct Download |
 | :--- | :--- | :--- |
-| **macOS** | Universal (Apple Silicon & Intel) | [frugallm-app_0.0.14_universal.dmg](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.14/frugallm-app_0.0.14_universal.dmg) |
-| **Windows** | Standard Installer (`.exe`) | [frugallm-app_0.0.14_x64-setup.exe](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.14/frugallm-app_0.0.14_x64-setup.exe) |
-| **Ubuntu** | Debian Installer (`.deb`) | [frugallm-app_0.0.14_amd64.deb](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.14/frugallm-app_0.0.14_amd64.deb) |
-| **SteamOS** | Universal Portable (`.AppImage`) | [frugallm-app_0.0.14_amd64.AppImage](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.14/frugallm-app_0.0.14_amd64.AppImage) |
+| **macOS** | Universal (Apple Silicon & Intel) | [frugallm-app_0.0.15_universal.dmg](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.15/frugallm-app_0.0.15_universal.dmg) |
+| **Windows** | Standard Installer (`.exe`) | [frugallm-app_0.0.15_x64-setup.exe](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.15/frugallm-app_0.0.15_x64-setup.exe) |
+| **Ubuntu** | Debian Installer (`.deb`) | [frugallm-app_0.0.15_amd64.deb](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.15/frugallm-app_0.0.15_amd64.deb) |
+| **SteamOS** | Universal Portable (`.AppImage`) | [frugallm-app_0.0.15_amd64.AppImage](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.15/frugallm-app_0.0.15_amd64.AppImage) |
