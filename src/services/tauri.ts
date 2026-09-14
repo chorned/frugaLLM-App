@@ -221,6 +221,10 @@ export async function deployLocalModel(): Promise<void> {
   return invoke<void>('deploy_local_model');
 }
 
+export async function deleteLocalModel(): Promise<void> {
+  return invoke<void>('delete_local_model');
+}
+
 export async function restartApp(): Promise<void> {
   return invoke<void>('restart_app');
 }

@@ -40,6 +40,7 @@ describe('Typed Tauri IPC Service Layer (CHO-117)', () => {
     expect(typeof tauriService.configureHermesDefaults).toBe('function');
     expect(typeof tauriService.configureOpencodeDefaults).toBe('function');
     expect(typeof tauriService.deployLocalModel).toBe('function');
+    expect(typeof tauriService.deleteLocalModel).toBe('function');
   });
 
   it('delegates to invoke with exact command names and argument signatures', async () => {
@@ -61,6 +62,10 @@ describe('Typed Tauri IPC Service Layer (CHO-117)', () => {
     mockInvoke.mockResolvedValueOnce(undefined);
     await tauriService.spawnPty('bash', ['-c', 'echo hello'], 'run-test');
     expect(mockInvoke).toHaveBeenCalledWith('spawn_pty', { sessionId: 'run-test', command: 'bash', args: ['-c', 'echo hello'] });
+
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await tauriService.deleteLocalModel();
+    expect(mockInvoke).toHaveBeenCalledWith('delete_local_model');
   });
 
   it('guarantees zero raw @tauri-apps/api/core invoke calls inside UI presentation components', () => {

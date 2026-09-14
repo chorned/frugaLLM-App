@@ -3,6 +3,7 @@ import {
   killPty,
   stopHermesService,
   uninstallOllama,
+  deleteLocalModel,
   uninstallOpenCode,
   uninstallHermes,
   deleteCredential,
@@ -111,8 +112,17 @@ export function useNodeActions({
     }
     setIsOpenCodeInstalled(false);
   };
+  const handleDeleteLocalModel = async () => {
+    try {
+      await deleteLocalModel();
+      await refreshRoutingChain().catch(console.error);
+    } catch (e) {
+      console.error('Failed to delete local model:', e);
+    }
+  };
   const handleUninstallOllama = async () => {
     try {
+      await deleteLocalModel().catch(console.error);
       await uninstallOllama();
     } catch (e) {
       console.error('Failed to uninstall Ollama:', e);
@@ -349,6 +359,7 @@ export function useNodeActions({
     handleUninstallHermes,
     handleUninstallOpenCode,
     handleUninstallOllama,
+    handleDeleteLocalModel,
     handleDisconnectOpenRouter,
     handleDisconnectGoogle,
     handleNodeClick,

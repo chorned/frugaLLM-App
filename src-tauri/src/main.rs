@@ -159,7 +159,7 @@ fn main() {
             detect_vram, detect_hardware_profile,
             spawn_pty, write_pty, kill_pty, resize_pty,
             configure_hermes_defaults, configure_opencode_defaults,
-            deploy_local_model, get_frugallm_config, set_frugallm_config,
+            deploy_local_model, delete_local_model, get_frugallm_config, set_frugallm_config,
             get_provider_statuses, get_frugallm_server_status,
             edit_hermes_soul, open_app_logs,
             is_wipe_mode, is_mock_update_mode, get_local_ips, restart_app,

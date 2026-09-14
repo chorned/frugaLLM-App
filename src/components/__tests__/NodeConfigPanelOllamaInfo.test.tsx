@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { NodeConfigPanel } from '../NodeConfigPanel';
 import { MemoryProvider } from '../../context/MemoryContext';
 import en from '../../locales/en.json';
@@ -104,5 +104,29 @@ describe('NodeConfigPanel - Ollama Layout and Model Guidance', () => {
     expect(recModel.outcomeHelp).toMatch(/frontier cloud endpoints/i);
     expect(recModel.outcomeHelp).toMatch(/Claude 3\.5 Sonnet/i);
     expect(recModel.outcomeHelp).toMatch(/Gemini 1\.5 Pro/i);
+  });
+
+  it('renders DELETE LOCAL MODEL CTA when Ollama is installed and invokes handleDeleteLocalModel on confirmation', () => {
+    const handleDeleteLocalModel = vi.fn();
+    render(
+      <MemoryProvider>
+        <NodeConfigPanel
+          {...defaultProps}
+          isOllamaInstalled={true}
+          handleDeleteLocalModel={handleDeleteLocalModel}
+        />
+      </MemoryProvider>
+    );
+
+    const deleteBtn = screen.getByTestId('btn-delete-local-model');
+    expect(deleteBtn).toBeInTheDocument();
+    expect(deleteBtn).toHaveTextContent('DELETE LOCAL MODEL');
+
+    fireEvent.click(deleteBtn);
+    const yesBtn = screen.getByTestId('confirm-delete-local-model-yes');
+    expect(yesBtn).toBeInTheDocument();
+    fireEvent.click(yesBtn);
+
+    expect(handleDeleteLocalModel).toHaveBeenCalled();
   });
 });

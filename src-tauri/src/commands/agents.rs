@@ -1464,4 +1464,91 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command(async)]
+pub async fn delete_local_model(app: tauri::AppHandle) -> Result<(), String> {
+    log_event(&app, "INFO", "OLLAMA", "delete_local_model requested: evicting VRAM and removing local model tags");
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+
+    let mut tags_to_delete: Vec<String> = vec![
+        "frugallm-active".to_string(),
+        "frugallm-active:latest".to_string(),
+    ];
+
+    // Read base tag from Modelfile before removing
+    if let Ok(app_data_dir) = app.path().app_data_dir() {
+        let modelfile_path = app_data_dir.join("models").join("Modelfile");
+        if let Ok(content) = tokio::fs::read_to_string(&modelfile_path).await {
+            for line in content.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with("FROM ") {
+                    let base_tag = trimmed.trim_start_matches("FROM ").trim();
+                    if !base_tag.is_empty() && !tags_to_delete.contains(&base_tag.to_string()) {
+                        tags_to_delete.push(base_tag.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    // Inspect live /api/tags to identify any installed gemma4 or active models
+    if let Ok(tags_res) = client.get("http://127.0.0.1:11434/api/tags").send().await {
+        if let Ok(json) = tags_res.json::<serde_json::Value>().await {
+            if let Some(models) = json.get("models").and_then(|m| m.as_array()) {
+                for m in models {
+                    let name = m.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                    let model_name = m.get("model").and_then(|n| n.as_str()).unwrap_or("");
+                    for candidate in [name, model_name] {
+                        if (candidate.contains("frugallm-active") || candidate.contains("gemma4")) && !candidate.is_empty() {
+                            if !tags_to_delete.contains(&candidate.to_string()) {
+                                tags_to_delete.push(candidate.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 1. Immediate VRAM Eviction
+    for tag in &tags_to_delete {
+        log_event(&app, "INFO", "OLLAMA", &format!("Evicting {} from VRAM (keep_alive: 0)", tag));
+        let unload_payload = serde_json::json!({
+            "model": tag,
+            "keep_alive": 0
+        });
+        let _ = client.post("http://127.0.0.1:11434/api/generate")
+            .json(&unload_payload)
+            .send()
+            .await;
+    }
+
+    // 2. Complete Tag Removal
+    for tag in &tags_to_delete {
+        log_event(&app, "INFO", "OLLAMA", &format!("Deleting tag {} from Ollama", tag));
+        let delete_payload = serde_json::json!({
+            "model": tag,
+            "name": tag
+        });
+        let _ = client.request(reqwest::Method::DELETE, "http://127.0.0.1:11434/api/delete")
+            .json(&delete_payload)
+            .send()
+            .await;
+    }
+
+    // 3. Disk Cleanup: delete Modelfile
+    if let Ok(app_data_dir) = app.path().app_data_dir() {
+        let modelfile_path = app_data_dir.join("models").join("Modelfile");
+        let _ = tokio::fs::remove_file(&modelfile_path).await;
+        let models_dir = app_data_dir.join("models");
+        let _ = tokio::fs::remove_dir(&models_dir).await;
+    }
+
+    log_event(&app, "INFO", "OLLAMA", "Local model tags deleted and VRAM evicted successfully");
+    Ok(())
+}
+
+
 

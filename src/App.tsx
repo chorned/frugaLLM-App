@@ -187,6 +187,7 @@ function AppContent() {
     handleUninstallHermes,
     handleUninstallOpenCode,
     handleUninstallOllama,
+    handleDeleteLocalModel,
     handleDisconnectOpenRouter,
     handleDisconnectGoogle,
     handleNodeClick,
@@ -345,6 +346,7 @@ function AppContent() {
             handleInitializeOllama={handleInitializeOllama} 
             handleOpenOllama={handleOpenOllama} 
             handleUninstallOllama={handleUninstallOllama} 
+            handleDeleteLocalModel={handleDeleteLocalModel}
             handleInstallToolGateway={handleInstallToolGateway} 
             handleUninstallToolGateway={handleUninstallToolGateway} 
             handleDisconnectOpenRouter={handleDisconnectOpenRouter} 
