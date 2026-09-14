@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, waitFor } from '@testing-library/react';
+import { render, waitFor, screen } from '@testing-library/react';
 import { isWindowsPlatform, TerminalView } from '../components/TerminalView';
 import * as tauriService from '../services/tauri';
 
@@ -10,6 +10,11 @@ vi.mock('canvas-confetti', () => ({
 
 let mockWriteln = vi.fn();
 let mockWrite = vi.fn();
+let capturedOnDataCallback: ((data: string) => void) | undefined;
+let mockOnData = vi.fn().mockImplementation((cb: (data: string) => void) => {
+  capturedOnDataCallback = cb;
+  return { dispose: vi.fn() };
+});
 
 vi.mock('@xterm/xterm', () => {
   class Terminal {
@@ -18,7 +23,7 @@ vi.mock('@xterm/xterm', () => {
     writeln = mockWriteln;
     dispose = vi.fn();
     loadAddon = vi.fn();
-    onData = vi.fn().mockReturnValue({ dispose: vi.fn() });
+    onData = (cb: any) => mockOnData(cb);
     onResize = vi.fn();
   }
   return { Terminal };
@@ -74,6 +79,11 @@ describe('TerminalView Windows Native Execution & Error Handling', () => {
     vi.clearAllMocks();
     mockWriteln = vi.fn();
     mockWrite = vi.fn();
+    capturedOnDataCallback = undefined;
+    mockOnData = vi.fn().mockImplementation((cb: (data: string) => void) => {
+      capturedOnDataCallback = cb;
+      return { dispose: vi.fn() };
+    });
   });
 
   afterEach(() => {
@@ -111,6 +121,11 @@ describe('TerminalView Windows Native Execution & Error Handling', () => {
     );
 
     await waitFor(() => {
+      expect(mockWriteln).toHaveBeenCalledWith(
+        expect.stringContaining('Initializing OpenCode installation environment...')
+      );
+      expect(screen.queryByText(/Downloading OpenCode Engine/i)).toBeNull();
+      expect(screen.queryByTestId('download-size')).toBeNull();
       expect(tauriService.spawnPty).toHaveBeenCalledWith(
         expect.objectContaining({
           sessionId: 'test-session-opencode',
@@ -127,7 +142,7 @@ describe('TerminalView Windows Native Execution & Error Handling', () => {
     });
   });
 
-  it('spawns powershell.exe with install.ps1 on Windows for install-hermes', async () => {
+  it('spawns powershell.exe with 3-stage installer on Windows for install-hermes', async () => {
     Object.defineProperty(navigator, 'platform', { value: 'Win32', configurable: true });
     Object.defineProperty(navigator, 'userAgent', { value: 'Windows', configurable: true });
 
@@ -143,6 +158,12 @@ describe('TerminalView Windows Native Execution & Error Handling', () => {
     );
 
     await waitFor(() => {
+      expect(mockWriteln).toHaveBeenCalledWith(
+        expect.stringContaining('Initializing Hermes Agent installation environment...')
+      );
+      expect(mockWriteln).toHaveBeenCalledWith(
+        expect.stringContaining('Target directory: ~/.hermes/bin')
+      );
       expect(tauriService.spawnPty).toHaveBeenCalledWith(
         expect.objectContaining({
           sessionId: 'test-session-hermes',
@@ -217,5 +238,31 @@ describe('TerminalView Windows Native Execution & Error Handling', () => {
       );
       expect(onProcessExit).toHaveBeenCalled();
     });
+  });
+
+  it('registers term.onData globally in install mode to forward cursor position reports and user input', async () => {
+    Object.defineProperty(navigator, 'platform', { value: 'Win32', configurable: true });
+    Object.defineProperty(navigator, 'userAgent', { value: 'Windows', configurable: true });
+
+    render(
+      <TerminalView
+        mode="install-opencode"
+        sessionId="test-session-dsr"
+        onExit={vi.fn()}
+        setIsHermesInstalled={vi.fn()}
+        setIsOpenCodeInstalled={vi.fn()}
+        setIsOllamaInstalled={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(mockOnData).toHaveBeenCalled();
+    });
+
+    // Simulate xterm sending a cursor position report response \x1b[1;1R
+    expect(capturedOnDataCallback).toBeDefined();
+    capturedOnDataCallback!('\x1b[1;1R');
+
+    expect(tauriService.writePty).toHaveBeenCalledWith('test-session-dsr', '\x1b[1;1R');
   });
 });

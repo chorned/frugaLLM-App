@@ -502,11 +502,13 @@ pub async fn uninstall_ollama(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         let mut kill = tokio::process::Command::new("taskkill");
-        kill.args(["/F", "/T", "/IM", "ollama.exe", "/IM", "ollama app.exe", "/IM", "ollama_llama_server.exe"])
+        kill.args(["/F", "/T", "/IM", "ollama app.exe", "/IM", "ollama.exe", "/IM", "ollama_llama_server.exe"])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .creation_flags(0x08000000);
         let _ = kill.output().await;
+
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
             let p = std::path::PathBuf::from(&local_app_data).join("Programs").join("Ollama");
@@ -1201,6 +1203,9 @@ pub async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), Strin
                 Remove-Item -Force $tempInstaller -ErrorAction SilentlyContinue;
             }
 
+            # Stop any background tray/daemon processes auto-spawned by the installer so start_ollama_daemon can manage the process cleanly
+            Get-Process -Name 'ollama app', 'ollama', 'ollama_llama_server' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue;
+
             $ollamaProgDir = Join-Path $env:LOCALAPPDATA 'Programs\Ollama';
             if (Test-Path $ollamaProgDir) {
                 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User');
@@ -1290,7 +1295,9 @@ pub async fn start_ollama_daemon(app: &tauri::AppHandle) -> Result<(), String> {
         .build()
         .map_err(|e| e.to_string())?;
 
-    if client.get("http://127.0.0.1:11434/api/tags").send().await.is_ok() {
+    if client.get("http://127.0.0.1:11434/api/version").send().await.is_ok()
+        || client.get("http://127.0.0.1:11434/api/tags").send().await.is_ok()
+    {
         log_event(app, "INFO", "OLLAMA", "Ollama daemon already responding on port 11434");
         let _ = app.emit("download_progress", DownloadProgress {
             status: ">>> Ollama daemon already running.\r\n".to_string(),
@@ -1299,6 +1306,10 @@ pub async fn start_ollama_daemon(app: &tauri::AppHandle) -> Result<(), String> {
     }
 
     let ollama_bin = get_ollama_binary();
+    if !ollama_bin.exists() && !check_ollama_status().await {
+        log_event(app, "INFO", "OLLAMA", "Ollama is not installed; skipping background daemon startup");
+        return Ok(());
+    }
     log_event(app, "INFO", "OLLAMA", &format!("Spawning Ollama daemon with binary {:?}", ollama_bin));
 
     // Redirect daemon stdout and stderr to server.log to suppress raw Go/route log bleed
@@ -1357,9 +1368,11 @@ pub async fn start_ollama_daemon(app: &tauri::AppHandle) -> Result<(), String> {
         *guard = Some(child);
     }
 
-    // Healthcheck against Ollama API with active in-terminal spinner and 40s total timeout
+    // Healthcheck against Ollama API with active in-terminal spinner and 120s total timeout
+    // (Cold boot on Windows with modern discrete GPUs such as RTX 50-series Blackwell / CUDA 12/13
+    // can take 60-90s for library extraction and GPU discovery).
     let spinner_chars = ['|', '/', '-', '\\'];
-    let max_sec: u64 = 40;
+    let max_sec: u64 = 120;
     let mut is_ready = false;
     let start_time = std::time::Instant::now();
     let mut i: usize = 0;

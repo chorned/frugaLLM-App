@@ -111,6 +111,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
       resizePty(sessionId, cols, rows).catch(console.error);
     });
 
+    const dataListener = term.onData((data) => {
+      writePty(sessionId, data).catch(console.error);
+    });
+
     let fitTimeout: number | undefined;
     const resizeObserver = new ResizeObserver(() => {
       window.clearTimeout(fitTimeout);
@@ -226,9 +230,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
       } else if (mode.startsWith('install')) {
         let installingText = 'Initializing installation...';
         if (mode === 'install-hermes') installingText = 'Installing Hermes Agent...';
-        if (mode === 'install-opencode') installingText = 'Installing OpenCode...';
+        if (mode === 'install-opencode') {
+          installingText = 'Installing OpenCode...';
+        }
         if (mode === 'install-ollama') installingText = 'Initializing Ollama installation...';
         term.writeln(installingText);
+        if (mode === 'install-opencode') {
+          term.writeln('>>> Initializing OpenCode installation environment...');
+          term.writeln('>>> Target directory: ~/.opencode/bin');
+        } else if (mode === 'install-hermes') {
+          term.writeln('>>> Initializing Hermes Agent installation environment...');
+          term.writeln('>>> Target directory: ~/.hermes/bin');
+        }
         
         unlistenOutput = await listen<{ session_id: string, data: string }>('pty_output', (event) => {
           if (event.payload.session_id === sessionId) {
@@ -238,6 +251,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
         });
         unlistenExit = await listen<{ session_id: string, exit_code: number }>('pty_exit', async (event) => {
           if (event.payload.session_id !== sessionId) return;
+          setIsProvisioningModel(false);
           if (onProcessExit) onProcessExit();
           if (event.payload.exit_code === 0) {
             if (mode === 'install-opencode') {
@@ -284,22 +298,48 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
               const script = `
                 $ProgressPreference = 'SilentlyContinue';
                 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
-                $binDir = Join-Path $HOME '.opencode\\bin';
-                if (!(Test-Path -Path $binDir)) { New-Item -ItemType Directory -Force -Path $binDir | Out-Null };
-                $zipPath = Join-Path $env:TEMP 'opencode-windows-x64.zip';
-                Write-Host 'Downloading OpenCode for Windows...';
+                $installDir = Join-Path $HOME '.opencode\\bin';
+                if (!(Test-Path $installDir)) { New-Item -ItemType Directory -Force -Path $installDir | Out-Null };
+                $tempZip = Join-Path $env:TEMP 'opencode-windows-x64.zip';
+                $downloadUrl = 'https://github.com/anomalyco/opencode/releases/latest/download/opencode-windows-x64.zip';
+                Write-Host '>>> [1/3] Downloading OpenCode binary (60 MB)...';
                 try {
-                  Invoke-WebRequest -Uri 'https://github.com/anomalyco/opencode/releases/latest/download/opencode-windows-x64.zip' -OutFile $zipPath -UseBasicParsing;
-                  Write-Host 'Extracting OpenCode to' $binDir '...';
-                  Expand-Archive -Path $zipPath -DestinationPath $binDir -Force;
-                  Remove-Item -Force $zipPath -ErrorAction SilentlyContinue;
-                  Write-Host 'OpenCode installed successfully.';
+                  & curl.exe -# -L --fail -o "$tempZip" "$downloadUrl";
+                  Write-Host '';
                 } catch {
-                  Write-Warning ('Direct binary download failed: ' + $_.Exception.Message + '. Attempting npm install...');
-                  npm install -g opencode-ai;
+                  Write-Warning ('curl download failed: ' + $_.Exception.Message + '. Trying WebClient...');
+                  $wc = New-Object System.Net.WebClient;
+                  $wc.DownloadFile($downloadUrl, $tempZip);
+                  Write-Host '';
+                }
+                Write-Host ">>> [2/3] Extracting OpenCode to $installDir...";
+                taskkill /F /IM opencode.exe 2>$null;
+                $tarExit = -1;
+                if (Get-Command tar.exe -ErrorAction SilentlyContinue) {
+                  & tar.exe -xf "$tempZip" -C "$installDir";
+                  $tarExit = $LASTEXITCODE;
+                }
+                if ($tarExit -ne 0 -or !(Test-Path (Join-Path $installDir 'opencode.exe'))) {
+                  Expand-Archive -Path $tempZip -DestinationPath $installDir -Force;
+                }
+                $userPath = [Environment]::GetEnvironmentVariable('PATH', 'User');
+                if ($userPath -notlike ('*' + $installDir + '*')) {
+                  [Environment]::SetEnvironmentVariable('PATH', ($installDir + ';' + $userPath), 'User');
+                }
+                $env:PATH = "$installDir;$env:PATH";
+                $exe = Join-Path $installDir 'opencode.exe';
+                if (Test-Path $exe) {
+                  $ver = & $exe --version;
+                  Write-Host ([char]13 + '>>> [3/3] OpenCode successfully installed (' + $ver + ')! Ready for use.');
+                  Remove-Item "$tempZip" -Force -ErrorAction SilentlyContinue;
+                  exit 0;
+                } else {
+                  Write-Host '';
+                  Write-Host ">>> [ERROR] OpenCode binary not found at $exe";
+                  exit 1;
                 }
               `.replace(/\n\s+/g, ' ').trim();
-              await spawnPty({ sessionId, command: 'powershell.exe', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script] });
+              await spawnPty({ sessionId, command: 'powershell.exe', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', `& { ${script} }`] });
             } else {
               await spawnPty({ sessionId, command: 'bash', args: ['-c', 'export TERM=xterm-256color && curl -fsSL https://opencode.ai/install | bash'] });
             }
@@ -362,12 +402,59 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
               const script = `
                 $ProgressPreference = 'SilentlyContinue';
                 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
-                Write-Host 'Downloading and running Hermes Agent installer for Windows...';
-                $installerScript = Invoke-RestMethod -Uri 'https://hermes-agent.nousresearch.com/install.ps1';
-                $installer = [scriptblock]::Create($installerScript);
-                & $installer -SkipSetup;
+                Write-Host '>>> [1/3] Fetching Hermes installer from nousresearch.com...';
+                $installer = Join-Path $env:TEMP 'hermes-install.ps1';
+                try {
+                  & curl.exe -# -L --fail -o "$installer" 'https://hermes-agent.nousresearch.com/install.ps1';
+                  Write-Host '';
+                } catch {
+                  $wc = New-Object System.Net.WebClient;
+                  $wc.DownloadFile('https://hermes-agent.nousresearch.com/install.ps1', $installer);
+                  Write-Host '';
+                }
+                Write-Host '>>> [2/3] Installing Hermes Agent...';
+                & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$installer" -SkipSetup;
+                $hermesPaths = @(
+                  (Join-Path $env:LOCALAPPDATA 'hermes\\bin'),
+                  (Join-Path $HOME '.hermes\\bin'),
+                  (Join-Path $HOME '.local\\bin')
+                );
+                foreach ($p in $hermesPaths) {
+                  if (Test-Path $p) {
+                    $env:PATH = "$p;$env:PATH";
+                    $userPath = [Environment]::GetEnvironmentVariable('PATH', 'User');
+                    if ($userPath -notlike ('*' + $p + '*')) {
+                      [Environment]::SetEnvironmentVariable('PATH', ($p + ';' + $userPath), 'User');
+                    }
+                  }
+                }
+                $hermesBin = (Get-Command hermes.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1);
+                if (!$hermesBin) {
+                  $hermesBin = (Get-Command hermes.cmd -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1);
+                }
+                if (!$hermesBin) {
+                  $hermesBin = (Get-Command hermes -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1);
+                }
+                if (!$hermesBin) {
+                  foreach ($p in $hermesPaths) {
+                    $c1 = Join-Path $p 'hermes.exe';
+                    if (Test-Path $c1) { $hermesBin = $c1; break; }
+                    $c2 = Join-Path $p 'hermes.cmd';
+                    if (Test-Path $c2) { $hermesBin = $c2; break; }
+                  }
+                }
+                if ($hermesBin -and (Test-Path $hermesBin)) {
+                  $ver = & $hermesBin --version;
+                  Write-Host ([char]13 + '>>> [3/3] Hermes Agent successfully installed (' + $ver + ')! Ready for use.');
+                  Remove-Item "$installer" -Force -ErrorAction SilentlyContinue;
+                  exit 0;
+                } else {
+                  Write-Host '';
+                  Write-Host '>>> [ERROR] Hermes executable not found after installation';
+                  exit 1;
+                }
               `.replace(/\n\s+/g, ' ').trim();
-              await spawnPty({ sessionId, command: 'powershell.exe', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script] });
+              await spawnPty({ sessionId, command: 'powershell.exe', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', `& { ${script} }`] });
             } else {
               await spawnPty({ sessionId, command: 'bash', args: ['-c', 'export TERM=xterm-256color && curl -sSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup'] });
             }
@@ -384,9 +471,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
         if (mode.startsWith('run-hermes')) runningText = 'Starting Hermes Agent...';
         if (mode === 'run-ollama') runningText = 'Chatting with Ollama...';
         term.writeln(runningText);
-        const dataListener = term.onData((data) => {
-          writePty(sessionId, data).catch(console.error);
-        });
         unlistenOutput = await listen<{ session_id: string, data: string }>('pty_output', (event) => {
           if (event.payload.session_id === sessionId) {
             term.write(event.payload.data);
@@ -494,12 +578,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
           term.writeln(`\r\n\x1b[31mFailed to launch process: ${err?.message || err}\x1b[0m\r\n`);
           if (onProcessExit) onProcessExit();
         }
-        
-        const cleanup = unlistenExit;
-        unlistenExit = () => {
-          dataListener.dispose();
-          if (cleanup) cleanup();
-        };
       }
     };
 
@@ -509,6 +587,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
       isMounted = false;
       window.clearTimeout(fitTimeout);
       resizeObserver.disconnect();
+      dataListener.dispose();
       if (unlistenOutput) unlistenOutput();
       if (unlistenExit) unlistenExit();
       term.dispose();
@@ -623,7 +702,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
         <div style={{ padding: '14px 24px', backgroundColor: 'var(--zen-surface-hover)', borderBottom: '1px solid var(--zen-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-               <span style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--zen-text)' }}>Downloading Weights...</span>
+               <span style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--zen-text)' }}>
+                 Downloading Weights...
+               </span>
                {downloadStats.total > 0 && (
                  <span data-testid="download-size" style={{ fontSize: '0.75rem', color: 'var(--zen-text-secondary)', fontWeight: 500, fontFamily: 'monospace' }}>
                    ({formatBytes(downloadStats.completed)} / {formatBytes(downloadStats.total)})

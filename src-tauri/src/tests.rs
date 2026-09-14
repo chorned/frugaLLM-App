@@ -175,6 +175,70 @@ use std::collections::{HashMap, HashSet};
     }
 
     #[test]
+    fn test_pty_powershell_execution() {
+        use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
+        use std::io::Read;
+
+        let pty_system = NativePtySystem::default();
+        let pair = pty_system.openpty(PtySize {
+            rows: 24,
+            cols: 80,
+            pixel_width: 0,
+            pixel_height: 0,
+        }).unwrap();
+
+        let cmd = if cfg!(windows) {
+            let mut c = CommandBuilder::new("powershell.exe");
+            c.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "Write-Output 'Stage 1 reached'"]);
+            c
+        } else {
+            let mut c = CommandBuilder::new("bash");
+            c.args(["-c", "echo 'Stage 1 reached'"]);
+            c
+        };
+
+        let mut child = pair.slave.spawn_command(cmd).unwrap();
+        drop(pair.slave);
+
+        let mut reader = pair.master.try_clone_reader().unwrap();
+        let mut writer = pair.master.take_writer().unwrap();
+        #[cfg(windows)]
+        {
+            use std::io::Write;
+            let _ = writer.write_all(b"\x1b[1;1R");
+            let _ = writer.flush();
+        }
+
+        std::thread::spawn(move || {
+            let _ = child.wait();
+        });
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut buf = [0u8; 128];
+            while let Ok(n) = reader.read(&mut buf) {
+                if n == 0 { break; }
+                if tx.send(String::from_utf8_lossy(&buf[..n]).to_string()).is_err() {
+                    break;
+                }
+            }
+        });
+
+        let mut output = String::new();
+        let start = std::time::Instant::now();
+        while start.elapsed() < std::time::Duration::from_secs(15) {
+            if let Ok(chunk) = rx.recv_timeout(std::time::Duration::from_millis(100)) {
+                output.push_str(&chunk);
+                if output.contains("Stage 1 reached") {
+                    break;
+                }
+            }
+        }
+
+        assert!(output.contains("Stage 1 reached"), "PTY output was: {:?}", output);
+    }
+
+    #[test]
     fn test_calculate_gemma_128k_q8_kv_cache() {
         use crate::telemetry::calculate_gemma_128k_q8_kv_cache;
 

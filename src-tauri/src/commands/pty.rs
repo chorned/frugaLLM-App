@@ -117,7 +117,14 @@ pub fn spawn_pty(
     }
 
     let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
-    let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+    let mut writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+
+    #[cfg(windows)]
+    {
+        use std::io::Write;
+        let _ = writer.write_all(b"\x1b[1;1R");
+        let _ = writer.flush();
+    }
     
     if let Ok(mut state_writer) = state.writer.lock() {
         state_writer.insert(session_id.clone(), writer);
