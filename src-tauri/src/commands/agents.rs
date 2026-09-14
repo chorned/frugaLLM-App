@@ -238,10 +238,6 @@ pub fn get_opencode_source_path(home: &std::path::Path) -> Option<std::path::Pat
                 if p_cmd.exists() {
                     return Some(p_cmd);
                 }
-                let cmd = dir.join("opencode.cmd");
-                if cmd.exists() {
-                    return Some(cmd);
-                }
             }
             if let Ok(app_data) = std::env::var("APPDATA") {
                 let p_npm_cmd = std::path::PathBuf::from(&app_data).join("npm").join("opencode.cmd");
