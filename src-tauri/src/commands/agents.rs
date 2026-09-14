@@ -1614,9 +1614,6 @@ pub async fn start_ollama_daemon(app: &tauri::AppHandle) -> Result<(), String> {
     }
 
     let err = format!("Timed out waiting for Ollama daemon to start after {} seconds", max_sec);
-=======
-    let err = "Timed out waiting for Ollama daemon to start after 120 seconds".to_string();
->>>>>>> main
     log_event(app, "ERROR", "OLLAMA", &err);
     let _ = app.emit("download_progress", DownloadProgress {
         status: format!("\r\n>>> [ERROR] Ollama daemon failed to respond within {} seconds.\r\n", max_sec),
@@ -1674,7 +1671,6 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
                 let mut last_speed_calc = tokio::time::Instant::now();
                 let mut smoothed_speed: f64 = 0.0;
                 let mut last_emit = tokio::time::Instant::now();
-                let mut stream_error: Option<String> = None;
                 while let Ok(Some(chunk)) = res.chunk().await {
                     buffer.extend_from_slice(&chunk);
                     while let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
@@ -1735,11 +1731,6 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
                             }
                         }
                     }
-                }
-                if let Some(err_msg) = stream_error {
-                    log_event(&app_clone, "ERROR", "OLLAMA", &format!("Ollama pull reported error: {}", err_msg));
-                    let _ = app_clone.emit("model_deployment_complete", DeploymentResult { success: false, message: format!("Model pull error: {}", err_msg) });
-                    return;
                 }
             }
             Err(e) => {
