@@ -139,6 +139,7 @@ fn main() {
             proxy::server::start_provider_health_loop(app_handle.clone());
             let ollama_handle = app_handle.clone();
             tauri::async_runtime::spawn(async move { let _ = commands::agents::start_ollama_daemon(&ollama_handle).await; });
+            telemetry::start_telemetry_loop(app_handle.clone());
 
             // Handle Silent / Start Minimized Window Visibility
             if !should_show_window(is_silent, start_minimized) {

@@ -283,6 +283,38 @@ pub fn start_telemetry_loop(app: AppHandle) {
                 } else {
                     new_ollama_state.status = "offline".into();
                 }
+
+                if new_ollama_state.status != "offline" && (new_ollama_state.model_name.is_empty() || new_ollama_state.model_name == "gemma4") {
+                    if let Ok(tags_resp) = client.get("http://127.0.0.1:11434/api/tags").send().await {
+                        if let Ok(tags_json) = tags_resp.json::<serde_json::Value>().await {
+                            if let Some(installed_models) = tags_json.get("models").and_then(|m| m.as_array()) {
+                                let primary = installed_models.iter().find(|m| {
+                                    let name = m.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                                    !name.contains("frugallm-active")
+                                }).or_else(|| installed_models.first());
+
+                                if let Some(m) = primary {
+                                    let raw_name = m.get("name").and_then(|n| n.as_str()).unwrap_or("Unknown");
+                                    let clean_name = if raw_name.contains("frugallm-active") {
+                                        m.get("details")
+                                            .and_then(|d| d.get("parent_model"))
+                                            .and_then(|p| p.as_str())
+                                            .filter(|p| !p.is_empty())
+                                            .map(|p| p.trim_start_matches("library/").trim_end_matches(":latest").to_string())
+                                            .unwrap_or_else(|| "gemma4".to_string())
+                                    } else {
+                                        raw_name.trim_start_matches("library/").trim_end_matches(":latest").to_string()
+                                    };
+                                    new_ollama_state.model_name = clean_name;
+                                    let size = m.get("size").and_then(|s| s.as_u64()).unwrap_or(0);
+                                    if new_ollama_state.total_size == 0 {
+                                        new_ollama_state.total_size = size;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 
                 last_ollama_state = new_ollama_state;
             }

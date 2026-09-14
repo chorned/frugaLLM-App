@@ -291,6 +291,8 @@ function AppContent() {
         setIsOpenCodeInstalled={setIsOpenCodeInstalled}
         setIsOllamaInstalled={setIsOllamaInstalled}
         setIsToolGatewayInstalled={setIsToolGatewayInstalled}
+        setNodes={setNodes}
+        memoryRef={memoryRef}
       />
 
       <TopologyCanvas
@@ -336,7 +338,7 @@ function AppContent() {
             isToolGatewayInstalled={isToolGatewayInstalled} 
             detectedVram={detectedVram}
             setDetectedVram={setDetectedVram}
-            hasActiveBackend={nodes.some(n => (n.id === 'node-ollama' || n.id === 'node-openrouter' || n.id === 'node-google') && n.data.status === 'active')}
+            hasActiveBackend={isOllamaInstalled || nodes.some(n => (n.id === 'node-ollama' || n.id === 'node-openrouter' || n.id === 'node-google') && n.data.status === 'active')}
             handleInitializeHermes={handleInitializeHermes} 
             handleUninstallHermes={handleUninstallHermes} 
             handleOpenHermes={handleOpenHermes} 

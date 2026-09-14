@@ -12,8 +12,10 @@ import {
   resizePty,
   writePty,
   getOllamaChatModel,
+  refreshRoutingChain,
   killPty,
 } from '../services/tauri';
+import { AppNode } from '../constants/canvas';
 import { listen } from '@tauri-apps/api/event';
 import confetti from 'canvas-confetti';
 import { loadOnnxClassifier, clearOnnxCache } from '../services/onnxGateway';
@@ -41,9 +43,11 @@ export interface TerminalViewProps {
   setIsOpenCodeInstalled: (installed: boolean) => void;
   setIsOllamaInstalled: (installed: boolean) => void;
   setIsToolGatewayInstalled?: (installed: boolean) => void;
+  setNodes?: React.Dispatch<React.SetStateAction<AppNode[]>>;
+  memoryRef?: React.MutableRefObject<any>;
 }
 
-export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, frugalConfig, setFrugalConfig, setIsHermesInstalled, setIsOpenCodeInstalled, setIsOllamaInstalled, setIsToolGatewayInstalled }: { mode: 'install-hermes' | 'run-hermes' | 'run-hermes-web' | 'run-hermes-gateway' | 'run-hermes-desktop' | 'install-opencode' | 'run-opencode' | 'run-opencode-web' | 'install-ollama' | 'run-ollama' | 'install-tool-gateway' | 'uninstall-tool-gateway', sessionId: string, onExit: () => void, onProcessStart?: () => void, onProcessExit?: () => void, frugalConfig?: any, setFrugalConfig?: any, setIsHermesInstalled: (installed: boolean) => void, setIsOpenCodeInstalled: (installed: boolean) => void, setIsOllamaInstalled: (installed: boolean) => void, setIsToolGatewayInstalled?: (installed: boolean) => void }) => {
+export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, frugalConfig, setFrugalConfig, setIsHermesInstalled, setIsOpenCodeInstalled, setIsOllamaInstalled, setIsToolGatewayInstalled, setNodes, memoryRef }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const [isProvisioningModel, setIsProvisioningModel] = useState(false);
   const [downloadPercent, setDownloadPercent] = useState<number>(0);
@@ -324,6 +328,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
               setIsProvisioningModel(false);
               if (event.payload.success) {
                 setIsOllamaInstalled(true);
+                setNodes?.(nds => nds.map(n => n.id === 'node-ollama' ? { ...n, data: { ...n.data, status: 'active' } } : n));
+                getOllamaChatModel().then(m => {
+                  if (m && memoryRef?.current) memoryRef.current.setActiveModelName(m);
+                }).catch(() => {});
+                refreshRoutingChain().catch(() => {});
                 term.writeln(`\r\n\x1b[32mModel Provisioned successfully.\x1b[0m\r\n`);
                 confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
                 setTimeout(() => { if (isMounted) onExit(); }, 3000);

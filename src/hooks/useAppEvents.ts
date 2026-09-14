@@ -53,6 +53,9 @@ export function useAppEvents({
         if (status === 'active' || status === 'idle') {
           setIsOllamaInstalled(true);
           setNodes(nds => nds.map(n => n.id === 'node-ollama' && n.data.status !== 'active' ? { ...n, data: { ...n.data, status: 'active' } } : n));
+          if (event.payload?.ollama?.model_name) {
+            memoryRef.current.setActiveModelName(event.payload.ollama.model_name);
+          }
         } else if (status === 'offline') {
           setNodes(nds => nds.map(n => n.id === 'node-ollama' && n.data.status !== 'needs_activation' ? { ...n, data: { ...n.data, status: 'needs_activation' } } : n));
         }

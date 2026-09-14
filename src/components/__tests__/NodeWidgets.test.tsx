@@ -207,6 +207,28 @@ describe('NodeWidgets Components', () => {
       expect(statusElement).toBeInTheDocument();
       expect(statusElement).toHaveTextContent('503');
     });
+
+    it('renders model name and Ready status when Ollama telemetry reports idle with installed model', async () => {
+      render(
+        <MemoryProvider>
+          <HardwareNode />
+        </MemoryProvider>
+      );
+
+      await act(async () => {
+        eventCallback({
+          payload: {
+            ollama: { status: 'idle', model_name: 'gemma4:e4b', location_state: 'unknown', total_size: 9608350473 },
+            hardware: { cpu_utilization: 5.0, gpu_utilization: 0.0, vram_used: 0, vram_total: 16000000000 },
+          },
+        });
+      });
+
+      expect(screen.getByTestId('active-model-name')).toHaveTextContent('gemma4:e4b');
+      const statusElement = screen.getByTestId('node-ollama-status');
+      expect(statusElement).toBeInTheDocument();
+      expect(statusElement).toHaveTextContent('Ready');
+    });
   });
 
   describe('CloudConnectNode', () => {

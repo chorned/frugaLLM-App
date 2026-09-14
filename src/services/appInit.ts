@@ -6,6 +6,8 @@ import {
   checkOpencodeStatus,
   getOpencodeVersion,
   checkOllamaStatus,
+  getOllamaChatModel,
+  refreshRoutingChain,
   checkToolGatewayStatus,
   isWipeMode,
   detectVram,
@@ -96,6 +98,16 @@ export async function runAppInit({
   try {
     const ollamaStatus = await checkOllamaStatus();
     setIsOllamaInstalled(ollamaStatus);
+    if (ollamaStatus) {
+      setNodes(nds => nds.map(n => n.id === 'node-ollama' ? { ...n, data: { ...n.data, status: 'active' } } : n));
+      try {
+        const model = await getOllamaChatModel();
+        if (model) {
+          memoryRef.current.setActiveModelName(model);
+        }
+      } catch(e) {}
+      refreshRoutingChain().catch(() => {});
+    }
     addLog(ollamaStatus ? "OK: Ollama detected." : "INFO: Ollama not detected.");
   } catch(e) {}
   

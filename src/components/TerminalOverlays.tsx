@@ -1,6 +1,7 @@
 import React from 'react';
 import { TerminalView } from './TerminalView';
-import { checkHermesStatus, checkOpencodeStatus, checkOllamaStatus, checkToolGatewayStatus } from '../services/tauri';
+import { checkHermesStatus, checkOpencodeStatus, checkOllamaStatus, checkToolGatewayStatus, getOllamaChatModel, refreshRoutingChain } from '../services/tauri';
+import { AppNode } from '../constants/canvas';
 
 export interface TerminalOverlaysProps {
   terminalMode: string | null;
@@ -13,6 +14,8 @@ export interface TerminalOverlaysProps {
   setIsOpenCodeInstalled: (installed: boolean) => void;
   setIsOllamaInstalled: (installed: boolean) => void;
   setIsToolGatewayInstalled?: (installed: boolean) => void;
+  setNodes?: React.Dispatch<React.SetStateAction<AppNode[]>>;
+  memoryRef?: React.MutableRefObject<any>;
 }
 
 const TERMINAL_MODES = [
@@ -41,6 +44,8 @@ export const TerminalOverlays: React.FC<TerminalOverlaysProps> = ({
   setIsOpenCodeInstalled,
   setIsOllamaInstalled,
   setIsToolGatewayInstalled,
+  setNodes,
+  memoryRef,
 }) => {
   return (
     <>
@@ -56,7 +61,19 @@ export const TerminalOverlays: React.FC<TerminalOverlaysProps> = ({
                  setTerminalMode(null);
                  checkHermesStatus().then((installed) => setIsHermesInstalled(installed));
                  checkOpencodeStatus().then((installed) => setIsOpenCodeInstalled(installed));
-                 checkOllamaStatus().then((installed) => setIsOllamaInstalled(installed));
+                 checkOllamaStatus().then(async (installed) => {
+                   setIsOllamaInstalled(installed);
+                   if (installed) {
+                     setNodes?.(nds => nds.map(n => n.id === 'node-ollama' ? { ...n, data: { ...n.data, status: 'active' } } : n));
+                     try {
+                       const model = await getOllamaChatModel();
+                       if (model && memoryRef?.current) {
+                         memoryRef.current.setActiveModelName(model);
+                       }
+                     } catch(e) {}
+                     refreshRoutingChain().catch(() => {});
+                   }
+                 });
                  checkToolGatewayStatus().then((installed) => setIsToolGatewayInstalled?.(installed));
                }}
                onProcessStart={() => setActiveProcesses(prev => ({ ...prev, [mode]: true }))}
@@ -67,6 +84,8 @@ export const TerminalOverlays: React.FC<TerminalOverlaysProps> = ({
                setIsOpenCodeInstalled={setIsOpenCodeInstalled}
                setIsOllamaInstalled={setIsOllamaInstalled}
                setIsToolGatewayInstalled={setIsToolGatewayInstalled}
+               setNodes={setNodes}
+               memoryRef={memoryRef}
             />
           </div>
         );

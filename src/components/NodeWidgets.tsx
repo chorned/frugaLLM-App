@@ -470,6 +470,7 @@ export const HardwareNode = ({
     };
   }, [isActive]);
 
+  const isOllamaOnline = telemetry?.ollama?.status === 'active' || telemetry?.ollama?.status === 'idle';
   const isLoaded = telemetry?.ollama?.status === 'active';
   const isThinking = (isGenerating && isLoaded) || liveThroughput > 0;
   const isLoading = isGenerating && !isLoaded;
@@ -483,7 +484,8 @@ export const HardwareNode = ({
   else if (isLoading) headerStatusText = 'Loading';
   else if (isThinking) headerStatusText = 'Thinking';
   else if (isLoaded) headerStatusText = 'Loaded';
-  const isStatusActive = isError || isLoading || isThinking || isLoaded;
+  else if (isOllamaOnline) headerStatusText = 'Ready';
+  const isStatusActive = isError || isLoading || isThinking || isLoaded || isOllamaOnline;
 
   return (
     <>
@@ -508,7 +510,7 @@ export const HardwareNode = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {isStatusActive && (
               <span data-testid="node-ollama-status">
-                <StatusLight status={isError ? (isDead ? 'not_installed' : 'standby') : 'active'} text={headerStatusText} color={statusLightColor} />
+                <StatusLight status={isError ? (isDead ? 'not_installed' : 'standby') : (isLoaded || isOllamaOnline ? 'active' : 'standby')} text={headerStatusText} color={statusLightColor} />
               </span>
             )}
             {onSettingsClick && (
@@ -539,11 +541,14 @@ export const HardwareNode = ({
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>Active Model</span>
             {(() => {
-              const rawName = isLoaded ? (telemetry?.ollama?.model_name || memory.activeModelName) : 'None';
+              const rawName = isOllamaOnline
+                ? (telemetry?.ollama?.model_name || memory.activeModelName || 'None')
+                : 'None';
               const displayName = rawName.replace(/^library\//, '').replace(/frugallm-active.*/, 'gemma4').replace(/:latest$/, '');
+              const hasActiveModel = isOllamaOnline && displayName !== 'None';
               return (
-                <span data-testid="active-model-name" style={{ fontSize: '0.78rem', fontWeight: 600, color: isLoaded ? 'var(--zen-text)' : 'var(--zen-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }} title={isLoaded ? displayName : 'None'}>
-                  {isLoaded ? displayName : 'None'}
+                <span data-testid="active-model-name" style={{ fontSize: '0.78rem', fontWeight: 600, color: hasActiveModel ? 'var(--zen-text)' : 'var(--zen-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }} title={hasActiveModel ? displayName : 'None'}>
+                  {hasActiveModel ? displayName : 'None'}
                 </span>
               );
             })()}
