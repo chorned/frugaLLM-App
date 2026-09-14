@@ -1,4 +1,5 @@
 name: PR Gatekeeper
+run-name: "Gatekeeper: ${{ github.event.pull_request.title || github.event.head_commit.message }}"
 
 on:
   push:

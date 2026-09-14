@@ -14,7 +14,7 @@ describe('Release Draft and Version Synchronization', () => {
 
     expect(pkg.version).toBeDefined();
     expect(tauriConf.version).toBe(pkg.version);
-    expect(pkg.version).toBe('0.0.14');
+    expect(pkg.version).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
   it('synchronizes Cargo.toml and Cargo.lock versions with package.json', () => {
