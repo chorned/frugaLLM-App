@@ -1464,16 +1464,21 @@ HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bf
         let config_dir = fake_home.join(".config").join("opencode");
         let roaming_dir = fake_home.join("AppData").join("Roaming").join("opencode");
         let local_dir = fake_home.join("AppData").join("Local").join("Programs").join("opencode");
+        let npm_dir = fake_home.join("AppData").join("Roaming").join("npm");
 
         fs::create_dir_all(&opencode_dir).unwrap();
         fs::create_dir_all(&config_dir).unwrap();
         fs::create_dir_all(&roaming_dir).unwrap();
         fs::create_dir_all(&local_dir).unwrap();
+        fs::create_dir_all(&npm_dir).unwrap();
 
         fs::write(opencode_dir.join("test.txt"), "data").unwrap();
         fs::write(config_dir.join("opencode.json"), "{}").unwrap();
         fs::write(roaming_dir.join("opencode.json"), "{}").unwrap();
         fs::write(local_dir.join("opencode.exe"), "bin").unwrap();
+        fs::write(npm_dir.join("opencode.exe"), "npm_bin").unwrap();
+        fs::write(npm_dir.join("opencode.cmd"), "npm_cmd").unwrap();
+        fs::write(npm_dir.join("opencode"), "npm_sh").unwrap();
 
         wipe_opencode(&fake_home);
 
@@ -1482,6 +1487,9 @@ HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bf
         if cfg!(windows) {
             assert!(!roaming_dir.exists());
             assert!(!local_dir.exists());
+            assert!(!npm_dir.join("opencode.exe").exists());
+            assert!(!npm_dir.join("opencode.cmd").exists());
+            assert!(!npm_dir.join("opencode").exists());
         }
     }
 

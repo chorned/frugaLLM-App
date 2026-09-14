@@ -558,11 +558,25 @@ pub fn wipe_opencode(home: &std::path::Path) {
         let _ = std::fs::remove_file(home.join(".cargo").join("bin").join("opencode.cmd"));
         let _ = std::fs::remove_dir_all(home.join("AppData").join("Local").join("Programs").join("opencode"));
         let _ = std::fs::remove_dir_all(home.join("AppData").join("Roaming").join("opencode"));
+        let npm_home = home.join("AppData").join("Roaming").join("npm");
+        let _ = std::fs::remove_file(npm_home.join("opencode.exe"));
+        let _ = std::fs::remove_file(npm_home.join("opencode.cmd"));
+        let _ = std::fs::remove_file(npm_home.join("opencode"));
+        let _ = std::fs::remove_dir_all(npm_home.join("node_modules").join("opencode"));
+        let _ = std::fs::remove_dir_all(npm_home.join("node_modules").join("opencode-ai"));
+
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
             let _ = std::fs::remove_dir_all(std::path::PathBuf::from(local_app_data).join("Programs").join("opencode"));
         }
         if let Ok(app_data) = std::env::var("APPDATA") {
-            let _ = std::fs::remove_dir_all(std::path::PathBuf::from(app_data).join("opencode"));
+            let p_appdata = std::path::PathBuf::from(app_data);
+            let _ = std::fs::remove_dir_all(p_appdata.join("opencode"));
+            let p_npm = p_appdata.join("npm");
+            let _ = std::fs::remove_file(p_npm.join("opencode.exe"));
+            let _ = std::fs::remove_file(p_npm.join("opencode.cmd"));
+            let _ = std::fs::remove_file(p_npm.join("opencode"));
+            let _ = std::fs::remove_dir_all(p_npm.join("node_modules").join("opencode"));
+            let _ = std::fs::remove_dir_all(p_npm.join("node_modules").join("opencode-ai"));
         }
     }
 }
@@ -606,6 +620,12 @@ pub async fn uninstall_opencode(app: tauri::AppHandle) -> Result<(), String> {
             let _ = tokio::fs::remove_dir_all(&home_opencode).await;
             let home_roaming_opencode = home.join("AppData").join("Roaming").join("opencode");
             let _ = tokio::fs::remove_dir_all(&home_roaming_opencode).await;
+            let npm_home = home.join("AppData").join("Roaming").join("npm");
+            let _ = tokio::fs::remove_file(npm_home.join("opencode.exe")).await;
+            let _ = tokio::fs::remove_file(npm_home.join("opencode.cmd")).await;
+            let _ = tokio::fs::remove_file(npm_home.join("opencode")).await;
+            let _ = tokio::fs::remove_dir_all(npm_home.join("node_modules").join("opencode")).await;
+            let _ = tokio::fs::remove_dir_all(npm_home.join("node_modules").join("opencode-ai")).await;
         }
     }
 
@@ -616,11 +636,18 @@ pub async fn uninstall_opencode(app: tauri::AppHandle) -> Result<(), String> {
             let _ = tokio::fs::remove_dir_all(&prog_opencode).await;
         }
         if let Ok(app_data) = std::env::var("APPDATA") {
-            let roaming_opencode = std::path::PathBuf::from(app_data).join("opencode");
+            let p_appdata = std::path::PathBuf::from(app_data);
+            let roaming_opencode = p_appdata.join("opencode");
             let _ = tokio::fs::remove_dir_all(&roaming_opencode).await;
+            let npm_dir = p_appdata.join("npm");
+            let _ = tokio::fs::remove_file(npm_dir.join("opencode.exe")).await;
+            let _ = tokio::fs::remove_file(npm_dir.join("opencode.cmd")).await;
+            let _ = tokio::fs::remove_file(npm_dir.join("opencode")).await;
+            let _ = tokio::fs::remove_dir_all(npm_dir.join("node_modules").join("opencode")).await;
+            let _ = tokio::fs::remove_dir_all(npm_dir.join("node_modules").join("opencode-ai")).await;
         }
         let mut npm_uninstall = tokio::process::Command::new("cmd.exe");
-        npm_uninstall.args(["/C", "npm", "uninstall", "-g", "opencode-ai"])
+        npm_uninstall.args(["/C", "npm", "uninstall", "-g", "opencode", "opencode-ai"])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .creation_flags(0x08000000);
@@ -708,6 +735,12 @@ pub async fn execute_deep_wipe(app: &tauri::AppHandle) {
             let p = std::path::PathBuf::from(&app_data);
             let _ = tokio::fs::remove_dir_all(p.join("opencode")).await;
             let _ = tokio::fs::remove_dir_all(p.join("hermes")).await;
+            let npm_dir = p.join("npm");
+            let _ = tokio::fs::remove_file(npm_dir.join("opencode.exe")).await;
+            let _ = tokio::fs::remove_file(npm_dir.join("opencode.cmd")).await;
+            let _ = tokio::fs::remove_file(npm_dir.join("opencode")).await;
+            let _ = tokio::fs::remove_dir_all(npm_dir.join("node_modules").join("opencode")).await;
+            let _ = tokio::fs::remove_dir_all(npm_dir.join("node_modules").join("opencode-ai")).await;
         }
     }
 
@@ -1026,8 +1059,14 @@ pub fn sync_opencode_config(app: &tauri::AppHandle, port: u16, api_key: &str) ->
 }
 
 pub fn sync_all_agent_configs(app: &tauri::AppHandle, port: u16, api_key: &str) {
-    let _ = sync_hermes_config(app, port, api_key);
-    let _ = sync_opencode_config(app, port, api_key);
+    if let Ok(home) = app.path().home_dir() {
+        if is_hermes_installed(&home) {
+            let _ = sync_hermes_config(app, port, api_key);
+        }
+        if is_opencode_installed(&home) {
+            let _ = sync_opencode_config(app, port, api_key);
+        }
+    }
 }
 
 #[tauri::command]
