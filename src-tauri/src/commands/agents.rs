@@ -1011,7 +1011,7 @@ pub async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), Strin
 
     #[cfg(target_os = "windows")]
     {
-        use tokio::io::AsyncBufReadExt;
+        use tokio::io::AsyncReadExt;
 
         log_event(app, "INFO", "OLLAMA", "Preparing seamless Ollama installation for Windows via PowerShell");
 
@@ -1038,14 +1038,31 @@ pub async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), Strin
             $tempInstaller = Join-Path $env:TEMP ('OllamaSetup_' + (Get-Random) + '.exe');
             try {
                 Write-Host '>>> Downloading Ollama installer from ollama.com...';
-                Invoke-WebRequest -Uri 'https://ollama.com/download/OllamaSetup.exe' -OutFile $tempInstaller -UseBasicParsing;
-                Write-Host '>>> Installing Ollama Engine silently...';
+                $oldEap = $ErrorActionPreference;
+                $ErrorActionPreference = 'Continue';
+                $installerUrl = 'https://ollama.com/download/OllamaSetup.exe';
+                curl.exe -# -L --fail -o "$tempInstaller" "$installerUrl";
+                $curlExit = $LASTEXITCODE;
+                $ErrorActionPreference = $oldEap;
+                if ($curlExit -ne 0 -or !(Test-Path "$tempInstaller")) {
+                    $wc = New-Object System.Net.WebClient;
+                    $wc.DownloadFile($installerUrl, "$tempInstaller");
+                }
+                Write-Host '';
+
                 $proc = Start-Process -FilePath $tempInstaller -ArgumentList '/VERYSILENT /NORESTART /CLOSEAPPLICATIONS /SUPPRESSMSGBOXES' -PassThru;
+                $sp = @('|', '/', '-', '\');
+                $i = 0;
+                while (Get-Process -Name 'OllamaSetup' -ErrorAction SilentlyContinue) {
+                    Write-Host -NoNewline ("`r>>> Installing Ollama Engine silently... [" + $sp[$i % 4] + "]");
+                    Start-Sleep -Milliseconds 250;
+                    $i++;
+                }
                 $proc.WaitForExit();
                 if ($proc.ExitCode -ne 0) {
                     throw ('Installer exited with code ' + $proc.ExitCode);
                 }
-                Write-Host '>>> Ollama Engine installed successfully.';
+                Write-Host "`r>>> Ollama Engine installed successfully!               ";
             } finally {
                 Remove-Item -Force $tempInstaller -ErrorAction SilentlyContinue;
             }
@@ -1073,22 +1090,26 @@ pub async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), Strin
         })?;
 
         let app_clone = app.clone();
-        if let Some(stdout) = child.stdout.take() {
-            let mut reader = tokio::io::BufReader::new(stdout).lines();
+        if let Some(mut stdout) = child.stdout.take() {
             let app_inner = app_clone.clone();
             tokio::spawn(async move {
-                while let Ok(Some(line)) = reader.next_line().await {
-                    let _ = app_inner.emit("download_progress", DownloadProgress { status: format!("{}\r\n", line) });
+                let mut buf = [0u8; 1024];
+                while let Ok(n) = stdout.read(&mut buf).await {
+                    if n == 0 { break; }
+                    let s = String::from_utf8_lossy(&buf[..n]).to_string();
+                    let _ = app_inner.emit("download_progress", DownloadProgress { status: s });
                 }
             });
         }
 
-        if let Some(stderr) = child.stderr.take() {
-            let mut reader = tokio::io::BufReader::new(stderr).lines();
+        if let Some(mut stderr) = child.stderr.take() {
             let app_inner = app_clone;
             tokio::spawn(async move {
-                while let Ok(Some(line)) = reader.next_line().await {
-                    let _ = app_inner.emit("download_progress", DownloadProgress { status: format!("{}\r\n", line) });
+                let mut buf = [0u8; 1024];
+                while let Ok(n) = stderr.read(&mut buf).await {
+                    if n == 0 { break; }
+                    let s = String::from_utf8_lossy(&buf[..n]).to_string();
+                    let _ = app_inner.emit("download_progress", DownloadProgress { status: s });
                 }
             });
         }
@@ -1132,14 +1153,14 @@ pub async fn start_ollama_daemon(app: &tauri::AppHandle) -> Result<(), String> {
 
     // Check if already responding
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(2))
+        .timeout(std::time::Duration::from_secs(1))
         .build()
         .map_err(|e| e.to_string())?;
 
     if client.get("http://127.0.0.1:11434/api/tags").send().await.is_ok() {
         log_event(app, "INFO", "OLLAMA", "Ollama daemon already responding on port 11434");
         let _ = app.emit("download_progress", DownloadProgress {
-            status: "Ollama daemon already running.".to_string(),
+            status: ">>> Ollama daemon already running.\r\n".to_string(),
         });
         return Ok(());
     }
@@ -1147,39 +1168,54 @@ pub async fn start_ollama_daemon(app: &tauri::AppHandle) -> Result<(), String> {
     let ollama_bin = get_ollama_binary();
     log_event(app, "INFO", "OLLAMA", &format!("Spawning Ollama daemon with binary {:?}", ollama_bin));
 
-    // Spawn daemon in background — pipe stderr so we can stream boot logs
+    // Redirect daemon stdout and stderr to server.log to suppress raw Go/route log bleed
+    #[cfg(target_os = "windows")]
+    let server_log_path = {
+        let dir = std::env::var("LOCALAPPDATA")
+            .map(|l| std::path::PathBuf::from(l).join("Ollama"))
+            .unwrap_or_else(|_| std::env::temp_dir());
+        let _ = std::fs::create_dir_all(&dir);
+        dir.join("server.log")
+    };
+    #[cfg(not(target_os = "windows"))]
+    let server_log_path = {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        let dir = std::path::PathBuf::from(home).join(".ollama");
+        let _ = std::fs::create_dir_all(&dir);
+        dir.join("server.log")
+    };
+
+    let log_file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open(&server_log_path);
+
+    let (stdout_cfg, stderr_cfg) = match log_file {
+        Ok(f) => {
+            let stderr_f = f.try_clone().ok();
+            (
+                std::process::Stdio::from(f),
+                stderr_f.map(std::process::Stdio::from).unwrap_or_else(std::process::Stdio::null),
+            )
+        }
+        Err(_) => (std::process::Stdio::null(), std::process::Stdio::null()),
+    };
+
     let mut cmd = tokio::process::Command::new(ollama_bin);
     cmd.arg("serve")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::piped())
+        .stdout(stdout_cfg)
+        .stderr(stderr_cfg)
         .kill_on_drop(false);
     #[cfg(target_os = "windows")]
     {
         cmd.creation_flags(0x08000000);
     }
-    let mut child = cmd.spawn().map_err(|e| {
+    let child = cmd.spawn().map_err(|e| {
         let err = format!("Failed to spawn Ollama daemon: {}", e);
         log_event(app, "ERROR", "OLLAMA", &err);
         err
     })?;
-
-    // Stream daemon stderr to the frontend in a detached task (never blocks main flow)
-    if let Some(stderr) = child.stderr.take() {
-        use tokio::io::AsyncBufReadExt;
-        let mut reader = tokio::io::BufReader::new(stderr).lines();
-        let app_inner = app.clone();
-        tokio::spawn(async move {
-            use tokio::time::{Instant, Duration};
-            let mut last_emit = Instant::now();
-            while let Ok(Some(line)) = reader.next_line().await {
-                let now = Instant::now();
-                if now.duration_since(last_emit) > Duration::from_millis(100) {
-                    let _ = app_inner.emit("download_progress", DownloadProgress { status: line });
-                    last_emit = now;
-                }
-            }
-        });
-    }
 
     // Store the child handle in application state so it lives for the entire app lifetime.
     // This prevents tokio from reaping or signaling the process when the handle is dropped.
@@ -1188,31 +1224,50 @@ pub async fn start_ollama_daemon(app: &tauri::AppHandle) -> Result<(), String> {
         *guard = Some(child);
     }
 
-    // Poll for readiness — 500ms intervals, 10s timeout
-    let _ = app.emit("download_progress", DownloadProgress {
-        status: "Waiting for Ollama daemon to start...".to_string(),
-    });
+    // Healthcheck against Ollama API with active in-terminal spinner and 40s total timeout
+    let spinner_chars = ['|', '/', '-', '\\'];
+    let total_seconds = 40;
+    let mut is_ready = false;
 
-    for i in 0..20 {
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        if client.get("http://127.0.0.1:11434/api/tags").send().await.is_ok() {
-            log_event(app, "INFO", "OLLAMA", &format!("Ollama daemon ready ({}ms)", (i + 1) * 500));
-            let _ = app.emit("download_progress", DownloadProgress {
-                status: format!("Ollama daemon ready ({}ms).", (i + 1) * 500),
-            });
+    for elapsed in 1..=total_seconds {
+        let sp = spinner_chars[(elapsed as usize) % spinner_chars.len()];
+        let status_msg = format!("\r>>> Waiting for Ollama daemon to initialize... ({}/{}s) [{}]", elapsed, total_seconds, sp);
+        let _ = app.emit("download_progress", DownloadProgress {
+            status: status_msg,
+        });
 
-            // Boot buffer: Ollama's GPU discovery on macOS takes additional time
-            // after the HTTP endpoint is live. Wait 2s before issuing model commands.
-            let _ = app.emit("download_progress", DownloadProgress {
-                status: "Waiting for GPU backend initialization...".to_string(),
-            });
-            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-
-            return Ok(());
+        if let Ok(res) = client.get("http://127.0.0.1:11434/api/version").send().await {
+            if res.status().is_success() {
+                is_ready = true;
+                break;
+            }
+        } else if let Ok(res) = client.get("http://127.0.0.1:11434/").send().await {
+            if res.status().is_success() {
+                is_ready = true;
+                break;
+            }
         }
+
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
 
-    let err = "Timed out waiting for Ollama daemon to start after 10 seconds".to_string();
+    if is_ready {
+        log_event(app, "INFO", "OLLAMA", "Ollama daemon online and ready");
+        let _ = app.emit("download_progress", DownloadProgress {
+            status: "\r>>> Ollama daemon online and ready!                                \r\n".to_string(),
+        });
+
+        // Boot buffer: Ollama's GPU discovery on macOS/Windows takes additional time
+        // after the HTTP endpoint is live. Wait 2s before issuing model commands.
+        let _ = app.emit("download_progress", DownloadProgress {
+            status: ">>> Waiting for GPU backend initialization...\r\n".to_string(),
+        });
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+        return Ok(());
+    }
+
+    let err = format!("Timed out waiting for Ollama daemon to start after {} seconds", total_seconds);
     log_event(app, "ERROR", "OLLAMA", &err);
     Err(err)
 }
