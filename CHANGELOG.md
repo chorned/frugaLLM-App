@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.0.16] - 2026-09-15
+
+### Added
+- **Dependency Provenance Tracking**: Implemented tracking for installation provenance across external agents and runtimes (`is_managed` vs preinstalled `is_installed`) to guard uninstallation and lifecycle workflows across platforms.
+- **OpenSSF Best Practices Integration**: Registered project metadata and added the OpenSSF Best Practices badge to documentation.
+- **Issue Diagnostics Tooltip**: Added an explanatory help tooltip for the diagnostic report inclusion checkbox in the issue submission modal.
+
+### Fixed
+- **Credential Scrubbing in Wipe Routine**: Enhanced `--wipe` credential cleanup to detect and scrub API key aliases and parent `.env` candidates.
+- **Windows Path Lookup**: Removed redundant directory check in `local_app_data` resolution for the OpenCode command runner.
+
+### Security
+- **GitHub Actions Hardening**: Pinned all GitHub Actions workflows to immutable commit SHAs with semantic version comments.
+- **Least-Privilege CI Permissions**: Explicitly configured minimal token permissions across all workflows and automated security audits.
+
+### Changed
+- **Workflow Telemetry & Run Names**: Added dynamic descriptive `run-name` headers across PR Gatekeeper, Security Audit, and Release workflows.
+- **Repository Hygiene**: Removed untracked `production_artifacts` directory and cleaned up root documentation.
+
+---
+
 ## [0.0.15] - 2026-09-15
 
 ### Added
