@@ -2,6 +2,8 @@ name: Security Analysis & Audit
 run-name: "Security Audit: ${{ github.event.pull_request.title || github.event.head_commit.message }}"
 
 on:
+  schedule:
+    - cron: '0 0 * * 1'
   push:
     branches:
       - main

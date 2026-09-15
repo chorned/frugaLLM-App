@@ -141,5 +141,67 @@ describe('DevSecOps & Repository Security Compliance (CHO-85)', () => {
     expect(teamIdMatch).not.toBeNull();
     expect(teamIdMatch![1]).toBe('PG6G5TQVQQ');
   });
+
+  describe('OpenSSF Scorecard Hardening (CHO-130)', () => {
+    it('verifies root LICENSE file exists with MIT text, and matches package.json and Cargo.toml', () => {
+      const licensePath = path.join(rootDir, 'LICENSE');
+      expect(fs.existsSync(licensePath), 'Root LICENSE file must exist').toBe(true);
+
+      const licenseContent = fs.readFileSync(licensePath, 'utf-8');
+      expect(licenseContent).toMatch(/MIT License/i);
+      expect(licenseContent).toMatch(/Copyright \(c\) \d{4} Carl Horned/i);
+
+      // Verify package.json
+      const pkgJsonPath = path.join(rootDir, 'package.json');
+      const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf-8'));
+      expect(pkg.license, 'package.json must declare MIT license').toBe('MIT');
+
+      // Verify Cargo.toml
+      const cargoTomlPath = path.join(rootDir, 'src-tauri/Cargo.toml');
+      const cargoContent = fs.readFileSync(cargoTomlPath, 'utf-8');
+      expect(cargoContent).toMatch(/license\s*=\s*["']MIT["']/);
+    });
+
+    it('verifies all GitHub workflows pin every action reference to a 40-character commit SHA', () => {
+      const workflowsDir = path.join(rootDir, '.github/workflows');
+      const workflowFiles = ['pr-checks.yml', 'security.yml', 'release.yml'];
+
+      for (const file of workflowFiles) {
+        const filePath = path.join(workflowsDir, file);
+        expect(fs.existsSync(filePath), `${file} must exist`).toBe(true);
+
+        const content = fs.readFileSync(filePath, 'utf-8');
+        const actionUses = content.match(/uses:\s*([^\s]+)/g) || [];
+        expect(actionUses.length, `${file} should contain action references`).toBeGreaterThan(0);
+
+        for (const useLine of actionUses) {
+          const match = useLine.match(/uses:\s*([^#\s]+)/);
+          if (match && !match[1].startsWith('./')) {
+            const actionRef = match[1];
+            expect(
+              actionRef,
+              `In ${file}, action reference '${actionRef}' must be pinned to a 40-character commit SHA for OpenSSF Scorecard`
+            ).toMatch(/@[a-f0-9]{40}$/);
+          }
+        }
+      }
+    });
+
+    it('verifies security.yml has a scheduled cron trigger for continuous OpenSSF freshness', () => {
+      const securityPath = path.join(rootDir, '.github/workflows/security.yml');
+      const content = fs.readFileSync(securityPath, 'utf-8');
+
+      expect(content).toMatch(/schedule:\s*\n\s*-\s*cron:\s*['"][^'"]+['"]/);
+    });
+
+    it('verifies release.yml contains build provenance attestation with required permissions', () => {
+      const releasePath = path.join(rootDir, '.github/workflows/release.yml');
+      const content = fs.readFileSync(releasePath, 'utf-8');
+
+      expect(content).toMatch(/attestations:\s*write/);
+      expect(content).toMatch(/id-token:\s*write/);
+      expect(content).toMatch(/uses:\s*actions\/attest-build-provenance@[a-f0-9]{40}/);
+    });
+  });
 });
 
