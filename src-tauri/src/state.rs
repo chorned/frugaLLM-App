@@ -226,6 +226,23 @@ pub fn default_true() -> bool {
     true
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct InstalledByApp {
+    #[serde(default)]
+    pub ollama: bool,
+    #[serde(default)]
+    pub hermes: bool,
+    #[serde(default)]
+    pub opencode: bool,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct DependencyStatus {
+    #[serde(alias = "installed")]
+    pub is_installed: bool,
+    pub is_managed: bool,
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(default)]
 pub struct FrugalConfig {
@@ -250,6 +267,28 @@ pub struct FrugalConfig {
     pub tool_enforcing_gateway: bool,
     #[serde(default = "default_true")]
     pub enable_paid_fallback: bool,
+    #[serde(default, alias = "installed_by_frugallm", alias = "managed_installations")]
+    pub installed_by_app: InstalledByApp,
+}
+
+impl FrugalConfig {
+    pub fn is_managed(&self, component: &str) -> bool {
+        match component {
+            "ollama" => self.installed_by_app.ollama,
+            "hermes" => self.installed_by_app.hermes,
+            "opencode" => self.installed_by_app.opencode,
+            _ => false,
+        }
+    }
+
+    pub fn set_managed(&mut self, component: &str, managed: bool) {
+        match component {
+            "ollama" => self.installed_by_app.ollama = managed,
+            "hermes" => self.installed_by_app.hermes = managed,
+            "opencode" => self.installed_by_app.opencode = managed,
+            _ => {}
+        }
+    }
 }
 
 impl Default for FrugalConfig {
@@ -270,6 +309,7 @@ impl Default for FrugalConfig {
             manual_model_overrides: Vec::new(),
             tool_enforcing_gateway: false,
             enable_paid_fallback: true,
+            installed_by_app: InstalledByApp::default(),
         }
     }
 }

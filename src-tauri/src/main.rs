@@ -156,6 +156,7 @@ fn main() {
             set_model_override, get_launch_options,
             set_credential, get_credential, delete_credential, wipe_credentials,
             check_hermes_status, check_opencode_status, check_ollama_status,
+            install_ollama, install_hermes, install_opencode,
             get_ollama_chat_model, get_hermes_version, get_opencode_version,
             uninstall_ollama, uninstall_opencode, uninstall_hermes,
             detect_vram, detect_hardware_profile,

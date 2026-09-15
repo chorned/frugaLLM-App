@@ -23,8 +23,11 @@ interface UseNodeActionsProps {
   setTerminalMode: (mode: any) => void;
   setActiveProcesses: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   setIsHermesInstalled: (val: boolean) => void;
+  setIsHermesManaged?: (val: boolean) => void;
   setIsOpenCodeInstalled: (val: boolean) => void;
+  setIsOpenCodeManaged?: (val: boolean) => void;
   setIsOllamaInstalled: (val: boolean) => void;
+  setIsOllamaManaged?: (val: boolean) => void;
   setNodes: React.Dispatch<React.SetStateAction<AppNode[]>>;
   frugalConfig: any;
   setFrugalConfig: (conf: any) => void;
@@ -37,8 +40,11 @@ export function useNodeActions({
   setTerminalMode,
   setActiveProcesses,
   setIsHermesInstalled,
+  setIsHermesManaged,
   setIsOpenCodeInstalled,
+  setIsOpenCodeManaged,
   setIsOllamaInstalled,
+  setIsOllamaManaged,
   setNodes,
   frugalConfig,
   setFrugalConfig,
@@ -99,18 +105,20 @@ export function useNodeActions({
   const handleUninstallHermes = async () => {
     try {
       await uninstallHermes();
+      setIsHermesInstalled(false);
+      setIsHermesManaged?.(false);
     } catch (e) {
       console.error('Failed to uninstall Hermes:', e);
     }
-    setIsHermesInstalled(false);
   };
   const handleUninstallOpenCode = async () => {
     try {
       await uninstallOpenCode();
+      setIsOpenCodeInstalled(false);
+      setIsOpenCodeManaged?.(false);
     } catch (e) {
       console.error('Failed to uninstall OpenCode:', e);
     }
-    setIsOpenCodeInstalled(false);
   };
   const handleDeleteLocalModel = async () => {
     try {
@@ -124,11 +132,12 @@ export function useNodeActions({
     try {
       await deleteLocalModel().catch(console.error);
       await uninstallOllama();
+      setIsOllamaInstalled(false);
+      setIsOllamaManaged?.(false);
+      setNodes(nds => nds.map(n => n.id === 'node-ollama' ? { ...n, data: { ...n.data, status: 'ready' } } : n));
     } catch (e) {
       console.error('Failed to uninstall Ollama:', e);
     }
-    setIsOllamaInstalled(false);
-    setNodes(nds => nds.map(n => n.id === 'node-ollama' ? { ...n, data: { ...n.data, status: 'ready' } } : n));
   };
   const handleDisconnectOpenRouter = async () => {
     await deleteCredential('openrouter').catch(console.error);

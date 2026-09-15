@@ -41,6 +41,9 @@ describe('Typed Tauri IPC Service Layer (CHO-117)', () => {
     expect(typeof tauriService.configureOpencodeDefaults).toBe('function');
     expect(typeof tauriService.deployLocalModel).toBe('function');
     expect(typeof tauriService.deleteLocalModel).toBe('function');
+    expect(typeof tauriService.installOllama).toBe('function');
+    expect(typeof tauriService.installHermes).toBe('function');
+    expect(typeof tauriService.installOpenCode).toBe('function');
   });
 
   it('delegates to invoke with exact command names and argument signatures', async () => {
@@ -50,10 +53,10 @@ describe('Typed Tauri IPC Service Layer (CHO-117)', () => {
     expect(mockInvoke).toHaveBeenCalledWith('get_frugallm_config');
     expect(config).toEqual({ port: 61721 });
 
-    mockInvoke.mockResolvedValueOnce(true);
-    const hermesInstalled = await tauriService.checkHermesStatus();
+    mockInvoke.mockResolvedValueOnce({ is_installed: true, is_managed: false });
+    const hermesStatus = await tauriService.checkHermesStatus();
     expect(mockInvoke).toHaveBeenCalledWith('check_hermes_status');
-    expect(hermesInstalled).toBe(true);
+    expect(hermesStatus).toEqual({ is_installed: true, is_managed: false });
 
     mockInvoke.mockResolvedValueOnce(undefined);
     await tauriService.setCredential('openrouter', 'sk-test');

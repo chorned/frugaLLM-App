@@ -50,16 +50,45 @@ export async function setFrugallmConfig(
   return invoke<void>('set_frugallm_config', { newConfig: payload });
 }
 
-export async function checkHermesStatus(): Promise<boolean> {
-  return invoke<boolean>('check_hermes_status');
+export interface DependencyStatus {
+  is_installed: boolean;
+  is_managed: boolean;
 }
 
-export async function checkOpencodeStatus(): Promise<boolean> {
-  return invoke<boolean>('check_opencode_status');
+export async function checkHermesStatus(): Promise<DependencyStatus> {
+  const res = await invoke<any>('check_hermes_status');
+  if (typeof res === 'boolean') {
+    return { is_installed: res, is_managed: false };
+  }
+  return res ?? { is_installed: false, is_managed: false };
 }
 
-export async function checkOllamaStatus(): Promise<boolean> {
-  return invoke<boolean>('check_ollama_status');
+export async function checkOpencodeStatus(): Promise<DependencyStatus> {
+  const res = await invoke<any>('check_opencode_status');
+  if (typeof res === 'boolean') {
+    return { is_installed: res, is_managed: false };
+  }
+  return res ?? { is_installed: false, is_managed: false };
+}
+
+export async function checkOllamaStatus(): Promise<DependencyStatus> {
+  const res = await invoke<any>('check_ollama_status');
+  if (typeof res === 'boolean') {
+    return { is_installed: res, is_managed: false };
+  }
+  return res ?? { is_installed: false, is_managed: false };
+}
+
+export async function installOllama(): Promise<void> {
+  return invoke<void>('install_ollama');
+}
+
+export async function installOpenCode(): Promise<void> {
+  return invoke<void>('install_opencode');
+}
+
+export async function installHermes(): Promise<void> {
+  return invoke<void>('install_hermes');
 }
 
 export async function checkToolGatewayStatus(): Promise<boolean> {

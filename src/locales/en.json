@@ -41,6 +41,9 @@
       }
     },
     "nodeConfigPanel": {
+      "badges": {
+        "systemManaged": "External Installation (System Managed)"
+      },
       "inputs": {
         "schemaPath": {
           "label": "SCHEMA PATH",
@@ -388,6 +391,10 @@
   },
   "header": {
     "brandName": "FrugaLLM",
+    "betaBanner": "Beta",
+    "betaTooltip": "FrugaLLM is currently in active Beta development",
+    "reportIssue": "Report Issue",
+    "reportIssueTooltip": "Report an issue or send diagnostic telemetry",
     "toggleTheme": "Toggle theme",
     "themeLight": "Switch to light theme",
     "themeDark": "Switch to dark theme"

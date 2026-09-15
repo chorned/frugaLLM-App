@@ -697,12 +697,14 @@ describe('App Component Integration', () => {
       { timeout: 10000 }
     );
 
-    // Header assertions: left-aligned logo and brand text
+    // Header assertions: left-aligned logo, brand text, beta banner, and report issue CTA
     const header = screen.getByTestId('app-header');
     expect(header).toBeInTheDocument();
     const logoSvg = screen.getByRole('img', { name: 'FrugaLLM Logo' });
     expect(logoSvg).toBeInTheDocument();
     expect(screen.getByTestId('header-frugallm-icon')).toBeInTheDocument();
+    expect(screen.getByTestId('header-beta-banner')).toHaveTextContent('Beta');
+    expect(screen.getByTestId('header-report-issue-btn')).toHaveTextContent('Report Issue');
 
     // Footer assertions: Horned.se and Github hyperlinks
     const footer = screen.getByTestId('app-footer');
@@ -1096,6 +1098,70 @@ describe('App Component Integration', () => {
     });
 
     // Close modal
+    fireEvent.click(screen.getByTestId('cancel-issue-button'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('issue-reporter-modal')).not.toBeInTheDocument();
+    });
+  }, 15000);
+
+  it('opens IssueReporterModal directly when Header report issue CTA is clicked', async () => {
+    (invoke as any).mockImplementation((cmd: string, _args?: any) => {
+      if (cmd === 'get_diagnostic_data') {
+        return Promise.resolve({
+          app_version: '0.0.15',
+          os_info: 'macos x86_64',
+          logs: '[1234] [INFO] system ok',
+        });
+      }
+      if (cmd === 'get_frugallm_config') {
+        return Promise.resolve({
+          port: 61721,
+          bind_all_interfaces: false,
+          api_password: '',
+          input_tokens_session: 0,
+          output_tokens_session: 0,
+          input_tokens_lifetime: 0,
+          output_tokens_lifetime: 0,
+          opencode_workspace: '~/OpenCode',
+          hermes_workspace: '~/Hermes',
+          start_minimized: false,
+          manual_model_overrides: [],
+          tool_enforcing_gateway: false,
+        });
+      }
+      if (cmd === 'get_routing_chain') return Promise.resolve([]);
+      if (cmd === 'check_ollama_status') return Promise.resolve(false);
+      if (cmd === 'check_hermes_status') return Promise.resolve(false);
+      if (cmd === 'check_opencode_status') return Promise.resolve(false);
+      if (cmd === 'check_tool_gateway_status') return Promise.resolve(false);
+      if (cmd === 'get_provider_statuses') return Promise.resolve({});
+      if (cmd === 'detect_vram') return Promise.resolve(16384);
+      if (cmd === 'detect_hardware_profile') {
+        return Promise.resolve({
+          cpu_brand: 'Intel Core i9',
+          total_memory_bytes: 34359738368,
+          gpus: [{ name: 'AMD Radeon Pro', vram_bytes: 17179869184, is_primary: true }],
+          os_version: 'Darwin 24.0.0',
+        });
+      }
+      if (cmd === 'get_latest_telemetry') return Promise.resolve(null);
+      if (cmd === 'get_frugallm_server_status') return Promise.resolve({ status: 'running' });
+      return Promise.resolve(null);
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('header-report-issue-btn')).toBeInTheDocument();
+    }, { timeout: 10000 });
+
+    fireEvent.click(screen.getByTestId('header-report-issue-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('issue-reporter-modal')).toBeInTheDocument();
+      expect(invoke).toHaveBeenCalledWith('get_diagnostic_data');
+    });
+
     fireEvent.click(screen.getByTestId('cancel-issue-button'));
     await waitFor(() => {
       expect(screen.queryByTestId('issue-reporter-modal')).not.toBeInTheDocument();

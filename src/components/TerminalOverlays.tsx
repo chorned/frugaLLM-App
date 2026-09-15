@@ -11,8 +11,11 @@ export interface TerminalOverlaysProps {
   frugalConfig: any;
   setFrugalConfig: any;
   setIsHermesInstalled: (installed: boolean) => void;
+  setIsHermesManaged?: (managed: boolean) => void;
   setIsOpenCodeInstalled: (installed: boolean) => void;
+  setIsOpenCodeManaged?: (managed: boolean) => void;
   setIsOllamaInstalled: (installed: boolean) => void;
+  setIsOllamaManaged?: (managed: boolean) => void;
   setIsToolGatewayInstalled?: (installed: boolean) => void;
   setNodes?: React.Dispatch<React.SetStateAction<AppNode[]>>;
   memoryRef?: React.MutableRefObject<any>;
@@ -41,8 +44,11 @@ export const TerminalOverlays: React.FC<TerminalOverlaysProps> = ({
   frugalConfig,
   setFrugalConfig,
   setIsHermesInstalled,
+  setIsHermesManaged,
   setIsOpenCodeInstalled,
+  setIsOpenCodeManaged,
   setIsOllamaInstalled,
+  setIsOllamaManaged,
   setIsToolGatewayInstalled,
   setNodes,
   memoryRef,
@@ -59,11 +65,18 @@ export const TerminalOverlays: React.FC<TerminalOverlaysProps> = ({
                sessionId={mode}
                onExit={() => {
                  setTerminalMode(null);
-                 checkHermesStatus().then((installed) => setIsHermesInstalled(installed));
-                 checkOpencodeStatus().then((installed) => setIsOpenCodeInstalled(installed));
-                 checkOllamaStatus().then(async (installed) => {
-                   setIsOllamaInstalled(installed);
-                   if (installed) {
+                 checkHermesStatus().then((status) => {
+                   setIsHermesInstalled(status.is_installed);
+                   setIsHermesManaged?.(status.is_managed);
+                 });
+                 checkOpencodeStatus().then((status) => {
+                   setIsOpenCodeInstalled(status.is_installed);
+                   setIsOpenCodeManaged?.(status.is_managed);
+                 });
+                 checkOllamaStatus().then(async (status) => {
+                   setIsOllamaInstalled(status.is_installed);
+                   setIsOllamaManaged?.(status.is_managed);
+                   if (status.is_installed) {
                      setNodes?.(nds => nds.map(n => n.id === 'node-ollama' ? { ...n, data: { ...n.data, status: 'active' } } : n));
                      try {
                        const model = await getOllamaChatModel();

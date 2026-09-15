@@ -23,11 +23,14 @@ export interface AppInitOptions {
   addLog: (msg: string) => void;
   setFrugalConfig: (conf: any) => void;
   setIsHermesInstalled: (val: boolean) => void;
+  setIsHermesManaged?: (val: boolean) => void;
   setHermesVersion: (ver: string) => void;
   setActiveProcesses: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   setIsOpenCodeInstalled: (val: boolean) => void;
+  setIsOpenCodeManaged?: (val: boolean) => void;
   setOpencodeVersion: (ver: string) => void;
   setIsOllamaInstalled: (val: boolean) => void;
+  setIsOllamaManaged?: (val: boolean) => void;
   setIsToolGatewayInstalled: (val: boolean) => void;
   setDetectedVram: (vram: string) => void;
   memoryRef: React.MutableRefObject<any>;
@@ -42,11 +45,14 @@ export async function runAppInit({
   addLog,
   setFrugalConfig,
   setIsHermesInstalled,
+  setIsHermesManaged,
   setHermesVersion,
   setActiveProcesses,
   setIsOpenCodeInstalled,
+  setIsOpenCodeManaged,
   setOpencodeVersion,
   setIsOllamaInstalled,
+  setIsOllamaManaged,
   setIsToolGatewayInstalled,
   setDetectedVram,
   memoryRef,
@@ -71,8 +77,9 @@ export async function runAppInit({
   addLog("Checking Hermes agent status...");
   try {
     const hermesStatus = await checkHermesStatus();
-    setIsHermesInstalled(hermesStatus);
-    if (hermesStatus) {
+    setIsHermesInstalled(hermesStatus.is_installed);
+    setIsHermesManaged?.(hermesStatus.is_managed);
+    if (hermesStatus.is_installed) {
       getHermesVersion().then(v => setHermesVersion(v)).catch(() => setHermesVersion('N/A'));
       setActiveProcesses(prev => ({
         ...prev,
@@ -80,25 +87,27 @@ export async function runAppInit({
         'run-hermes-gateway': true,
       }));
     }
-    addLog(hermesStatus ? "OK: Hermes installed." : "INFO: Hermes not installed.");
+    addLog(hermesStatus.is_installed ? "OK: Hermes installed." : "INFO: Hermes not installed.");
   } catch(e) {}
   
   addLog("Checking OpenCode agent status...");
   try {
     const opencodeStatus = await checkOpencodeStatus();
-    setIsOpenCodeInstalled(opencodeStatus);
-    if (opencodeStatus) {
+    setIsOpenCodeInstalled(opencodeStatus.is_installed);
+    setIsOpenCodeManaged?.(opencodeStatus.is_managed);
+    if (opencodeStatus.is_installed) {
       getOpencodeVersion().then(v => setOpencodeVersion(v)).catch(() => setOpencodeVersion('N/A'));
     }
-    addLog(opencodeStatus ? "OK: OpenCode installed." : "INFO: OpenCode not installed.");
+    addLog(opencodeStatus.is_installed ? "OK: OpenCode installed." : "INFO: OpenCode not installed.");
   } catch(e) {}
   await new Promise(r => setTimeout(r, 200));
 
   addLog("Detecting Ollama daemon...");
   try {
     const ollamaStatus = await checkOllamaStatus();
-    setIsOllamaInstalled(ollamaStatus);
-    if (ollamaStatus) {
+    setIsOllamaInstalled(ollamaStatus.is_installed);
+    setIsOllamaManaged?.(ollamaStatus.is_managed);
+    if (ollamaStatus.is_installed) {
       setNodes(nds => nds.map(n => n.id === 'node-ollama' ? { ...n, data: { ...n.data, status: 'active' } } : n));
       try {
         const model = await getOllamaChatModel();
@@ -108,7 +117,7 @@ export async function runAppInit({
       } catch(e) {}
       refreshRoutingChain().catch(() => {});
     }
-    addLog(ollamaStatus ? "OK: Ollama detected." : "INFO: Ollama not detected.");
+    addLog(ollamaStatus.is_installed ? "OK: Ollama detected." : "INFO: Ollama not detected.");
   } catch(e) {}
   
   addLog("Checking Tool Enforcing Gateway status...");

@@ -5,6 +5,27 @@ use crate::state::*;
 use crate::proxy::*;
 use crate::commands::*;
 
+pub async fn set_installation_managed(app: &tauri::AppHandle, component: &str, is_managed: bool) -> Result<(), String> {
+    if let Some(state) = app.try_state::<FrugalConfigState>() {
+        let mut config = state.config.lock().await;
+        config.set_managed(component, is_managed);
+        if let Ok(path) = get_config_path(app) {
+            if let Ok(json) = serde_json::to_string_pretty(&*config) {
+                let _ = std::fs::write(path, json);
+            }
+        }
+    }
+    Ok(())
+}
+
+pub async fn is_installation_managed(app: &tauri::AppHandle, component: &str) -> bool {
+    if let Some(state) = app.try_state::<FrugalConfigState>() {
+        let config = state.config.lock().await;
+        config.is_managed(component)
+    } else {
+        false
+    }
+}
 
 pub fn get_hermes_source_path(home: &std::path::Path) -> Option<std::path::PathBuf> {
     #[cfg(target_os = "windows")]
@@ -103,11 +124,17 @@ pub fn is_hermes_installed(home: &std::path::Path) -> bool {
 }
 
 #[tauri::command]
-pub fn check_hermes_status(app: tauri::AppHandle) -> bool {
-    if let Ok(home) = app.path().home_dir() {
-        return is_hermes_installed(&home);
+pub async fn check_hermes_status(app: tauri::AppHandle) -> DependencyStatus {
+    let is_installed = if let Ok(home) = app.path().home_dir() {
+        is_hermes_installed(&home)
+    } else {
+        false
+    };
+    let is_managed = is_installed && is_installation_managed(&app, "hermes").await;
+    DependencyStatus {
+        is_installed,
+        is_managed,
     }
-    false
 }
 
 pub fn get_opencode_source_path(home: &std::path::Path) -> Option<std::path::PathBuf> {
@@ -279,11 +306,17 @@ pub fn is_opencode_installed(home: &std::path::Path) -> bool {
 }
 
 #[tauri::command]
-pub fn check_opencode_status(app: tauri::AppHandle) -> bool {
-    if let Ok(home) = app.path().home_dir() {
-        return is_opencode_installed(&home);
+pub async fn check_opencode_status(app: tauri::AppHandle) -> DependencyStatus {
+    let is_installed = if let Ok(home) = app.path().home_dir() {
+        is_opencode_installed(&home)
+    } else {
+        false
+    };
+    let is_managed = is_installed && is_installation_managed(&app, "opencode").await;
+    DependencyStatus {
+        is_installed,
+        is_managed,
     }
-    false
 }
 
 pub fn get_ollama_binary() -> std::path::PathBuf {
@@ -459,8 +492,7 @@ pub fn clean_windows_user_path_ollama() -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command(async)]
-pub async fn check_ollama_status() -> bool {
+pub async fn is_ollama_installed() -> bool {
     // 1. Check if it's currently running via its local API
     if reqwest::get("http://127.0.0.1:11434/api/version").await.is_ok() {
         return true;
@@ -509,6 +541,16 @@ pub async fn check_ollama_status() -> bool {
             "/Applications/Ollama.app/Contents/MacOS/Ollama",
         ];
         is_ollama_in_paths(&paths)
+    }
+}
+
+#[tauri::command(async)]
+pub async fn check_ollama_status(app: tauri::AppHandle) -> DependencyStatus {
+    let is_installed = is_ollama_installed().await;
+    let is_managed = is_installed && is_installation_managed(&app, "ollama").await;
+    DependencyStatus {
+        is_installed,
+        is_managed,
     }
 }
 
@@ -623,6 +665,11 @@ pub async fn get_opencode_version(app: tauri::AppHandle) -> String {
 
 #[tauri::command(async)]
 pub async fn uninstall_ollama(app: tauri::AppHandle) -> Result<(), String> {
+    if !is_installation_managed(&app, "ollama").await {
+        let msg = "Cannot uninstall Ollama: External installation (system-managed) cannot be uninstalled by FrugaLLM.".to_string();
+        log_event(&app, "WARN", "OLLAMA", &msg);
+        return Err(msg);
+    }
     log_event(&app, "INFO", "OLLAMA", "Initiating complete uninstallation of Ollama");
 
     // 1. Kill daemon child process if managed by app
@@ -727,6 +774,7 @@ pub async fn uninstall_ollama(app: tauri::AppHandle) -> Result<(), String> {
         let _ = store.save();
     }
 
+    let _ = set_installation_managed(&app, "ollama", false).await;
     let _ = app.emit("ollama_uninstalled", ());
     log_event(&app, "INFO", "OLLAMA", "Ollama uninstalled, registry purged, leftover storage removed, and state reset successfully");
 
@@ -771,6 +819,13 @@ pub fn wipe_opencode(home: &std::path::Path) {
 
 #[tauri::command(async)]
 pub async fn uninstall_opencode(app: tauri::AppHandle) -> Result<(), String> {
+    if !is_installation_managed(&app, "opencode").await {
+        let msg = "Cannot uninstall OpenCode: External installation (system-managed) cannot be uninstalled by FrugaLLM.".to_string();
+        log_event(&app, "WARN", "OPENCODE", &msg);
+        return Err(msg);
+    }
+    log_event(&app, "INFO", "OPENCODE", "Initiating complete uninstallation of OpenCode");
+
     // 1. Terminate running opencode processes
     #[cfg(not(target_os = "windows"))]
     {
@@ -844,11 +899,21 @@ pub async fn uninstall_opencode(app: tauri::AppHandle) -> Result<(), String> {
         let _ = npm_uninstall.output().await;
     }
 
+    let _ = set_installation_managed(&app, "opencode", false).await;
+    log_event(&app, "INFO", "OPENCODE", "OpenCode uninstalled and state reset successfully");
+
     Ok(())
 }
 
 #[tauri::command(async)]
 pub async fn uninstall_hermes(app: tauri::AppHandle) -> Result<(), String> {
+    if !is_installation_managed(&app, "hermes").await {
+        let msg = "Cannot uninstall Hermes: External installation (system-managed) cannot be uninstalled by FrugaLLM.".to_string();
+        log_event(&app, "WARN", "HERMES", &msg);
+        return Err(msg);
+    }
+    log_event(&app, "INFO", "HERMES", "Initiating complete uninstallation of Hermes");
+
     // 1. Terminate running hermes processes
     #[cfg(not(target_os = "windows"))]
     {
@@ -897,6 +962,9 @@ pub async fn uninstall_hermes(app: tauri::AppHandle) -> Result<(), String> {
         }
     }
 
+    let _ = set_installation_managed(&app, "hermes", false).await;
+    log_event(&app, "INFO", "HERMES", "Hermes uninstalled and state reset successfully");
+
     Ok(())
 }
 
@@ -907,30 +975,48 @@ pub async fn execute_deep_wipe(app: &tauri::AppHandle) {
     let _ = uninstall_hermes(app.clone()).await;
 
     if let Ok(home) = app.path().home_dir() {
-        wipe_opencode(&home);
-        let _ = tokio::fs::remove_dir_all(home.join(".hermes")).await;
-        let _ = tokio::fs::remove_dir_all(home.join(".ollama")).await;
+        if is_installation_managed(app, "opencode").await {
+            wipe_opencode(&home);
+        }
+        if is_installation_managed(app, "hermes").await {
+            let _ = tokio::fs::remove_dir_all(home.join(".hermes")).await;
+        }
+        if is_installation_managed(app, "ollama").await {
+            let _ = tokio::fs::remove_dir_all(home.join(".ollama")).await;
+        }
     }
 
     #[cfg(target_os = "windows")]
     {
-        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-            let p = std::path::PathBuf::from(&local_app_data);
-            let _ = tokio::fs::remove_dir_all(p.join("hermes")).await;
-            let _ = tokio::fs::remove_dir_all(p.join("Ollama")).await;
-            let _ = tokio::fs::remove_dir_all(p.join("Programs").join("Ollama")).await;
-            let _ = tokio::fs::remove_dir_all(p.join("Programs").join("opencode")).await;
+        if is_installation_managed(app, "hermes").await {
+            if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+                let _ = tokio::fs::remove_dir_all(std::path::PathBuf::from(&local_app_data).join("hermes")).await;
+            }
+            if let Ok(app_data) = std::env::var("APPDATA") {
+                let _ = tokio::fs::remove_dir_all(std::path::PathBuf::from(&app_data).join("hermes")).await;
+            }
         }
-        if let Ok(app_data) = std::env::var("APPDATA") {
-            let p = std::path::PathBuf::from(&app_data);
-            let _ = tokio::fs::remove_dir_all(p.join("opencode")).await;
-            let _ = tokio::fs::remove_dir_all(p.join("hermes")).await;
-            let npm_dir = p.join("npm");
-            let _ = tokio::fs::remove_file(npm_dir.join("opencode.exe")).await;
-            let _ = tokio::fs::remove_file(npm_dir.join("opencode.cmd")).await;
-            let _ = tokio::fs::remove_file(npm_dir.join("opencode")).await;
-            let _ = tokio::fs::remove_dir_all(npm_dir.join("node_modules").join("opencode")).await;
-            let _ = tokio::fs::remove_dir_all(npm_dir.join("node_modules").join("opencode-ai")).await;
+        if is_installation_managed(app, "ollama").await {
+            if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+                let p = std::path::PathBuf::from(&local_app_data);
+                let _ = tokio::fs::remove_dir_all(p.join("Ollama")).await;
+                let _ = tokio::fs::remove_dir_all(p.join("Programs").join("Ollama")).await;
+            }
+        }
+        if is_installation_managed(app, "opencode").await {
+            if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+                let _ = tokio::fs::remove_dir_all(std::path::PathBuf::from(&local_app_data).join("Programs").join("opencode")).await;
+            }
+            if let Ok(app_data) = std::env::var("APPDATA") {
+                let p = std::path::PathBuf::from(&app_data);
+                let _ = tokio::fs::remove_dir_all(p.join("opencode")).await;
+                let npm_dir = p.join("npm");
+                let _ = tokio::fs::remove_file(npm_dir.join("opencode.exe")).await;
+                let _ = tokio::fs::remove_file(npm_dir.join("opencode.cmd")).await;
+                let _ = tokio::fs::remove_file(npm_dir.join("opencode")).await;
+                let _ = tokio::fs::remove_dir_all(npm_dir.join("node_modules").join("opencode")).await;
+                let _ = tokio::fs::remove_dir_all(npm_dir.join("node_modules").join("opencode-ai")).await;
+            }
         }
     }
 
@@ -1147,6 +1233,7 @@ pub fn sync_hermes_config(app: &tauri::AppHandle, port: u16, api_key: &str) -> R
 
 #[tauri::command]
 pub async fn configure_hermes_defaults(app: tauri::AppHandle, state: tauri::State<'_, FrugalConfigState>) -> Result<(), String> {
+    let _ = set_installation_managed(&app, "hermes", true).await;
     let (port, api_key) = {
         let config = state.config.lock().await;
         (config.port, config.api_password.clone().unwrap_or_else(|| "frugallm".to_string()))
@@ -1261,6 +1348,7 @@ pub fn sync_all_agent_configs(app: &tauri::AppHandle, port: u16, api_key: &str) 
 
 #[tauri::command]
 pub async fn configure_opencode_defaults(app: tauri::AppHandle, state: tauri::State<'_, FrugalConfigState>) -> Result<(), String> {
+    let _ = set_installation_managed(&app, "opencode", true).await;
     let (port, api_key) = {
         let config = state.config.lock().await;
         (config.port, config.api_password.clone().unwrap_or_else(|| "frugallm".to_string()))
@@ -1268,10 +1356,106 @@ pub async fn configure_opencode_defaults(app: tauri::AppHandle, state: tauri::St
     sync_opencode_config(&app, port, &api_key)
 }
 
+#[tauri::command(async)]
+pub async fn install_ollama(app: tauri::AppHandle) -> Result<(), String> {
+    ensure_ollama_installed(&app).await?;
+    let _ = set_installation_managed(&app, "ollama", true).await;
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub async fn install_hermes(app: tauri::AppHandle) -> Result<(), String> {
+    log_event(&app, "INFO", "HERMES", "install_hermes requested");
+    #[cfg(target_os = "windows")]
+    {
+        let script = r#"
+            $ProgressPreference = 'SilentlyContinue';
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
+            $installer = Join-Path $env:TEMP 'hermes-install.ps1';
+            try {
+                curl.exe -# -L --fail -o "$installer" 'https://hermes-agent.nousresearch.com/install.ps1';
+            } catch {
+                $wc = New-Object System.Net.WebClient;
+                $wc.DownloadFile('https://hermes-agent.nousresearch.com/install.ps1', $installer);
+            }
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$installer" -SkipSetup -NonInteractive;
+            Remove-Item "$installer" -Force -ErrorAction SilentlyContinue;
+        "#;
+        let mut cmd = tokio::process::Command::new("powershell.exe");
+        cmd.args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script]);
+        cmd.creation_flags(0x08000000);
+        let status = cmd.status().await.map_err(|e| format!("Failed to spawn PowerShell Hermes installer: {}", e))?;
+        if !status.success() {
+            return Err(format!("Hermes installation failed with exit code {:?}", status.code()));
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let mut child = tokio::process::Command::new("bash")
+            .arg("-c")
+            .arg("curl -sSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup")
+            .spawn()
+            .map_err(|e| format!("Failed to spawn Hermes install.sh: {}", e))?;
+        let status = child.wait().await.map_err(|e| format!("Error waiting for Hermes installer: {}", e))?;
+        if !status.success() {
+            return Err(format!("Hermes install script failed with exit code {:?}", status.code()));
+        }
+    }
+
+    let _ = set_installation_managed(&app, "hermes", true).await;
+    log_event(&app, "INFO", "HERMES", "Hermes installed successfully and marked as managed");
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub async fn install_opencode(app: tauri::AppHandle) -> Result<(), String> {
+    log_event(&app, "INFO", "OPENCODE", "install_opencode requested");
+    #[cfg(target_os = "windows")]
+    {
+        let script = r#"
+            $ProgressPreference = 'SilentlyContinue';
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
+            $installDir = Join-Path $HOME '.opencode\bin';
+            if (!(Test-Path $installDir)) { New-Item -ItemType Directory -Force -Path $installDir | Out-Null };
+            $tempZip = Join-Path $env:TEMP 'opencode-windows-x64.zip';
+            $downloadUrl = 'https://github.com/anomalyco/opencode/releases/latest/download/opencode-windows-x64.zip';
+            try {
+                curl.exe -# -L --fail -o "$tempZip" "$downloadUrl";
+                Expand-Archive -Path "$tempZip" -DestinationPath $installDir -Force;
+            } finally {
+                Remove-Item "$tempZip" -Force -ErrorAction SilentlyContinue;
+            }
+        "#;
+        let mut cmd = tokio::process::Command::new("powershell.exe");
+        cmd.args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script]);
+        cmd.creation_flags(0x08000000);
+        let status = cmd.status().await.map_err(|e| format!("Failed to spawn PowerShell OpenCode installer: {}", e))?;
+        if !status.success() {
+            return Err(format!("OpenCode installation failed with exit code {:?}", status.code()));
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let mut child = tokio::process::Command::new("bash")
+            .arg("-c")
+            .arg("curl -fsSL https://opencode.ai/install | bash")
+            .spawn()
+            .map_err(|e| format!("Failed to spawn OpenCode install: {}", e))?;
+        let status = child.wait().await.map_err(|e| format!("Error waiting for OpenCode installer: {}", e))?;
+        if !status.success() {
+            return Err(format!("OpenCode install script failed with exit code {:?}", status.code()));
+        }
+    }
+
+    let _ = set_installation_managed(&app, "opencode", true).await;
+    log_event(&app, "INFO", "OPENCODE", "OpenCode installed successfully and marked as managed");
+    Ok(())
+}
+
 pub async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), String> {
     log_event(app, "INFO", "OLLAMA", "Checking if Ollama is already installed and responsive");
     // Check if the binary already exists on PATH or common paths
-    if check_ollama_status().await {
+    if is_ollama_installed().await {
         log_event(app, "INFO", "OLLAMA", "Ollama is already installed on the system");
         return Ok(());
     }
@@ -1321,12 +1505,13 @@ pub async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), Strin
 
         let _ = child.wait().await;
 
-        if !check_ollama_status().await {
+        if !is_ollama_installed().await {
             let err = "Failed to install Ollama via install.sh".to_string();
             log_event(app, "ERROR", "OLLAMA", &err);
             return Err(err);
         }
         log_event(app, "INFO", "OLLAMA", "Ollama installed successfully on macOS/Linux");
+        let _ = set_installation_managed(app, "ollama", true).await;
     }
 
     #[cfg(target_os = "windows")]
@@ -1456,7 +1641,7 @@ pub async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), Strin
 
         let mut installed = false;
         for _ in 0..10 {
-            if check_ollama_status().await {
+            if is_ollama_installed().await {
                 installed = true;
                 break;
             }
@@ -1469,6 +1654,7 @@ pub async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), Strin
             return Err(err);
         }
         log_event(app, "INFO", "OLLAMA", "Ollama Windows installation verified successfully");
+        let _ = set_installation_managed(app, "ollama", true).await;
     }
 
     Ok(())
@@ -1494,7 +1680,7 @@ pub async fn start_ollama_daemon(app: &tauri::AppHandle) -> Result<(), String> {
     }
 
     let ollama_bin = get_ollama_binary();
-    if !ollama_bin.exists() && !check_ollama_status().await {
+    if !ollama_bin.exists() && !is_ollama_installed().await {
         log_event(app, "INFO", "OLLAMA", "Ollama is not installed; skipping background daemon startup");
         return Ok(());
     }

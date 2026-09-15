@@ -149,7 +149,7 @@ use std::collections::{HashMap, HashSet};
 
     #[tokio::test]
     async fn test_check_ollama_status_graceful_offline() {
-        let _ = check_ollama_status().await;
+        let _ = is_ollama_installed().await;
     }
 
     #[test]
@@ -1801,4 +1801,65 @@ HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bf
         // Verify function executes without errors
         let res = clean_windows_user_path_ollama();
         assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_installed_by_app_defaults_to_false() {
+        let defaults = InstalledByApp::default();
+        assert!(!defaults.ollama);
+        assert!(!defaults.hermes);
+        assert!(!defaults.opencode);
+
+        let config = FrugalConfig::default();
+        assert!(!config.is_managed("ollama"));
+        assert!(!config.is_managed("hermes"));
+        assert!(!config.is_managed("opencode"));
+    }
+
+    #[test]
+    fn test_frugal_config_set_managed_and_serialization() {
+        let mut config = FrugalConfig::default();
+        assert!(!config.is_managed("ollama"));
+        config.set_managed("ollama", true);
+        assert!(config.is_managed("ollama"));
+        assert!(!config.is_managed("hermes"));
+
+        config.set_managed("hermes", true);
+        config.set_managed("opencode", true);
+        assert!(config.is_managed("hermes"));
+        assert!(config.is_managed("opencode"));
+
+        config.set_managed("ollama", false);
+        assert!(!config.is_managed("ollama"));
+
+        // Serialization & Deserialization
+        let json_str = serde_json::to_string(&config).unwrap();
+        let deserialized: FrugalConfig = serde_json::from_str(&json_str).unwrap();
+        assert!(!deserialized.is_managed("ollama"));
+        assert!(deserialized.is_managed("hermes"));
+        assert!(deserialized.is_managed("opencode"));
+
+        // Backward compatibility with alias schemas
+        let alias_json = r#"{
+            "installed_by_frugallm": {
+                "ollama": true,
+                "hermes": false,
+                "opencode": true
+            }
+        }"#;
+        let alias_cfg: FrugalConfig = serde_json::from_str(alias_json).unwrap();
+        assert!(alias_cfg.is_managed("ollama"));
+        assert!(!alias_cfg.is_managed("hermes"));
+        assert!(alias_cfg.is_managed("opencode"));
+    }
+
+    #[test]
+    fn test_dependency_status_structure() {
+        let status = DependencyStatus {
+            is_installed: true,
+            is_managed: false,
+        };
+        let json_val = serde_json::to_value(&status).unwrap();
+        assert_eq!(json_val["is_installed"], true);
+        assert_eq!(json_val["is_managed"], false);
     }

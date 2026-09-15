@@ -29,8 +29,11 @@ export interface NodeConfigPanelProps {
   onSave: (nodeId: string, data: any) => Promise<void> | void;
   onOpenIssueReporter?: () => void;
   isHermesInstalled: boolean;
+  isHermesManaged?: boolean;
   isOpenCodeInstalled: boolean;
+  isOpenCodeManaged?: boolean;
   isOllamaInstalled: boolean;
+  isOllamaManaged?: boolean;
   isToolGatewayInstalled?: boolean;
   detectedVram: number | string;
   setDetectedVram: (vram: any) => void;
@@ -62,7 +65,7 @@ export interface NodeConfigPanelProps {
   portConflict: boolean;
 }
 
-export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose, onSave, onOpenIssueReporter, isHermesInstalled, isOpenCodeInstalled, isOllamaInstalled, isToolGatewayInstalled, detectedVram, setDetectedVram, hasActiveBackend, handleInitializeHermes, handleOpenHermes, handleUninstallHermes, handleInitializeOpenCode, handleOpenOpenCode, handleUninstallOpenCode, handleInitializeOllama, handleOpenOllama, handleUninstallOllama, handleDeleteLocalModel, handleInstallToolGateway, handleUninstallToolGateway, handleDisconnectOpenRouter, handleDisconnectGoogle, frugalConfig, handleOpenHermesGateway, handleOpenHermesDesktop, handleOpenHermesWeb, handleOpenOpenCodeWeb, activeProcesses, handleKillProcess, setFrugalConfig, latestTelemetry, hardwareProfile, portConflict }: any) => {
+export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose, onSave, onOpenIssueReporter, isHermesInstalled, isHermesManaged = false, isOpenCodeInstalled, isOpenCodeManaged = false, isOllamaInstalled, isOllamaManaged = false, isToolGatewayInstalled, detectedVram, setDetectedVram, hasActiveBackend, handleInitializeHermes, handleOpenHermes, handleUninstallHermes, handleInitializeOpenCode, handleOpenOpenCode, handleUninstallOpenCode, handleInitializeOllama, handleOpenOllama, handleUninstallOllama, handleDeleteLocalModel, handleInstallToolGateway, handleUninstallToolGateway, handleDisconnectOpenRouter, handleDisconnectGoogle, frugalConfig, handleOpenHermesGateway, handleOpenHermesDesktop, handleOpenHermesWeb, handleOpenOpenCodeWeb, activeProcesses, handleKillProcess, setFrugalConfig, latestTelemetry, hardwareProfile, portConflict }: any) => {
   const memory = useMemory();
   const [confirmUninstall, setConfirmUninstall] = useState<string | null>(null);
   const [showToolGatewayPrompt, setShowToolGatewayPrompt] = useState<'install' | 'uninstall' | null>(null);
@@ -742,8 +745,26 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
       
       {node.id === 'node-hermes' && isHermesInstalled === true && (
         <div style={{ marginTop: '12px', padding: '14px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '14px' }}>
-          <h4 style={{ margin: '0 0 8px 0', color: 'var(--zen-text)', fontSize: '0.8rem', fontWeight: 600 }}>HERMES AGENT INSTALLED</h4>
-          {confirmUninstall === 'hermes' ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <h4 style={{ margin: 0, color: 'var(--zen-text)', fontSize: '0.8rem', fontWeight: 600 }}>HERMES AGENT INSTALLED</h4>
+            {!isHermesManaged && (
+              <span
+                data-testid="system-managed-badge"
+                style={{
+                  fontSize: '0.65rem',
+                  fontWeight: 600,
+                  padding: '2px 8px',
+                  borderRadius: '9999px',
+                  backgroundColor: 'var(--zen-surface)',
+                  color: 'var(--zen-text-secondary)',
+                  border: '1px solid var(--zen-border)'
+                }}
+              >
+                {en.routingGraph.nodeConfigPanel.badges.systemManaged}
+              </span>
+            )}
+          </div>
+          {confirmUninstall === 'hermes' && isHermesManaged ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 600 }}>ARE YOU SURE?</span>
               <div style={{ display: 'flex', gap: '8px' }}>
@@ -804,11 +825,13 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
                 style={{ width: '100%', padding: '8px 12px', backgroundColor: 'var(--zen-surface-hover)', borderRadius: '9999px', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                 EDIT SOUL.MD
               </button>
-              <button 
-                onClick={(e) => { e.stopPropagation(); setConfirmUninstall('hermes'); }}
-                style={{ width: '100%', padding: '8px 12px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
-                UNINSTALL HERMES
-              </button>
+              {isHermesManaged && (
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setConfirmUninstall('hermes'); }}
+                  style={{ width: '100%', padding: '8px 12px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
+                  UNINSTALL HERMES
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -839,8 +862,26 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
       
       {node.id === 'node-opencode' && isOpenCodeInstalled === true && (
         <div style={{ marginTop: '12px', padding: '14px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '14px' }}>
-          <h4 style={{ margin: '0 0 8px 0', color: 'var(--zen-text)', fontSize: '0.8rem', fontWeight: 600 }}>OPENCODE AGENT INSTALLED</h4>
-          {confirmUninstall === 'opencode' ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <h4 style={{ margin: 0, color: 'var(--zen-text)', fontSize: '0.8rem', fontWeight: 600 }}>OPENCODE AGENT INSTALLED</h4>
+            {!isOpenCodeManaged && (
+              <span
+                data-testid="system-managed-badge"
+                style={{
+                  fontSize: '0.65rem',
+                  fontWeight: 600,
+                  padding: '2px 8px',
+                  borderRadius: '9999px',
+                  backgroundColor: 'var(--zen-surface)',
+                  color: 'var(--zen-text-secondary)',
+                  border: '1px solid var(--zen-border)'
+                }}
+              >
+                {en.routingGraph.nodeConfigPanel.badges.systemManaged}
+              </span>
+            )}
+          </div>
+          {confirmUninstall === 'opencode' && isOpenCodeManaged ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 600 }}>ARE YOU SURE?</span>
               <div style={{ display: 'flex', gap: '8px' }}>
@@ -874,11 +915,13 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
                   <button onClick={(e) => { e.stopPropagation(); handleKillProcess(mode); }} style={{ backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '9999px', padding: '3px 8px', fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer' }}>CLOSE</button>
                 </div>
               ))}
-              <button 
-                onClick={(e) => { e.stopPropagation(); setConfirmUninstall('opencode'); }}
-                style={{ width: '100%', padding: '8px 12px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
-                UNINSTALL OPENCODE
-              </button>
+              {isOpenCodeManaged && (
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setConfirmUninstall('opencode'); }}
+                  style={{ width: '100%', padding: '8px 12px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
+                  UNINSTALL OPENCODE
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -954,7 +997,25 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
       
       {node.id === 'node-ollama' && isOllamaInstalled === true && (
         <div style={{ marginTop: '12px', padding: '14px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '14px' }}>
-          <h4 style={{ margin: '0 0 8px 0', color: 'var(--zen-text)', fontSize: '0.8rem', fontWeight: 600 }}>OLLAMA INSTALLED</h4>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <h4 style={{ margin: 0, color: 'var(--zen-text)', fontSize: '0.8rem', fontWeight: 600 }}>OLLAMA INSTALLED</h4>
+            {!isOllamaManaged && (
+              <span
+                data-testid="system-managed-badge"
+                style={{
+                  fontSize: '0.65rem',
+                  fontWeight: 600,
+                  padding: '2px 8px',
+                  borderRadius: '9999px',
+                  backgroundColor: 'var(--zen-surface)',
+                  color: 'var(--zen-text-secondary)',
+                  border: '1px solid var(--zen-border)'
+                }}
+              >
+                {en.routingGraph.nodeConfigPanel.badges.systemManaged}
+              </span>
+            )}
+          </div>
           
           <div style={{ marginBottom: '12px' }}>
             <MemoryPipelineWidget 
@@ -963,7 +1024,7 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
               hardwareProfile={hardwareProfile || memory.hardwareProfile || latestTelemetry?.hardware_profile} 
             />
           </div>
-          {confirmUninstall === 'ollama' ? (
+          {confirmUninstall === 'ollama' && isOllamaManaged ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 600 }}>ARE YOU SURE?</span>
               <div style={{ display: 'flex', gap: '8px' }}>
@@ -992,11 +1053,13 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
                 style={{ width: '100%', padding: '8px 12px', backgroundColor: 'transparent', color: 'var(--zen-text-secondary)', border: '1px solid var(--zen-border)', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                 DELETE LOCAL MODEL
               </button>
-              <button 
-                onClick={(e) => { e.stopPropagation(); setConfirmUninstall('ollama'); }}
-                style={{ width: '100%', padding: '8px 12px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
-                UNINSTALL OLLAMA
-              </button>
+              {isOllamaManaged && (
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setConfirmUninstall('ollama'); }}
+                  style={{ width: '100%', padding: '8px 12px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
+                  UNINSTALL OLLAMA
+                </button>
+              )}
             </div>
           )}
         </div>

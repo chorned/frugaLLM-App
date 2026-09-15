@@ -87,10 +87,12 @@ function AppContent() {
     if (import.meta.env.DEV && isScreenshotMode()) return true;
     return false;
   });
+  const [isHermesManaged, setIsHermesManaged] = useState<boolean>(false);
   const [isOpenCodeInstalled, setIsOpenCodeInstalled] = useState<boolean>(() => {
     if (import.meta.env.DEV && isScreenshotMode()) return true;
     return false;
   });
+  const [isOpenCodeManaged, setIsOpenCodeManaged] = useState<boolean>(false);
   const [hermesVersion, setHermesVersion] = useState<string>(() => {
     if (import.meta.env.DEV && isScreenshotMode()) return 'v0.4.2';
     return 'N/A';
@@ -103,6 +105,7 @@ function AppContent() {
     if (import.meta.env.DEV && isScreenshotMode()) return true;
     return false;
   });
+  const [isOllamaManaged, setIsOllamaManaged] = useState<boolean>(false);
   const [isToolGatewayInstalled, setIsToolGatewayInstalled] = useState<boolean>(() => {
     if (import.meta.env.DEV && isScreenshotMode()) return true;
     return false;
@@ -197,8 +200,11 @@ function AppContent() {
     setTerminalMode,
     setActiveProcesses,
     setIsHermesInstalled,
+    setIsHermesManaged,
     setIsOpenCodeInstalled,
+    setIsOpenCodeManaged,
     setIsOllamaInstalled,
+    setIsOllamaManaged,
     setNodes,
     frugalConfig,
     setFrugalConfig,
@@ -239,11 +245,14 @@ function AppContent() {
       },
       setFrugalConfig,
       setIsHermesInstalled,
+      setIsHermesManaged,
       setHermesVersion,
       setActiveProcesses,
       setIsOpenCodeInstalled,
+      setIsOpenCodeManaged,
       setOpencodeVersion,
       setIsOllamaInstalled,
+      setIsOllamaManaged,
       setIsToolGatewayInstalled,
       setDetectedVram,
       memoryRef,
@@ -278,6 +287,7 @@ function AppContent() {
         headerRef={headerRef}
         isDark={isDark}
         onToggleTheme={handleToggleTheme}
+        onOpenIssueReporter={() => setIsIssueReporterOpen(true)}
       />
 
       <TerminalOverlays
@@ -288,8 +298,11 @@ function AppContent() {
         frugalConfig={frugalConfig}
         setFrugalConfig={setFrugalConfig}
         setIsHermesInstalled={setIsHermesInstalled}
+        setIsHermesManaged={setIsHermesManaged}
         setIsOpenCodeInstalled={setIsOpenCodeInstalled}
+        setIsOpenCodeManaged={setIsOpenCodeManaged}
         setIsOllamaInstalled={setIsOllamaInstalled}
+        setIsOllamaManaged={setIsOllamaManaged}
         setIsToolGatewayInstalled={setIsToolGatewayInstalled}
         setNodes={setNodes}
         memoryRef={memoryRef}
@@ -333,8 +346,11 @@ function AppContent() {
             onSave={handleSaveNodeConfig} 
             onOpenIssueReporter={() => setIsIssueReporterOpen(true)}
             isHermesInstalled={isHermesInstalled} 
+            isHermesManaged={isHermesManaged}
             isOpenCodeInstalled={isOpenCodeInstalled} 
+            isOpenCodeManaged={isOpenCodeManaged}
             isOllamaInstalled={isOllamaInstalled} 
+            isOllamaManaged={isOllamaManaged}
             isToolGatewayInstalled={isToolGatewayInstalled} 
             detectedVram={detectedVram}
             setDetectedVram={setDetectedVram}
