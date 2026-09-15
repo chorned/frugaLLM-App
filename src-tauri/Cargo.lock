@@ -1502,7 +1502,7 @@ dependencies = [
 
 [[package]]
 name = "frugallm-app"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "axum",
  "dirs 6.0.0",
