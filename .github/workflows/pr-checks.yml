@@ -53,6 +53,8 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Rust Clippy Linters
+        env:
+          FRUGAL_OFFLINE_BUILD: "1"
         run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
 
       # 2. FRONTEND TESTS

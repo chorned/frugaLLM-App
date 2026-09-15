@@ -37,9 +37,14 @@ describe('Release Draft and Version Synchronization', () => {
     expect(cargoLockEntryMatch![1]).toBe(pkg.version);
   });
 
-  it('verifies production_artifacts/release_notes.md matches current release draft', () => {
+  it('verifies production_artifacts/release_notes.md matches current release draft when present', () => {
     const packageJsonPath = path.join(rootDir, 'package.json');
     const releaseNotesPath = path.join(rootDir, 'production_artifacts', 'release_notes.md');
+
+    if (!fs.existsSync(releaseNotesPath)) {
+      // production_artifacts/ is gitignored in clean clones
+      return;
+    }
 
     const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
     const notes = fs.readFileSync(releaseNotesPath, 'utf-8');

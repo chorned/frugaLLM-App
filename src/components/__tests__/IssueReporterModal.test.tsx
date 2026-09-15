@@ -7,6 +7,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 
 import { invoke } from '@tauri-apps/api/core';
 import { IssueReporterModal } from '../IssueReporterModal';
+import en from '../../locales/en.json';
 
 describe('IssueReporterModal Component', () => {
   beforeEach(() => {
@@ -192,5 +193,83 @@ describe('IssueReporterModal Component', () => {
     await waitFor(() => {
       expect(screen.getByText(/network error/i)).toBeInTheDocument();
     });
+  });
+
+  it('renders dotted-underline help tooltip trigger for include diagnostics checkbox', async () => {
+    (invoke as any).mockResolvedValueOnce({
+      app_version: '0.0.11',
+      os_info: 'macos x86_64',
+      logs: 'logs',
+    });
+
+    render(<IssueReporterModal isOpen={true} onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('get_diagnostic_data');
+    });
+
+    const tooltipTrigger = screen.getByTestId('btn-include-diagnostics-help');
+    expect(tooltipTrigger).toBeInTheDocument();
+    expect(tooltipTrigger).toHaveTextContent(en.issueReporter.fields.includeDiagnostics.label);
+    expect(tooltipTrigger.style.textDecoration).toContain('underline dotted');
+  });
+
+  it('displays explanation of shared and unshared data on hover over diagnostics label', async () => {
+    (invoke as any).mockResolvedValueOnce({
+      app_version: '0.0.11',
+      os_info: 'macos x86_64',
+      logs: 'logs',
+    });
+
+    render(<IssueReporterModal isOpen={true} onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('get_diagnostic_data');
+    });
+
+    const tooltipTrigger = screen.getByTestId('btn-include-diagnostics-help');
+    fireEvent.mouseEnter(tooltipTrigger);
+
+    const tooltipBox = screen.getByTestId('include-diagnostics-tooltip-box');
+    expect(tooltipBox).toBeInTheDocument();
+    expect(tooltipBox).toHaveTextContent(en.issueReporter.fields.includeDiagnostics.tooltip);
+    expect(tooltipBox).toHaveTextContent(/app version, operating system, and recent runtime logs/i);
+    expect(tooltipBox).toHaveTextContent(/sensitive credentials.*automatically redacted/i);
+    expect(tooltipBox).toHaveTextContent(/never collected/i);
+
+    fireEvent.mouseLeave(tooltipTrigger);
+    expect(screen.queryByTestId('include-diagnostics-tooltip-box')).not.toBeInTheDocument();
+  });
+
+  it('allows toggling the include diagnostics checkbox independently of the tooltip trigger', async () => {
+    (invoke as any).mockResolvedValueOnce({
+      app_version: '0.0.11',
+      os_info: 'macos x86_64',
+      logs: 'sample logs',
+    });
+
+    render(<IssueReporterModal isOpen={true} onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('get_diagnostic_data');
+    });
+
+    const checkbox = screen.getByTestId('include-diagnostics-checkbox') as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+
+    // Diagnostics preview button should be present initially
+    expect(screen.getByTestId('toggle-diagnostics-preview')).toBeInTheDocument();
+
+    // Uncheck
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(false);
+
+    // Diagnostics preview should collapse/unmount when unchecked
+    expect(screen.queryByTestId('toggle-diagnostics-preview')).not.toBeInTheDocument();
+
+    // Re-check
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(true);
+    expect(screen.getByTestId('toggle-diagnostics-preview')).toBeInTheDocument();
   });
 });

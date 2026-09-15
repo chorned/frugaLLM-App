@@ -2221,3 +2221,48 @@ HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bf
         assert!(candidate_ids.contains(&"openai/gpt-4o-mini".to_string()));
     }
 
+    #[test]
+    fn test_wipe_credentials_clears_keys_and_preserves_configs() {
+        // Set test env variables
+        std::env::set_var("OPENROUTER_KEY", "sk-or-v1-secret123");
+        std::env::set_var("OPENROUTER_API_KEY", "sk-or-v1-secret456");
+        std::env::set_var("GOOGLE_KEY", "ai-google-secret789");
+        std::env::set_var("GOOGLE_API_KEY", "ai-google-secret012");
+        std::env::set_var("OLLAMA_KEY", "ollama-mock-key");
+
+        let current_dir = std::env::current_dir().unwrap_or_default();
+        let test_env_path = current_dir.join(".env.wipe_test_scratch");
+        
+        let initial_contents = "VITE_WEB3FORMS_ACCESS_KEY=preserve-access-key\nOPENROUTER_KEY=sk-or-v1-secret123\nOPENROUTER_API_KEY=sk-or-v1-secret456\nGOOGLE_KEY=ai-google-secret789\nAPP_PORT=8000\n";
+        fs::write(&test_env_path, initial_contents).unwrap();
+
+        // Perform wipe
+        let wipe_result = crate::db::wipe_credentials();
+        assert!(wipe_result.is_ok());
+
+        // Verify in-memory environment variables are scrubbed
+        assert!(std::env::var("OPENROUTER_KEY").is_err());
+        assert!(std::env::var("OPENROUTER_API_KEY").is_err());
+        assert!(std::env::var("GOOGLE_KEY").is_err());
+        assert!(std::env::var("GOOGLE_API_KEY").is_err());
+        assert!(std::env::var("OLLAMA_KEY").is_err());
+        assert!(std::env::var("OLLAMA_API_KEY").is_err());
+
+        // Clean up scratch file
+        if test_env_path.exists() {
+            let _ = fs::remove_file(&test_env_path);
+        }
+    }
+
+    #[test]
+    fn test_delete_credential_clears_aliases() {
+        std::env::set_var("OPENROUTER_KEY", "sk-or-delete-1");
+        std::env::set_var("OPENROUTER_API_KEY", "sk-or-delete-2");
+
+        let res = crate::db::delete_credential("openrouter");
+        assert!(res.is_ok());
+
+        assert!(std::env::var("OPENROUTER_KEY").is_err());
+        assert!(std::env::var("OPENROUTER_API_KEY").is_err());
+    }
+

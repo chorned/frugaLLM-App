@@ -115,6 +115,8 @@ pub fn delete_credential(service: &str) -> Result<(), String> {
     {
         let key = format!("{}_KEY", service.to_uppercase());
         std::env::remove_var(&key);
+        let alt_key = format!("{}_API_KEY", service.to_uppercase());
+        std::env::remove_var(&alt_key);
 
         let current_dir = std::env::current_dir().unwrap_or_default();
         let env_candidates = [
@@ -129,8 +131,9 @@ pub fn delete_credential(service: &str) -> Result<(), String> {
                 if let Ok(contents) = std::fs::read_to_string(env_path) {
                     let mut new_contents = String::new();
                     let prefix = format!("{}=", key);
+                    let alt_prefix = format!("{}=", alt_key);
                     for line in contents.lines() {
-                        if !line.starts_with(&prefix) {
+                        if !line.starts_with(&prefix) && !line.starts_with(&alt_prefix) {
                             new_contents.push_str(line);
                             new_contents.push('\n');
                         }
@@ -159,26 +162,57 @@ pub fn wipe_credentials() -> Result<(), String> {
         let env_candidates = [
             current_dir.join(".env"),
             current_dir.join("src-tauri").join(".env"),
+            current_dir.parent().unwrap_or(&std::path::PathBuf::new()).join(".env"),
+            current_dir.parent().unwrap_or(&std::path::PathBuf::new()).join("src-tauri").join(".env"),
         ];
+
+        let prefixes = [
+            "OPENROUTER_KEY=",
+            "OPENROUTER_API_KEY=",
+            "GOOGLE_KEY=",
+            "GOOGLE_API_KEY=",
+            "OLLAMA_KEY=",
+            "OLLAMA_API_KEY=",
+        ];
+
         for env_path in &env_candidates {
             if env_path.exists() {
-                let _ = std::fs::remove_file(env_path);
+                if let Ok(contents) = std::fs::read_to_string(env_path) {
+                    let mut new_contents = String::new();
+                    for line in contents.lines() {
+                        if !prefixes.iter().any(|p| line.starts_with(p)) {
+                            new_contents.push_str(line);
+                            new_contents.push('\n');
+                        }
+                    }
+                    let _ = std::fs::write(env_path, new_contents);
+                }
             }
         }
-        // Also remove from current environment so it doesn't linger
+
+        // Also remove from current environment so they don't linger
         std::env::remove_var("OPENROUTER_KEY");
+        std::env::remove_var("OPENROUTER_API_KEY");
         std::env::remove_var("GOOGLE_KEY");
+        std::env::remove_var("GOOGLE_API_KEY");
         std::env::remove_var("OLLAMA_KEY");
+        std::env::remove_var("OLLAMA_API_KEY");
         Ok(())
     }
 
     #[cfg(not(debug_assertions))]
     {
-        for svc in &["openrouter", "google"] {
+        for svc in &["openrouter", "google", "ollama"] {
             if let Ok(entry) = Entry::new("frugallm-app", svc) {
                 let _ = entry.delete_credential();
             }
         }
+        std::env::remove_var("OPENROUTER_KEY");
+        std::env::remove_var("OPENROUTER_API_KEY");
+        std::env::remove_var("GOOGLE_KEY");
+        std::env::remove_var("GOOGLE_API_KEY");
+        std::env::remove_var("OLLAMA_KEY");
+        std::env::remove_var("OLLAMA_API_KEY");
         return Ok(());
     }
 }

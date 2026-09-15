@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { submitIssueReport, getDiagnosticData } from '../services/tauri';
 import { Bug, ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Tooltip } from './Tooltip';
 import en from '../locales/en.json';
 
 interface IssueReporterModalProps {
@@ -395,9 +396,18 @@ export const IssueReporterModal: React.FC<IssueReporterModalProps> = ({
                   color: 'var(--zen-text)',
                   cursor: 'pointer',
                   userSelect: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
                 }}
               >
-                {strings.fields.includeDiagnostics.label}
+                <Tooltip
+                  text={strings.fields.includeDiagnostics.tooltip}
+                  triggerTestId="btn-include-diagnostics-help"
+                  testId="include-diagnostics-tooltip-box"
+                  ariaLabel={strings.fields.includeDiagnostics.label}
+                >
+                  <span>{strings.fields.includeDiagnostics.label}</span>
+                </Tooltip>
               </label>
             </div>
 

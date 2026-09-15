@@ -439,7 +439,8 @@
         "placeholder": "you@example.com (if you'd like follow-up updates)"
       },
       "includeDiagnostics": {
-        "label": "Include system diagnostics & sanitized logs"
+        "label": "Include system diagnostics & sanitized logs",
+        "tooltip": "Attaches your app version, operating system, and recent runtime logs to help diagnose issues. Sensitive credentials (API keys, passwords, and Bearer tokens) are automatically redacted, and model prompt content, chat history, or personal files are never collected."
       }
     },
     "diagnostics": {
