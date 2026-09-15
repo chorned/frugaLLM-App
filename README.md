@@ -1,6 +1,7 @@
 # FrugaLLM
 
 [![Release](https://github.com/chorned/frugallm-app/actions/workflows/release.yml/badge.svg)](https://github.com/chorned/frugallm-app/actions/workflows/release.yml)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14664/badge)](https://www.bestpractices.dev/projects/14664)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/chorned/frugaLLM-App/badge)](https://scorecard.dev/viewer/?uri=github.com/chorned/frugaLLM-App)
 [![CodeQL](https://github.com/chorned/frugaLLM-App/actions/workflows/security.yml/badge.svg?branch=main&job=codeql-analysis)](https://github.com/chorned/frugaLLM-App/actions/workflows/security.yml)
 [![Security Audit](https://github.com/chorned/frugaLLM-App/actions/workflows/security.yml/badge.svg?branch=main&job=dependency-audit)](https://github.com/chorned/frugaLLM-App/actions/workflows/security.yml)
