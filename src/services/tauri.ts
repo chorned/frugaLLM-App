@@ -278,6 +278,10 @@ export async function getFrugallmServerStatus(): Promise<any> {
   return invoke<any>('get_frugallm_server_status');
 }
 
+export async function retryFrugallmServer(): Promise<any> {
+  return invoke<any>('retry_frugallm_server');
+}
+
 export async function checkHermesReady(): Promise<boolean> {
   return invoke<boolean>('check_hermes_ready');
 }

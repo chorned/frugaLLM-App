@@ -81,8 +81,9 @@ export const Footer: React.FC<FooterProps> = ({ portConflict, daemonError }) => 
             height: '6px', 
             borderRadius: '50%', 
             backgroundColor: statusColor,
+            boxShadow: isError ? '0 0 8px rgba(239, 68, 68, 0.6)' : 'none',
             flexShrink: 0,
-            transition: 'background-color 0.2s ease'
+            transition: 'all 0.2s ease'
           }} 
         />
         <span 

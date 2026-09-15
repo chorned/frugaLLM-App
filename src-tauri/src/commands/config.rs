@@ -95,6 +95,27 @@ pub async fn set_frugallm_config(app: tauri::AppHandle, state: State<'_, FrugalC
     Ok(())
 }
 
+#[tauri::command]
+pub async fn retry_frugallm_server(app: tauri::AppHandle, state: State<'_, FrugalConfigState>) -> Result<ServerStatus, String> {
+    if let Some(handle) = state.server_abort_handle.lock().await.take() {
+        handle.abort();
+    }
+    {
+        let mut status = state.server_status.write().await;
+        *status = ServerStatus::Starting;
+    }
+    let _ = app.emit("frugallm_server_status", ServerStatus::Starting);
+
+    let app_clone = app.clone();
+    let new_abort = tauri::async_runtime::spawn(async move {
+        start_frugallm_server(app_clone).await;
+    });
+    *state.server_abort_handle.lock().await = Some(new_abort);
+
+    let status = state.server_status.read().await;
+    Ok(status.clone())
+}
+
 
 
 

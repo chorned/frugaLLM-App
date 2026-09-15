@@ -121,7 +121,7 @@ button {
   }
 }
 
-/* V2 Styling Overrides (merged from v2/App.css) */
+/* Accessibility and Zen Styling Overrides */
 :root {
   --zen-border: #d1d5db; /* Darker faint gray lines for connecting lines and node borders */
   --zen-text-secondary: #6b7280; /* Darker text for status indicators like Standby */
@@ -224,3 +224,49 @@ button {
   background-color: var(--zen-surface-hover);
   color: var(--zen-text);
 }
+
+/* Animated Saving Dots Indicator */
+.saving-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: inherit;
+  letter-spacing: inherit;
+}
+
+.saving-dots {
+  display: inline-flex;
+  width: 1.4em;
+  text-align: left;
+}
+
+.saving-dot {
+  display: inline-block;
+  opacity: 0.2;
+  transform: scale(0.9);
+  animation: saving-dot-pulse 1.4s infinite ease-in-out both;
+}
+
+.saving-dot.dot-1 {
+  animation-delay: 0s;
+}
+
+.saving-dot.dot-2 {
+  animation-delay: 0.2s;
+}
+
+.saving-dot.dot-3 {
+  animation-delay: 0.4s;
+}
+
+@keyframes saving-dot-pulse {
+  0%, 80%, 100% {
+    opacity: 0.2;
+    transform: scale(0.9);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.3);
+  }
+}
+

@@ -14,15 +14,14 @@ When the user types `/ship-release` (or optionally `/ship-release <version_input
      If current is `X.Y.Z`, target is strictly `X.Y.(Z+1)` (e.g., `1.2.3` becomes `1.2.4`).
    - **Manual Override (If `<version_input>` is provided):** Strip any leading `v` or whitespace from the provided string.
 
-3. **Lock Canonical Variables:**
-   - **`SEMVER`**: Raw numbers and dots only (e.g., `1.2.4`).
-   - **`TAG`**: Strictly `v<SEMVER>` (e.g., `v1.2.4`).
+3. **Lock Canonical Variables (Immutable across all steps):**
+   - **`SEMVER`**: Raw digits and dots only (e.g., `0.0.16`).
+   - **`TAG`**: Strictly `v<SEMVER>` (e.g., `v0.0.16`).
+   - **`RELEASE_TITLE`**: Strictly `FrugaLLM <TAG>` (e.g., `FrugaLLM v0.0.16`).
 
 4. **Declare Objective in Chat:**
    Print the transition directly in chat:
-   > 🚀 **Initiating Release:** `<CURRENT_VERSION>` → **`<SEMVER>`** (Tag: `<TAG>`)
-
-All downstream steps, file updates, commit messages, and URLs must use these exact variables.
+   > 🚀 **Initiating Release:** `<CURRENT_VERSION>` → **`<SEMVER>`** (Tag: `<TAG>` | Title: `<RELEASE_TITLE>`)
 
 ---
 
@@ -60,7 +59,7 @@ All downstream steps, file updates, commit messages, and URLs must use these exa
 
 4. **Halt for Approval:**
    Pause execution and output:
-   > *"Do you approve the patch bump to `<SEMVER>` (`<TAG>`) and the generated release notes in `production_artifacts/release_notes.md`? Type 'Approved' to continue."*
+   > *"Do you approve the patch bump to `<SEMVER>` (`<TAG>`) with title `<RELEASE_TITLE>` and the generated release notes in `production_artifacts/release_notes.md`? Type 'Approved' to continue."*
 
    **Halt Condition:** Stop execution completely and do not push or commit until the user responds in chat.
 
@@ -87,13 +86,18 @@ All downstream steps, file updates, commit messages, and URLs must use these exa
      `git checkout main && git pull origin main`
 
 7. **Tag & CI Hand-off:**
-   Tag the merged commit on `main` to trigger the production multi-platform build matrix:
+   Tag the merged commit on `main` to trigger the production build matrix:
    `git tag <TAG>`
    `git push origin <TAG>`
 
-8. **Changelog Injection:**
-   Update the release metadata created by GitHub Actions with the standardized title and notes:
-   `gh release edit <TAG> --title "<TAG>" --notes-file production_artifacts/release_notes.md`
+8. **Release Metadata & Title Enforcement:**
+   Ensure the release title matches `<RELEASE_TITLE>` regardless of whether CI or the CLI creates it first:
+   ```bash
+   # Wait up to 30 seconds for the GitHub release record to be created by CI if needed
+   for i in {1..6}; do
+     gh release view <TAG> >/dev/null 2>&1 && break || sleep 5
+   done
 
-   Confirm to the user:
-   > *"Release `<TAG>` has been merged into main, tagged, and is building in GitHub Actions."*
+   # Enforce the canonical title and release notes
+   gh release edit <TAG> --title "<RELEASE_TITLE>" --notes-file production_artifacts/release_notes.md || \
+   gh release create <TAG> --title "<RELEASE_TITLE>" --notes-file production_artifacts/release_notes.md

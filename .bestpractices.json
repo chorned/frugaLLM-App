@@ -1,0 +1,171 @@
+{
+  "$schema": "https://bestpractices.coreinfrastructure.org/schema.json",
+  "project_name": "FrugaLLM",
+  "repo_url": "https://github.com/chorned/frugaLLM-App",
+  "homepage_url": "https://github.com/chorned/frugaLLM-App",
+  "license": "MIT",
+  "implementation_languages": "TypeScript, Rust, JavaScript",
+  "badge_level": "passing",
+  "criteria": {
+    "description_good": {
+      "status": "Met",
+      "justification": "README.md provides a succinct explanation of what FrugaLLM does, its architecture, and the problem it solves."
+    },
+    "interact": {
+      "status": "Met",
+      "justification": "README.md and CONTRIBUTING.md provide clear instructions on how to download, run from source, submit feedback, and participate."
+    },
+    "contribution": {
+      "status": "Met",
+      "justification": "CONTRIBUTING.md provides step-by-step guidance on how to submit contributions and participate in the project."
+    },
+    "contribution_requirements": {
+      "status": "Met",
+      "justification": "CONTRIBUTING.md defines explicit PR workflows, conventional commit standards, linting rules, and branch guidelines."
+    },
+    "license_location": {
+      "status": "Met",
+      "justification": "The license is posted in a standard top-level LICENSE file in the source repository root and referenced in package.json and Cargo.toml."
+    },
+    "floss_license": {
+      "status": "Met",
+      "justification": "FrugaLLM is released under the MIT license, a Free/Libre/Open Source Software (FLOSS) license."
+    },
+    "floss_license_osi": {
+      "status": "Met",
+      "justification": "The MIT license is officially approved by the Open Source Initiative (OSI)."
+    },
+    "documentation_basics": {
+      "status": "Met",
+      "justification": "Comprehensive documentation is maintained in README.md, CONTRIBUTING.md, and CHANGELOG.md."
+    },
+    "documentation_interface": {
+      "status": "Met",
+      "justification": "All IPC commands, proxy endpoints, and configuration interfaces are documented in code and architecture documentation."
+    },
+    "discussion": {
+      "status": "Met",
+      "justification": "Public discussions and bug tracking are hosted openly on GitHub Issues and GitHub Discussions."
+    },
+    "repo_public": {
+      "status": "Met",
+      "justification": "The source code is publicly accessible on GitHub at https://github.com/chorned/frugaLLM-App."
+    },
+    "repo_track": {
+      "status": "Met",
+      "justification": "Full change tracking is maintained with Git version control."
+    },
+    "repo_interim": {
+      "status": "Met",
+      "justification": "Interim changes are tracked in git feature branches and pull requests prior to release."
+    },
+    "repo_distributed": {
+      "status": "Met",
+      "justification": "The project uses Git, a distributed version control system."
+    },
+    "version_unique": {
+      "status": "Met",
+      "justification": "Each release is uniquely identified by a Git tag and release tag (e.g., v0.0.15)."
+    },
+    "version_semver": {
+      "status": "Met",
+      "justification": "Versions strictly adhere to Semantic Versioning (MAJOR.MINOR.PATCH) in package.json, Cargo.toml, and Git tags."
+    },
+    "release_notes": {
+      "status": "Met",
+      "justification": "Human-readable release notes are maintained in CHANGELOG.md following the Keep a Changelog standard and published with every release."
+    },
+    "report_process": {
+      "status": "Met",
+      "justification": "Issues and bug reports are submitted and tracked publicly via GitHub Issues."
+    },
+    "report_tracker": {
+      "status": "Met",
+      "justification": "GitHub Issues provides an open, searchable defect tracker with unique issue identifiers."
+    },
+    "report_responses": {
+      "status": "Met",
+      "justification": "SECURITY.md defines an SLA committing to acknowledge security reports within 48 hours and triage within 5 business days."
+    },
+    "vulnerability_report_process": {
+      "status": "Met",
+      "justification": "SECURITY.md defines private disclosure channels via GitHub Security Advisories and direct security contact email hermes.horned@gmail.com."
+    },
+    "vulnerability_report_private": {
+      "status": "Met",
+      "justification": "Private vulnerability reports are accepted via GitHub Private Vulnerability Reporting and direct encrypted contact."
+    },
+    "build": {
+      "status": "Met",
+      "justification": "The project can be cleanly built from source using standard scripts ('npm run build' and 'cargo build')."
+    },
+    "build_common_tools": {
+      "status": "Met",
+      "justification": "The build system uses standard open-source tools (Node.js, npm, Vite, Cargo, Rustc)."
+    },
+    "build_floss_tools": {
+      "status": "Met",
+      "justification": "All tools required to build the software are 100% open-source software (FLOSS)."
+    },
+    "test": {
+      "status": "Met",
+      "justification": "Automated test suites exist across the frontend (Vitest) and backend (Cargo test), totaling over 350 unit and integration tests."
+    },
+    "test_continuous_integration": {
+      "status": "Met",
+      "justification": "Tests are automatically executed on all pull requests and commits to main via .github/workflows/pr-checks.yml."
+    },
+    "test_policy": {
+      "status": "Met",
+      "justification": "CONTRIBUTING.md explicitly mandates that all bug fixes and new features must include automated tests."
+    },
+    "warnings": {
+      "status": "Met",
+      "justification": "Compiler warnings and linters (TypeScript 'tsc --noEmit' and 'cargo clippy -- -D warnings') are enabled and strictly enforced."
+    },
+    "warnings_fixed": {
+      "status": "Met",
+      "justification": "All TypeScript type errors and Cargo Clippy warnings are fixed with zero unhandled warnings."
+    },
+    "know_secure_design": {
+      "status": "Met",
+      "justification": "Architecture enforces least privilege, prevents shell command injection by passing discrete argument arrays, and stores API keys in native OS credential keychains."
+    },
+    "know_common_errors": {
+      "status": "Met",
+      "justification": "Defenses against common vulnerabilities (command injection, path traversal, memory unsafety) are implemented across the Rust backend and TypeScript frontend."
+    },
+    "delivery_mitm": {
+      "status": "Met",
+      "justification": "All dependencies and release artifacts are distributed strictly over TLS/HTTPS."
+    },
+    "delivery_unsigned": {
+      "status": "Met",
+      "justification": "Release workflows generate cryptographic SLSA build provenance attestations via actions/attest-build-provenance, and macOS binaries are Developer ID signed."
+    },
+    "vulnerabilities_fixed_60_days": {
+      "status": "Met",
+      "justification": "No known unpatched vulnerabilities older than 60 days in production code; automated security scans run weekly."
+    },
+    "vulnerabilities_critical_fixed": {
+      "status": "Met",
+      "justification": "Zero critical vulnerabilities reported across project dependencies."
+    },
+    "static_analysis": {
+      "status": "Met",
+      "justification": "Automated static analysis is run in CI via GitHub CodeQL, OpenSSF Scorecard, Clippy, and TypeScript."
+    },
+    "static_analysis_fixed": {
+      "status": "Met",
+      "justification": "All static analysis findings are addressed prior to merging into main."
+    },
+    "dynamic_analysis": {
+      "status": "Met",
+      "justification": "Playwright end-to-end integration tests run in CI on every PR, and WebdriverIO desktop smoke tests run on real packaged binaries before release."
+    },
+    "crypto_weaknesses": {
+      "status": "Met",
+      "justification": "The project avoids implementing custom cryptography, relying solely on audited, standard system implementations (reqwest/rustls, keyring-rs)."
+    }
+  }
+}

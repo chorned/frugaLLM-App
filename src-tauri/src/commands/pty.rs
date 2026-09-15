@@ -5,6 +5,7 @@ use crate::proxy::ChildProcessManager;
 
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_pty(
     app: tauri::AppHandle,
     state: State<'_, PtyState>,
@@ -39,56 +40,51 @@ pub fn spawn_pty(
         let hermes_bin = home.join(".hermes").join("bin");
         let opencode_bin = home.join(".opencode").join("bin");
         let cargo_bin = home.join(".cargo").join("bin");
-        let current_path = std::env::var("PATH").unwrap_or_default();
-        let sep = if cfg!(windows) { ";" } else { ":" };
-        let augmented_path = if cfg!(windows) {
-            let local_appdata = std::env::var("LOCALAPPDATA")
+
+        let mut paths: Vec<std::path::PathBuf> = Vec::new();
+
+        if cfg!(windows) {
+            let local_appdata = std::env::var_os("LOCALAPPDATA")
                 .map(std::path::PathBuf::from)
-                .unwrap_or_else(|_| home.join("AppData").join("Local"));
-            let appdata = std::env::var("APPDATA")
+                .unwrap_or_else(|| home.join("AppData").join("Local"));
+            let appdata = std::env::var_os("APPDATA")
                 .map(std::path::PathBuf::from)
-                .unwrap_or_else(|_| home.join("AppData").join("Roaming"));
+                .unwrap_or_else(|| home.join("AppData").join("Roaming"));
             let npm_bin = appdata.join("npm");
             let hermes_local_appdata = local_appdata.join("hermes").join("bin");
             let opencode_local_appdata = local_appdata.join("Programs").join("opencode");
             let ollama_local_appdata = local_appdata.join("Programs").join("Ollama");
-            let prog_files = std::env::var("ProgramFiles")
+            let prog_files = std::env::var_os("ProgramFiles")
                 .map(std::path::PathBuf::from)
-                .unwrap_or_else(|_| std::path::PathBuf::from("C:\\Program Files"));
+                .unwrap_or_else(|| std::path::PathBuf::from("C:\\Program Files"));
             let ollama_prog_files = prog_files.join("Ollama");
-            format!(
-                "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}",
-                hermes_local_appdata.display(),
-                sep,
-                opencode_local_appdata.display(),
-                sep,
-                npm_bin.display(),
-                sep,
-                ollama_local_appdata.display(),
-                sep,
-                ollama_prog_files.display(),
-                sep,
-                local_bin.display(),
-                sep,
-                hermes_bin.display(),
-                sep,
-                opencode_bin.display(),
-                sep,
-                cargo_bin.display(),
-                sep,
-                current_path
-            )
+
+            paths.push(hermes_local_appdata);
+            paths.push(opencode_local_appdata);
+            paths.push(npm_bin);
+            paths.push(ollama_local_appdata);
+            paths.push(ollama_prog_files);
+            paths.push(local_bin);
+            paths.push(hermes_bin);
+            paths.push(opencode_bin);
+            paths.push(cargo_bin);
         } else {
-            format!(
-                "{}:{}:{}:{}:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:{}",
-                local_bin.display(),
-                hermes_bin.display(),
-                opencode_bin.display(),
-                cargo_bin.display(),
-                current_path
-            )
-        };
-        cmd.env("PATH", augmented_path);
+            paths.push(local_bin);
+            paths.push(hermes_bin);
+            paths.push(opencode_bin);
+            paths.push(cargo_bin);
+            paths.push(std::path::PathBuf::from("/opt/homebrew/bin"));
+            paths.push(std::path::PathBuf::from("/opt/homebrew/sbin"));
+            paths.push(std::path::PathBuf::from("/usr/local/bin"));
+        }
+
+        if let Some(existing) = std::env::var_os("PATH") {
+            paths.extend(std::env::split_paths(&existing));
+        }
+
+        if let Ok(joined) = std::env::join_paths(paths) {
+            cmd.env("PATH", joined);
+        }
     }
 
     let (port, api_key) = if let Some(frugal_state) = app.try_state::<FrugalConfigState>() {

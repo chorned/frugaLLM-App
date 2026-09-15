@@ -9,6 +9,7 @@ pub mod db;
 pub mod proxy;
 pub mod commands;
 pub mod tray;
+pub mod lifecycle;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
@@ -18,15 +19,12 @@ pub use telemetry::{HardwareProfile, MemorySegments, TelemetryPayload};
 pub use state::*;
 pub use proxy::*;
 pub use commands::*;
+pub use lifecycle::*;
 
 use std::env;
-use tauri::{Manager, Emitter};
+use tauri::Manager;
 use tauri_plugin_store::StoreExt;
 use std::sync::Arc;
-
-pub fn should_show_window(is_silent: bool, start_minimized: bool) -> bool {
-    !(is_silent && start_minimized)
-}
 
 fn main() {
     #[cfg(debug_assertions)]
@@ -36,21 +34,27 @@ fn main() {
     if args.contains(&"--wipe".to_string()) {
         println!("Wiping credentials, store, and agent configurations...");
         let _ = wipe_credentials();
-        if let Ok(h) = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")) {
-            let p = std::path::Path::new(&h);
-            wipe_opencode(p);
-            let _ = std::fs::remove_dir_all(p.join(".hermes"));
-            let _ = std::fs::remove_dir_all(p.join(".ollama"));
+        if let Some(h) = dirs::home_dir() {
+            wipe_opencode(&h);
+            let _ = std::fs::remove_dir_all(h.join(".hermes"));
+            let _ = std::fs::remove_dir_all(h.join(".ollama"));
         }
     }
 
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            handle_single_instance(app, argv);
+        }))
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--silent"])))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(tauri_plugin_window_state::StateFlags::all() & !tauri_plugin_window_state::StateFlags::VISIBLE)
+                .build()
+        )
         .manage(PtyState::default())
         .manage(OllamaDaemonState { child: tokio::sync::Mutex::new(None) })
         .manage(Arc::new(ChildProcessManager::new()))
@@ -135,18 +139,28 @@ fn main() {
 
             // Start proxy server, health loop, and background Ollama daemon
             let server_handle = app_handle.clone();
-            tauri::async_runtime::spawn(async move { proxy::server::start_frugallm_server(server_handle).await; });
+            let initial_server_handle = tauri::async_runtime::spawn(async move { proxy::server::start_frugallm_server(server_handle).await; });
+            let abort_clone = server_abort_handle.clone();
+            tauri::async_runtime::spawn(async move {
+                *abort_clone.lock().await = Some(initial_server_handle);
+            });
             proxy::server::start_provider_health_loop(app_handle.clone());
             let ollama_handle = app_handle.clone();
             tauri::async_runtime::spawn(async move { let _ = commands::agents::start_ollama_daemon(&ollama_handle).await; });
             telemetry::start_telemetry_loop(app_handle.clone());
 
-            // Handle Silent / Start Minimized Window Visibility
-            if !should_show_window(is_silent, start_minimized) {
-                if let Some(window) = app.get_webview_window("main") {
+            // Handle Silent / Start Minimized Window Visibility and coordinate clamping
+            if let Some(window) = app.get_webview_window("main") {
+                validate_and_clamp_window_coordinates(&window);
+                if should_show_window(is_silent, start_minimized) {
+                    let _ = window.show();
+                } else {
                     let _ = window.hide();
                 }
             }
+
+            #[cfg(unix)]
+            setup_unix_signal_handlers(app_handle.clone());
 
             tray::setup_system_tray(app)?;
 
@@ -163,7 +177,7 @@ fn main() {
             spawn_pty, write_pty, kill_pty, resize_pty,
             configure_hermes_defaults, configure_opencode_defaults,
             deploy_local_model, delete_local_model, get_frugallm_config, set_frugallm_config,
-            get_provider_statuses, get_frugallm_server_status,
+            get_provider_statuses, get_frugallm_server_status, retry_frugallm_server,
             edit_hermes_soul, open_app_logs,
             is_wipe_mode, is_mock_update_mode, get_local_ips, restart_app,
             get_routing_chain, set_routing_chain, refresh_routing_chain,
@@ -182,48 +196,41 @@ fn main() {
             handle_preventable_exit(app_handle, || api.prevent_exit());
         }
         tauri::RunEvent::WindowEvent { event: tauri::WindowEvent::CloseRequested { api, .. }, .. } => {
-            handle_preventable_exit(app_handle, || api.prevent_close());
+            #[cfg(target_os = "macos")]
+            {
+                api.prevent_close();
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.hide();
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let close_to_tray = app_handle
+                    .try_state::<FrugalConfigState>()
+                    .and_then(|s| s.config.try_lock().ok().map(|c| c.close_to_tray))
+                    .unwrap_or(true);
+
+                if close_to_tray {
+                    api.prevent_close();
+                    if let Some(window) = app_handle.get_webview_window("main") {
+                        let _ = window.hide();
+                    }
+                } else {
+                    handle_preventable_exit(app_handle, || api.prevent_close());
+                }
+            }
+        }
+        #[cfg(target_os = "macos")]
+        tauri::RunEvent::Reopen { .. } => {
+            if let Some(window) = app_handle.get_webview_window("main") {
+                let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Regular);
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
         }
         _ => {}
     });
 }
 
-pub fn flush_config_on_exit(app_handle: &tauri::AppHandle) {
-    let state = app_handle.state::<FrugalConfigState>();
-    if state.is_dirty.swap(false, std::sync::atomic::Ordering::AcqRel) {
-        let config_clone = if let Ok(guard) = state.config.try_lock() {
-            guard.clone()
-        } else {
-            tauri::async_runtime::block_on(async {
-                let guard = state.config.lock().await;
-                guard.clone()
-            })
-        };
-        if let Ok(path) = get_config_path(app_handle) {
-            if let Ok(json) = serde_json::to_string_pretty(&config_clone) {
-                let _ = std::fs::write(path, json);
-            }
-        }
-    }
-}
-
-fn handle_preventable_exit(app_handle: &tauri::AppHandle, prevent: impl FnOnce()) {
-    let process_manager = app_handle.state::<Arc<ChildProcessManager>>();
-    let allow_exit = app_handle.state::<Arc<std::sync::atomic::AtomicBool>>();
-    let is_allowed = allow_exit.load(std::sync::atomic::Ordering::Acquire);
-    let has_active = process_manager.has_active_services();
-
-    if !is_allowed && has_active {
-        prevent();
-        let _ = app_handle.emit("request_exit_confirmation", ());
-        if let Some(window) = app_handle.get_webview_window("main") {
-            let _ = window.show();
-            let _ = window.set_focus();
-            let _ = window.unminimize();
-        }
-    } else {
-        process_manager.kill_all();
-        flush_config_on_exit(app_handle);
-    }
-}
 

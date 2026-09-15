@@ -267,6 +267,8 @@ pub struct FrugalConfig {
     pub tool_enforcing_gateway: bool,
     #[serde(default = "default_true")]
     pub enable_paid_fallback: bool,
+    #[serde(default = "default_true")]
+    pub close_to_tray: bool,
     #[serde(default, alias = "installed_by_frugallm", alias = "managed_installations")]
     pub installed_by_app: InstalledByApp,
 }
@@ -309,6 +311,7 @@ impl Default for FrugalConfig {
             manual_model_overrides: Vec::new(),
             tool_enforcing_gateway: false,
             enable_paid_fallback: true,
+            close_to_tray: true,
             installed_by_app: InstalledByApp::default(),
         }
     }
@@ -391,9 +394,7 @@ impl Drop for NotifyOnDrop {
         
         let exact_in = self.exact_input_tokens.load(std::sync::atomic::Ordering::Acquire);
         let has_exact_in = self.has_exact_input.load(std::sync::atomic::Ordering::Acquire);
-        let input_tokens = if has_exact_in {
-            exact_in
-        } else if exact_in > 0 {
+        let input_tokens = if has_exact_in || exact_in > 0 {
             exact_in
         } else {
             self.input_tokens_estimate / 4

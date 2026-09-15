@@ -33,4 +33,14 @@ describe('PortConflictBanner Component', () => {
 
     expect(handleDismiss).toHaveBeenCalledTimes(1);
   });
+
+  it('triggers onRetry when retry button is clicked', () => {
+    const handleRetry = vi.fn();
+    render(<PortConflictBanner port={61721} onRetry={handleRetry} />);
+
+    const retryBtn = screen.getByTestId('port-conflict-retry');
+    fireEvent.click(retryBtn);
+
+    expect(handleRetry).toHaveBeenCalledTimes(1);
+  });
 });

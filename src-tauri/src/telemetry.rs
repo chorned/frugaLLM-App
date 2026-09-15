@@ -84,8 +84,25 @@ pub fn compute_memory_segments(
         target_model_tag
     };
 
+    // Inspect Ollama quantization levels alongside parameter count
+    let quant_factor = if effective_tag.contains("fp16") || effective_tag.contains("f16") {
+        16.0 / 8.5
+    } else if effective_tag.contains("q4") {
+        4.5 / 8.5
+    } else if effective_tag.contains("q5") {
+        5.5 / 8.5
+    } else if effective_tag.contains("q6") {
+        6.5 / 8.5
+    } else if effective_tag.contains("q2") {
+        2.7 / 8.5
+    } else if effective_tag.contains("q3") {
+        3.5 / 8.5
+    } else {
+        1.0
+    };
+
     // Pre-flight weights & 128k Q8 context based on Gemma 4 5:1 interleaved architecture
-    let (preflight_weights, preflight_context_128k) = match effective_tag {
+    let (base_weights, preflight_context_128k) = match effective_tag {
         t if t.contains("31b") => (
             20_937_965_568u64,
             calculate_gemma_128k_q8_kv_cache(56, 16, 256),
@@ -107,6 +124,8 @@ pub fn compute_memory_segments(
             calculate_gemma_128k_q8_kv_cache(32, 8, 256),
         ),
     };
+
+    let preflight_weights = (base_weights as f64 * quant_factor).round() as u64;
 
     let weights_bytes = if is_live {
         ollama.total_size
@@ -188,9 +207,13 @@ pub struct HardwareState {
     pub vram_total: u64,      // bytes
 }
 
+pub fn is_time_jump_detected(elapsed: Duration, expected_interval: Duration, multiplier: f64) -> bool {
+    elapsed.as_secs_f64() > expected_interval.as_secs_f64() * multiplier
+}
+
 pub fn start_telemetry_loop(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
-        let client = Client::builder()
+        let mut client = Client::builder()
             .timeout(Duration::from_millis(1500))
             .build()
             .unwrap_or_default();
@@ -205,8 +228,31 @@ pub fn start_telemetry_loop(app: AppHandle) {
         let mut last_ollama_state = OllamaState::default();
 
         let profile = crate::get_hardware_profile().await.unwrap_or_default();
+        let mut last_tick_instant = tokio::time::Instant::now();
+        let expected_interval = Duration::from_secs(1);
 
         loop {
+            let now = tokio::time::Instant::now();
+            let elapsed = now.duration_since(last_tick_instant);
+            last_tick_instant = now;
+
+            if tick_counter > 0 && is_time_jump_detected(elapsed, expected_interval, 2.5) {
+                eprintln!("[POWER] Monotonic time jump detected ({:?} > 2.5x expected). System resumed from sleep/suspend. Re-probing hardware and refreshing connections.", elapsed);
+                #[cfg(not(target_os = "macos"))]
+                {
+                    nvml = nvml_wrapper::Nvml::init().ok();
+                }
+                client = Client::builder()
+                    .timeout(Duration::from_millis(1500))
+                    .build()
+                    .unwrap_or_default();
+
+                let app_reprobe = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = crate::proxy::server::fetch_live_routing_chain(&app_reprobe).await;
+                });
+            }
+
             // Hardware polling (every 1 second)
             let mut hw_state = HardwareState::default();
             
@@ -427,6 +473,31 @@ mod tests {
         assert_eq!(segments.spillover_type, "ssd_swap");
         assert!(segments.triggers_warning);
         assert!(segments.warning_message.contains("Unified Memory"));
+    }
+
+    #[test]
+    fn test_compute_memory_segments_quantization_scaling() {
+        let profile = HardwareProfile {
+            is_unified: false,
+            dedicated_vram: 24 * 1024 * 1024 * 1024,
+            system_ram: 32 * 1024 * 1024 * 1024,
+            execution_ceiling: 24 * 1024 * 1024 * 1024,
+            os_architecture: "linux-x86_64".into(),
+        };
+        let ollama = OllamaState::default();
+
+        let seg_unquant = compute_memory_segments(&profile, &ollama, "gemma4:31b");
+        let seg_q4 = compute_memory_segments(&profile, &ollama, "gemma4:31b-q4_k_m");
+        let seg_fp16 = compute_memory_segments(&profile, &ollama, "gemma4:31b-fp16");
+
+        // Q4 weights must be significantly smaller than unquantized/Q8
+        assert!(seg_q4.weights_bytes < seg_unquant.weights_bytes);
+        // FP16 weights must be significantly larger than unquantized/Q8
+        assert!(seg_fp16.weights_bytes > seg_unquant.weights_bytes);
+
+        // Expected ratio: Q4 is ~4.5/8.5 (~53%) of unquantized baseline
+        let ratio = seg_q4.weights_bytes as f64 / seg_unquant.weights_bytes as f64;
+        assert!((ratio - (4.5 / 8.5)).abs() < 0.01);
     }
 }
 

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { MainCanvas } from '../pages/MainCanvas';
 
-test.describe('V2 Onboarding Flow', () => {
+test.describe('Onboarding Flow', () => {
   test.beforeEach(async ({ page }) => {
     // Mock Tauri IPC
     await page.addInitScript(() => {

@@ -4,12 +4,14 @@ import en from '../locales/en.json';
 interface PortConflictBannerProps {
   port: number;
   onConfigurePort?: () => void;
+  onRetry?: () => void;
   onDismiss?: () => void;
 }
 
 export const PortConflictBanner: React.FC<PortConflictBannerProps> = ({
   port,
   onConfigurePort,
+  onRetry,
   onDismiss,
 }) => {
   const t = en.portConflict;
@@ -24,19 +26,19 @@ export const PortConflictBanner: React.FC<PortConflictBannerProps> = ({
         position: 'relative',
         zIndex: 50,
         margin: '12px auto',
-        maxWidth: '900px',
+        maxWidth: '920px',
         width: 'calc(100% - 32px)',
-        backgroundColor: '#FEF2F2',
-        border: 'none',
+        backgroundColor: 'var(--zen-surface)',
+        border: '1px solid rgba(239, 68, 68, 0.35)',
         borderRadius: '16px',
-        boxShadow: '0 4px 20px rgba(239, 68, 68, 0.08)',
+        boxShadow: 'var(--zen-shadow-modal), 0 0 24px rgba(239, 68, 68, 0.12)',
         padding: '12px 18px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: '16px',
         fontFamily: 'inherit',
-        color: '#991B1B',
+        color: 'var(--zen-text)',
         animation: 'fadeIn 0.2s ease-in-out',
       }}
     >
@@ -46,11 +48,13 @@ export const PortConflictBanner: React.FC<PortConflictBannerProps> = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            width: '36px',
-            height: '36px',
+            width: '38px',
+            height: '38px',
             borderRadius: '9999px',
-            backgroundColor: '#FEE2E2',
-            color: '#DC2626',
+            backgroundColor: 'rgba(239, 68, 68, 0.14)',
+            border: '1px solid rgba(239, 68, 68, 0.28)',
+            boxShadow: '0 0 14px rgba(239, 68, 68, 0.15)',
+            color: '#EF4444',
             flexShrink: 0,
           }}
         >
@@ -67,8 +71,8 @@ export const PortConflictBanner: React.FC<PortConflictBannerProps> = ({
               style={{
                 fontSize: '0.75rem',
                 fontWeight: 700,
-                letterSpacing: '0.04em',
-                color: '#991B1B',
+                letterSpacing: '0.05em',
+                color: '#F87171',
                 textTransform: 'uppercase',
               }}
             >
@@ -78,11 +82,13 @@ export const PortConflictBanner: React.FC<PortConflictBannerProps> = ({
               style={{
                 fontSize: '0.65rem',
                 fontWeight: 700,
-                backgroundColor: '#DC2626',
-                color: '#ffffff',
+                backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                border: '1px solid rgba(239, 68, 68, 0.4)',
+                color: '#FCA5A5',
                 padding: '2px 8px',
                 borderRadius: '9999px',
                 letterSpacing: '0.04em',
+                whiteSpace: 'nowrap',
               }}
             >
               PORT {port}
@@ -93,11 +99,11 @@ export const PortConflictBanner: React.FC<PortConflictBannerProps> = ({
               margin: 0,
               fontSize: '0.82rem',
               fontWeight: 500,
-              color: '#7F1D1D',
+              color: 'var(--zen-text)',
               lineHeight: 1.35,
             }}
           >
-            {actionCloseRestart} <span style={{ opacity: 0.85, fontWeight: 450 }}>{t.actionOrChange}</span>
+            {actionCloseRestart} <span style={{ color: 'var(--zen-text-secondary)', fontWeight: 450 }}>{t.actionOrChange}</span>
           </p>
         </div>
       </div>
@@ -126,6 +132,31 @@ export const PortConflictBanner: React.FC<PortConflictBannerProps> = ({
           </button>
         )}
 
+        {onRetry && (
+          <button
+            data-testid="port-conflict-retry"
+            className="btn-cta btn-cta-secondary"
+            onClick={onRetry}
+            style={{
+              padding: '8px 14px',
+              borderRadius: '9999px',
+              fontWeight: 600,
+              fontSize: '0.78rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+              <path d="M16 21h5v-5" />
+            </svg>
+            {t.retry || 'Retry Port'}
+          </button>
+        )}
+
         {onDismiss && (
           <button
             data-testid="port-conflict-dismiss"
@@ -133,8 +164,6 @@ export const PortConflictBanner: React.FC<PortConflictBannerProps> = ({
             onClick={onDismiss}
             style={{
               padding: '8px 14px',
-              backgroundColor: '#FEE2E2',
-              color: '#991B1B',
               borderRadius: '9999px',
               fontWeight: 600,
               fontSize: '0.78rem',

@@ -52,7 +52,7 @@ pub fn set_credential(app: tauri::AppHandle, service: &str, secret: &str) -> Res
         
         std::fs::write(&env_path, new_contents).map_err(|e| e.to_string())?;
         std::env::set_var(key, secret);
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(not(debug_assertions))]
@@ -99,7 +99,7 @@ pub fn get_credential(service: &str) -> Result<String, String> {
             }
         }
 
-        return Err(format!("Credential for service '{}' not found", service));
+        Err(format!("Credential for service '{}' not found", service))
     }
 
     #[cfg(not(debug_assertions))]
@@ -139,7 +139,7 @@ pub fn delete_credential(service: &str) -> Result<(), String> {
                 }
             }
         }
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(not(debug_assertions))]
@@ -169,7 +169,7 @@ pub fn wipe_credentials() -> Result<(), String> {
         std::env::remove_var("OPENROUTER_KEY");
         std::env::remove_var("GOOGLE_KEY");
         std::env::remove_var("OLLAMA_KEY");
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(not(debug_assertions))]

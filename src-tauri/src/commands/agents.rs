@@ -73,11 +73,11 @@ pub fn get_hermes_source_path(home: &std::path::Path) -> Option<std::path::PathB
 
     let is_live_home = if cfg!(windows) {
         std::env::var_os("USERPROFILE")
-            .map(|u| std::path::PathBuf::from(u) == home)
+            .map(|u| u == home)
             .unwrap_or(true)
     } else {
         std::env::var_os("HOME")
-            .map(|h| std::path::PathBuf::from(h) == home)
+            .map(|h| h == home)
             .unwrap_or(true)
     };
 
@@ -245,11 +245,11 @@ pub fn get_opencode_source_path(home: &std::path::Path) -> Option<std::path::Pat
 
     let is_live_home = if cfg!(windows) {
         std::env::var_os("USERPROFILE")
-            .map(|u| std::path::PathBuf::from(u) == home)
+            .map(|u| u == home)
             .unwrap_or(true)
     } else {
         std::env::var_os("HOME")
-            .map(|h| std::path::PathBuf::from(h) == home)
+            .map(|h| h == home)
             .unwrap_or(true)
     };
 
@@ -396,7 +396,7 @@ pub fn is_ollama_in_paths(paths: &[&str]) -> bool {
 
 pub fn is_ollama_process_running() -> bool {
     let sys = sysinfo::System::new_all();
-    for (_pid, process) in sys.processes() {
+    for process in sys.processes().values() {
         let name = process.name().to_string_lossy().to_lowercase();
         if name == "ollama.exe" || name == "ollama app.exe" || name == "ollama" {
             return true;
@@ -1286,7 +1286,7 @@ pub fn edit_hermes_soul(app: tauri::AppHandle) -> Result<(), String> {
 
 pub fn get_ollama_source_path() -> Option<std::path::PathBuf> {
     let bin = get_ollama_binary();
-    if bin != std::path::PathBuf::from("ollama") && bin.exists() {
+    if bin != *"ollama" && bin.exists() {
         return Some(bin);
     }
     None
@@ -1705,7 +1705,7 @@ pub async fn start_ollama_daemon(app: &tauri::AppHandle) -> Result<(), String> {
 
     let log_file = std::fs::OpenOptions::new()
         .create(true)
-        .write(true)
+        
         .append(true)
         .open(&server_log_path);
 
@@ -1827,6 +1827,12 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let models_dir = app_data_dir.join("models");
     std::fs::create_dir_all(&models_dir).map_err(|e| e.to_string())?;
+
+    // Pre-flight disk space check: require at least 5 GB available for model weights and cache
+    let required_bytes = 5 * 1024 * 1024 * 1024;
+    crate::commands::system::check_available_disk_space(&models_dir, required_bytes).inspect_err(|e| {
+        log_event(&app, "ERROR", "OLLAMA", e);
+    })?;
 
     // Generate Modelfile
     let modelfile_path = models_dir.join("Modelfile");
@@ -2089,11 +2095,10 @@ pub async fn delete_local_model(app: tauri::AppHandle) -> Result<(), String> {
                     let name = m.get("name").and_then(|n| n.as_str()).unwrap_or("");
                     let model_name = m.get("model").and_then(|n| n.as_str()).unwrap_or("");
                     for candidate in [name, model_name] {
-                        if (candidate.contains("frugallm-active") || candidate.contains("gemma4")) && !candidate.is_empty() {
-                            if !tags_to_delete.contains(&candidate.to_string()) {
+                        if (candidate.contains("frugallm-active") || candidate.contains("gemma4")) && !candidate.is_empty()
+                            && !tags_to_delete.contains(&candidate.to_string()) {
                                 tags_to_delete.push(candidate.to_string());
                             }
-                        }
                     }
                 }
             }

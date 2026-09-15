@@ -15,6 +15,24 @@ FrugaLLM is a sophisticated, local-first proxy application and AI router built o
 - **Advanced Model Routing**: Rank models dynamically with fallback capabilities to maximize uptime and minimize costs.
 - **Cross-platform**: Available on macOS, Windows, and Linux.
 
+## Installation & Quick Start
+
+Pre-built desktop executables are published with every release for macOS, Windows, and Linux:
+
+* **Download**: Grab the latest release package for your operating system from [GitHub Releases](https://github.com/chorned/frugaLLM-App/releases/latest).
+  * **macOS**: `frugallm-app_universal.dmg` (Universal binary for Apple Silicon & Intel)
+  * **Windows**: `frugallm-app_x64-setup.exe` (Self-contained Windows installer)
+  * **Linux**: `frugallm-app_amd64.deb` or `.AppImage`
+
+### Running from Source
+Ensure you have [Node.js](https://nodejs.org/) (v24+) and [Rust](https://rust-lang.org/) installed:
+```bash
+git clone https://github.com/chorned/frugaLLM-App.git
+cd frugaLLM-App
+npm install
+npm run tauri dev
+```
+
 ## Recommended IDE Setup
 
 - [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
@@ -65,4 +83,17 @@ FrugaLLM is built upon the shoulders of remarkable open-source projects and comm
 - **[Vitest](https://vitest.dev/)** & **[@testing-library](https://testing-library.com/)**: Fast unit testing and reactive component verification.
 - **[Playwright](https://playwright.dev/)**: End-to-End browser automation and visual regression testing.
 - **[WebdriverIO](https://webdriver.io/)**: Cross-platform desktop smoke testing.
+
+## Community & Contributing
+
+We welcome contributions from the open-source community! Please review our [Contributing Guide](CONTRIBUTING.md) for setup details, testing mandates, and PR guidelines.
+
+* **Issue Tracker**: [GitHub Issues](https://github.com/chorned/frugaLLM-App/issues)
+* **Discussions**: [GitHub Discussions](https://github.com/chorned/frugaLLM-App/discussions)
+* **Changelog**: [CHANGELOG.md](CHANGELOG.md)
+* **Security Policy**: [SECURITY.md](SECURITY.md)
+
+## License
+
+FrugaLLM is licensed under the [MIT License](LICENSE).
 

@@ -158,4 +158,29 @@ describe('FrugaLLM Node Dual Tooltips (CHO-57 / CHO-122)', () => {
     const totalTokensVal = screen.getByTestId('frugallm-total-tokens');
     expect(totalTokensVal).toHaveTextContent('60,000');
   });
+
+  it('renders dark crimson themed port conflict badge and handles warning click to configure', () => {
+    const mockSetSelectedNodeId = vi.fn();
+    render(
+      <TopologyCanvas
+        {...defaultProps}
+        portConflict={{ port: 61721, message: 'Port 61721 conflict' }}
+        setSelectedNodeId={mockSetSelectedNodeId}
+      />
+    );
+
+    const badge = screen.getByTestId('frugallm-port-conflict-badge');
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveTextContent('PORT CONFLICT');
+    expect(badge.style.whiteSpace).toBe('nowrap');
+
+    // Warning pill in card body
+    const warningPill = screen.getByTestId('frugallm-node-conflict-warning');
+    expect(warningPill).toBeInTheDocument();
+    expect(warningPill).toHaveTextContent('Port 61721 Conflict');
+
+    // Click warning pill opens node configuration
+    fireEvent.click(warningPill);
+    expect(mockSetSelectedNodeId).toHaveBeenCalledWith('node-frugallm');
+  });
 });

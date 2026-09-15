@@ -26,9 +26,6 @@ We are building a local-first application that MUST run seamlessly across **Wind
 *   **Whitespace & Path Quoting:** Windows paths frequently contain spaces (e.g. `AppData\Local`). Always quote paths in PowerShell commands and use `std::path::PathBuf` in Rust.
 
 # 3. Frontend Architecture (The V2 Refactor)
-We are undergoing a massive UI redesign using the **Strangler Fig Pattern**.
-*   **V1 is the Baseline:** The existing `v1` UI is our source of truth. Treat it as READ-ONLY reference material. Never mutate or delete it. Scaffold the new UI inside a parallel `v2` directory.
-*   **Decoupled Logic:** Before building new `v2` UI components, abstract all business logic into custom hooks or standard context providers. Both `v1` and `v2` must consume the exact same underlying logic layer.
 *   **Resilient Primitives:** Build UI components to handle extreme edge cases natively (text overflow, empty states, loading skeletons, and network error boundaries).
 *   **Copy & Text (JSON CMS):** All user-facing strings must be extracted into a localized JSON dictionary pattern (`en.json`). No hardcoded display text in the React components.
 *   **Viewport Hub Centering Mandate:** The central FrugaLLM node must be mathematically positioned such that its geometric center (accounting for its true card height and width) coincides exactly with the viewport midpoint (50% of inner window width, 50% of inner window height). Peripheral nodes (providers and agents) must calculate their offsets symmetrically relative to FrugaLLM's true center point, ensuring balanced top/bottom and left/right canvas padding.

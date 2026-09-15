@@ -2,7 +2,6 @@ import React from 'react';
 import { AppNode, Icons, NODE_WIDTH } from '../constants/canvas';
 import { HardwareNode, InfoField, StatusLight } from './NodeWidgets';
 import { OllamaIcon, getProviderIcon } from './icons/ProviderIcons';
-import { PortConflictBanner } from './PortConflictBanner';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import en from '../locales/en.json';
 import { Tooltip } from './Tooltip';
@@ -77,7 +76,6 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   frugalConfig,
   isOllamaInstalled,
   setSelectedNodeId,
-  setPortConflict,
   handleCanvasClick,
   handleCanvasMouseDown,
   handleNodeClick,
@@ -107,15 +105,15 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     const isCore = node.id === 'node-frugallm';
 
     let stateColors = {
-      border: isCore && portConflict ? '#ef4444' : 'transparent',
-      headerBg: isCore && portConflict ? '#fef2f2' : (isSelected ? 'var(--zen-surface-header-active)' : 'var(--zen-surface-header)'), 
-      headerText: isCore && portConflict ? '#991b1b' : 'var(--zen-text)',
+      border: isCore && portConflict ? 'rgba(239, 68, 68, 0.45)' : 'transparent',
+      headerBg: isCore && portConflict ? 'rgba(239, 68, 68, 0.12)' : (isSelected ? 'var(--zen-surface-header-active)' : 'var(--zen-surface-header)'), 
+      headerText: 'var(--zen-text)',
       bodyBg: 'var(--zen-surface)',
       dot: isCore && portConflict ? '#ef4444' : '#10B981',
       statusText: 'var(--zen-text-secondary)',
-      boxShadow: isCore && portConflict ? '0 0 16px rgba(239, 68, 68, 0.2), var(--zen-shadow-diffused)' : 'var(--zen-shadow-diffused)',
-      borderStyle: 'none',
-      borderWidth: '0px'
+      boxShadow: isCore && portConflict ? '0 0 24px rgba(239, 68, 68, 0.22), var(--zen-shadow-diffused)' : 'var(--zen-shadow-diffused)',
+      borderStyle: isCore && portConflict ? 'solid' : 'none',
+      borderWidth: isCore && portConflict ? '1px' : '0px'
     };
 
     let Icon: React.ReactNode = Icons.cpu;
@@ -188,7 +186,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           boxSizing: 'border-box',
           cursor: 'pointer',
           backgroundColor: stateColors.bodyBg,
-          border: 'none',
+          border: isCore && portConflict ? '1px solid rgba(239, 68, 68, 0.45)' : 'none',
           borderRadius: '16px',
           overflow: 'hidden',
           boxShadow: isSelected ? `0 0 0 2px var(--zen-active-border), var(--zen-active-glow), ${stateColors.boxShadow}` : stateColors.boxShadow,
@@ -204,42 +202,45 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         <div style={{ 
           backgroundColor: stateColors.headerBg, 
           color: stateColors.headerText,
-          padding: '10px 14px',
+          padding: isCore && portConflict ? '9px 11px' : '10px 14px',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          borderBottom: 'none'
+          borderBottom: isCore && portConflict ? '1px solid rgba(239, 68, 68, 0.25)' : 'none'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
             {Icon}
             <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
-              <span style={{ fontWeight: 600, fontSize: '0.82rem', color: stateColors.headerText, letterSpacing: '0.02em' }}>
+              <span style={{ fontWeight: 600, fontSize: '0.80rem', color: stateColors.headerText, letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>
                 {node.data.label}
               </span>
               {node.data.subheader && (
-                <span style={{ fontWeight: 450, fontSize: '0.65rem', color: 'var(--zen-text-secondary)' }}>
+                <span style={{ fontWeight: 450, fontSize: '0.64rem', color: 'var(--zen-text-secondary)', whiteSpace: 'nowrap' }}>
                   {node.data.subheader}
                 </span>
               )}
             </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
             {isCore && portConflict && (
               <span
                 data-testid="frugallm-port-conflict-badge"
                 style={{
-                  fontSize: '0.6rem',
+                  fontSize: '0.50rem',
                   fontWeight: 700,
-                  backgroundColor: '#ef4444',
-                  color: '#ffffff',
-                  padding: '2px 6px',
+                  backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                  border: '1px solid rgba(239, 68, 68, 0.45)',
+                  color: '#FCA5A5',
+                  padding: '2px 5px',
                   borderRadius: '9999px',
-                  letterSpacing: '0.04em'
+                  letterSpacing: '0.03em',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
                 }}
               >
                 PORT CONFLICT
               </span>
             )}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <div 
               onClick={(e) => {
                 e.stopPropagation();
@@ -251,7 +252,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: 'var(--zen-text)',
-                padding: '4px',
+                padding: '2px',
                 borderRadius: '9999px',
                 opacity: 0.8
               }}
@@ -268,17 +269,42 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
               {portConflict && (
                 <div
                   data-testid="frugallm-node-conflict-warning"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedNodeId('node-frugallm');
+                  }}
+                  role="button"
+                  tabIndex={0}
                   style={{
-                    backgroundColor: '#fee2e2',
-                    border: 'none',
-                    color: '#991b1b',
+                    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                    color: '#FCA5A5',
                     borderRadius: '8px',
                     padding: '6px 8px',
                     fontSize: '0.72rem',
                     fontWeight: 600,
-                    textAlign: 'center'
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'background-color 0.15s ease, border-color 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.22)';
+                    e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.55)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.12)';
+                    e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.35)';
                   }}
                 >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
                   Port {portConflict.port} Conflict
                 </div>
               )}
@@ -424,17 +450,6 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             overflow: 'hidden'
           }}
         >
-        {portConflict && !terminalMode && (
-          <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: '12px', left: 0, right: 0, zIndex: 40, pointerEvents: 'auto', display: 'flex', justifyContent: 'center' }}>
-            <PortConflictBanner
-              port={portConflict.port}
-              onConfigurePort={() => setSelectedNodeId('node-frugallm')}
-              onDismiss={() => setPortConflict(null)}
-            />
-          </div>
-        )}
-
-
         <div style={{
           position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
           display: 'flex',

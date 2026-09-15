@@ -1272,7 +1272,18 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
             }
           }}
         >
-          {isSaving ? 'SAVING...' : 'SAVE CHANGES'}
+          {isSaving ? (
+            <span className="saving-label">
+              <span>{en.routingGraph?.nodeConfigPanel?.saveButton?.saving || 'SAVING'}</span>
+              <span className="saving-dots" aria-hidden="true">
+                <span className="saving-dot dot-1">.</span>
+                <span className="saving-dot dot-2">.</span>
+                <span className="saving-dot dot-3">.</span>
+              </span>
+            </span>
+          ) : (
+            en.routingGraph?.nodeConfigPanel?.saveButton?.saveChanges || 'SAVE CHANGES'
+          )}
         </button>
       </div>
     </div>

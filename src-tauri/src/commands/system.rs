@@ -242,18 +242,54 @@ pub fn format_log_entry(level: &str, tag: &str, message: &str) -> String {
     format!("[{}] [{}] [{}] {}\n", now, level, tag, message)
 }
 
+pub const MAX_LOG_FILE_SIZE_BYTES: u64 = 10 * 1024 * 1024; // 10 MB
+pub const MAX_ROTATED_LOG_FILES: usize = 5;
+
+pub fn rotate_logs_if_needed(path: &std::path::Path, incoming_bytes: u64, max_size: u64, max_files: usize) -> std::io::Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+
+    let current_size = match path.metadata() {
+        Ok(m) => m.len(),
+        Err(_) => return Ok(()),
+    };
+
+    if current_size + incoming_bytes > max_size {
+        let parent = match path.parent() {
+            Some(p) => p,
+            None => return Ok(()),
+        };
+
+        for i in (1..max_files).rev() {
+            let old_file = parent.join(format!("frugallm.{}.log", i));
+            let new_file = parent.join(format!("frugallm.{}.log", i + 1));
+            if old_file.exists() {
+                let _ = std::fs::rename(&old_file, &new_file);
+            }
+        }
+
+        let first_rotated = parent.join("frugallm.1.log");
+        let _ = std::fs::rename(path, &first_rotated);
+    }
+
+    Ok(())
+}
+
 pub fn append_log_entry_to_path(path: &std::path::Path, level: &str, tag: &str, message: &str) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         if !parent.exists() {
             std::fs::create_dir_all(parent)?;
         }
     }
+    let entry = format_log_entry(level, tag, message);
+    let _ = rotate_logs_if_needed(path, entry.len() as u64, MAX_LOG_FILE_SIZE_BYTES, MAX_ROTATED_LOG_FILES);
+
     use std::io::Write;
     let mut file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(path)?;
-    let entry = format_log_entry(level, tag, message);
     file.write_all(entry.as_bytes())?;
     Ok(())
 }
@@ -325,10 +361,65 @@ pub fn open_app_logs(app: tauri::AppHandle) -> Result<(), String> {
     open_file_in_system_viewer(&app, &log_path)
 }
 
-
 pub fn sanitize_diagnostic_logs(raw_logs: &str) -> String {
     let key_regex = regex::Regex::new(r"(sk-[a-zA-Z0-9_\-]{20,}|AIza[a-zA-Z0-9_\-]{16,}|Bearer\s+[a-zA-Z0-9_\.\-]+)").unwrap();
     key_regex.replace_all(raw_logs, "[REDACTED_API_KEY]").to_string()
+}
+
+pub fn read_last_n_lines(path: &std::path::Path, n: usize) -> std::io::Result<String> {
+    use std::io::{BufRead, BufReader, Seek, SeekFrom};
+    let mut file = std::fs::File::open(path)?;
+    let metadata = file.metadata()?;
+    let file_len = metadata.len();
+
+    let max_read_chunk: u64 = 512 * 1024; // Bounded to 512KB to protect RAM
+    let seek_offset = file_len.saturating_sub(max_read_chunk);
+    if seek_offset > 0 {
+        file.seek(SeekFrom::Start(seek_offset))?;
+    }
+
+    let reader = BufReader::new(file);
+    let mut lines: Vec<String> = reader.lines().map_while(Result::ok).collect();
+    if seek_offset > 0 && !lines.is_empty() {
+        lines.remove(0);
+    }
+
+    let start = lines.len().saturating_sub(n);
+    Ok(lines[start..].join("\n"))
+}
+
+pub fn check_available_disk_space(target_path: &std::path::Path, required_bytes: u64) -> Result<(), String> {
+    use sysinfo::Disks;
+    let disks = Disks::new_with_refreshed_list();
+    
+    let mut matching_disk = None;
+    let mut longest_mount_len = 0;
+    
+    for disk in &disks {
+        let mount = disk.mount_point();
+        if target_path.starts_with(mount) {
+            let mount_len = mount.as_os_str().len();
+            if mount_len >= longest_mount_len {
+                longest_mount_len = mount_len;
+                matching_disk = Some(disk);
+            }
+        }
+    }
+    
+    if let Some(disk) = matching_disk {
+        let available = disk.available_space();
+        if available < required_bytes {
+            let available_gb = available as f64 / 1024.0 / 1024.0 / 1024.0;
+            let required_gb = required_bytes as f64 / 1024.0 / 1024.0 / 1024.0;
+            return Err(format!(
+                "Insufficient disk space: {:.2} GB available on {}, but {:.2} GB is required.",
+                available_gb,
+                disk.mount_point().display(),
+                required_gb
+            ));
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -350,17 +441,7 @@ pub async fn get_diagnostic_data(app: tauri::AppHandle) -> Result<DiagnosticPayl
     };
 
     let raw_logs = if let Some(path) = log_path {
-        let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        // Grab the last 400 lines to keep payload size healthy
-        content
-            .lines()
-            .rev()
-            .take(400)
-            .collect::<Vec<&str>>()
-            .into_iter()
-            .rev()
-            .collect::<Vec<&str>>()
-            .join("\n")
+        read_last_n_lines(&path, 400).unwrap_or_else(|e| format!("Failed to read log file: {}", e))
     } else {
         "No log file found on disk.".to_string()
     };
@@ -424,7 +505,7 @@ pub async fn submit_issue_report(payload: SubmitIssuePayload) -> Result<String, 
 pub fn get_local_ips() -> Vec<String> {
     let mut ips = vec!["127.0.0.1".to_string()];
     if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") {
-        if let Ok(_) = socket.connect("8.8.8.8:80") {
+        if socket.connect("8.8.8.8:80").is_ok() {
             if let Ok(addr) = socket.local_addr() {
                 let ip = addr.ip().to_string();
                 if ip != "127.0.0.1" && !ips.contains(&ip) {

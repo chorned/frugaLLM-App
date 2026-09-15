@@ -366,6 +366,7 @@ function handleScreenshotInvoke(cmd: string, args: any, listeners: Record<string
     case 'refresh_routing_chain':
       return Promise.resolve(APPSTORE_ROUTING_CHAIN);
     case 'get_frugallm_server_status':
+    case 'retry_frugallm_server':
       return Promise.resolve({ status: 'Running' });
     case 'is_wipe_mode':
       return Promise.resolve(false);

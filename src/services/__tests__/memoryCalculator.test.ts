@@ -164,5 +164,32 @@ describe('memoryCalculator Service', () => {
       expect(segUnrec.overhead_bytes).toBe(0);
       expect(segUnrec.spillover_type).toBe('none');
     });
+
+    it('inspects Ollama quantization levels alongside parameter count to avoid VRAM miscalculations', () => {
+      const ceiling24Gb = 24 * 1024 * 1024 * 1024; // 24 GB VRAM
+
+      // Baseline unquantized 31b assumes Q8 (~33 GB) -> triggers spillover on 24 GB GPU
+      const segUnquant = computeMemorySegmentsForModel('gemma4:31b', ceiling24Gb, false, false);
+      expect(segUnquant.weights_bytes).toBe(Math.round(33.0 * 1024 * 1024 * 1024));
+      expect(segUnquant.triggers_warning).toBe(true);
+      expect(segUnquant.spillover_bytes).toBeGreaterThan(0);
+
+      // Q4 quantization (gemma4:31b-q4_k_m) scales weights to ~17.47 GB
+      const segQ4 = computeMemorySegmentsForModel('gemma4:31b-q4_k_m', ceiling24Gb, false, false);
+      const expectedQ4Weights = Math.round(33.0 * (4.5 / 8.5) * 1024 * 1024 * 1024);
+      expect(segQ4.weights_bytes).toBe(expectedQ4Weights);
+      expect(segQ4.weights_bytes).toBeLessThan(segUnquant.weights_bytes);
+
+      // FP16 quantization (gemma4:31b-fp16) scales weights to ~62.1 GB
+      const segFp16 = computeMemorySegmentsForModel('gemma4:31b-fp16', ceiling24Gb, false, false);
+      const expectedFp16Weights = Math.round(33.0 * (16.0 / 8.5) * 1024 * 1024 * 1024);
+      expect(segFp16.weights_bytes).toBe(expectedFp16Weights);
+      expect(segFp16.triggers_warning).toBe(true);
+
+      // Explicit quantization argument takes effect
+      const segExplicitQ4 = computeMemorySegmentsForModel('gemma4:12b', ceiling24Gb, false, false, 0, 'Q4_0');
+      const expected12bQ4Weights = Math.round(13.0 * (4.5 / 8.5) * 1024 * 1024 * 1024);
+      expect(segExplicitQ4.weights_bytes).toBe(expected12bQ4Weights);
+    });
   });
 });

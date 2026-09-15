@@ -102,8 +102,8 @@ fn process_stream_chunk_for_tokens(
                 continue;
             }
 
-            let json_candidate = if trimmed.starts_with("data:") {
-                let data_str = trimmed["data:".len()..].trim();
+            let json_candidate = if let Some(stripped) = trimmed.strip_prefix("data:") {
+                let data_str = stripped.trim();
                 if data_str == "[DONE]" {
                     continue;
                 }
@@ -374,6 +374,45 @@ async fn try_ollama(
     }
 }
 
+pub fn detect_stream_error_before_token(chunk: &[u8]) -> Option<String> {
+    let text = std::str::from_utf8(chunk).unwrap_or("");
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    // 1. Explicit SSE error event
+    if trimmed.starts_with("event: error") || trimmed.contains("\nevent: error") {
+        return Some(trimmed.to_string());
+    }
+
+    // 2. Direct JSON error object: {"error": ...}
+    if trimmed.starts_with('{') && trimmed.contains("\"error\"") {
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(trimmed) {
+            if let Some(err) = val.get("error") {
+                return Some(err.to_string());
+            }
+        }
+    }
+
+    // 3. SSE data lines with error: data: {"error": ...}
+    for line in trimmed.lines() {
+        let l = line.trim();
+        if let Some(data_str) = l.strip_prefix("data:") {
+            let data_str = data_str.trim();
+            if data_str.starts_with('{') && data_str.contains("\"error\"") {
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(data_str) {
+                    if let Some(err) = val.get("error") {
+                        return Some(err.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
 async fn try_cloud_provider(
     app: &tauri::AppHandle,
     client: &reqwest::Client,
@@ -482,28 +521,74 @@ async fn try_cloud_provider(
             let elapsed = start_time.elapsed();
             let remaining_ttft = ttft_limit.checked_sub(elapsed).unwrap_or(std::time::Duration::from_millis(100));
             let mut byte_stream = res.bytes_stream();
-            let first_chunk = match tokio::time::timeout(remaining_ttft, byte_stream.next()).await {
-                Ok(Some(Ok(bytes))) => bytes,
-                Ok(Some(Err(e))) => {
-                    update_provider_status(app, &cloud_model.provider, "503").await;
-                    if let Some(health_state) = app.try_state::<ProviderHealthState>() {
-                        let mut m_cooldowns = health_state.model_cooldowns.write().await;
-                        m_cooldowns.insert(cloud_model.model.clone(), std::time::Instant::now() + std::time::Duration::from_secs(60));
+            let mut prefix_chunks = Vec::new();
+
+            loop {
+                let chunk_bytes = match tokio::time::timeout(remaining_ttft, byte_stream.next()).await {
+                    Ok(Some(Ok(bytes))) => bytes,
+                    Ok(Some(Err(e))) => {
+                        update_provider_status(app, &cloud_model.provider, "503").await;
+                        if let Some(health_state) = app.try_state::<ProviderHealthState>() {
+                            let mut m_cooldowns = health_state.model_cooldowns.write().await;
+                            m_cooldowns.insert(cloud_model.model.clone(), std::time::Instant::now() + std::time::Duration::from_secs(60));
+                        }
+                        return Err(format!("{} stream read error: {}", cloud_model.provider, e));
                     }
-                    return Err(format!("{} stream read error: {}", cloud_model.provider, e));
-                }
-                Ok(None) => {
-                    axum::body::Bytes::new()
-                }
-                Err(_) => {
-                    update_provider_status(app, &cloud_model.provider, "timeout").await;
-                    if let Some(health_state) = app.try_state::<ProviderHealthState>() {
-                        let mut m_cooldowns = health_state.model_cooldowns.write().await;
-                        m_cooldowns.insert(cloud_model.model.clone(), std::time::Instant::now() + COOLDOWN_PENALTY_DURATION);
+                    Ok(None) => {
+                        return Err(format!("{} stream closed without emitting tokens on model '{}'", cloud_model.provider, cloud_model.model));
                     }
-                    return Err(format!("{} API error: HTTP timeout - Exceeded TTFT timeout ({}s) waiting for first token on model '{}'", cloud_model.provider, ttft_limit.as_secs(), cloud_model.model));
+                    Err(_) => {
+                        update_provider_status(app, &cloud_model.provider, "timeout").await;
+                        if let Some(health_state) = app.try_state::<ProviderHealthState>() {
+                            let mut m_cooldowns = health_state.model_cooldowns.write().await;
+                            m_cooldowns.insert(cloud_model.model.clone(), std::time::Instant::now() + COOLDOWN_PENALTY_DURATION);
+                        }
+                        return Err(format!("{} API error: HTTP timeout - Exceeded TTFT timeout ({}s) waiting for first token on model '{}'", cloud_model.provider, ttft_limit.as_secs(), cloud_model.model));
+                    }
+                };
+
+                // Detect in-stream SSE error before emitting token to downstream client
+                if let Some(err_msg) = detect_stream_error_before_token(&chunk_bytes) {
+                    if err_msg.contains("404") || err_msg.contains("NOT_FOUND") || err_msg.contains("no longer available") {
+                        if let Some(health_state) = app.try_state::<ProviderHealthState>() {
+                            let mut gated = health_state.gated_models.write().await;
+                            gated.insert(cloud_model.model.clone());
+                            let clean_model = cloud_model.model.strip_prefix("models/").unwrap_or(&cloud_model.model);
+                            gated.insert(clean_model.to_string());
+                            gated.insert(format!("models/{}", clean_model));
+                            if clean_model.contains("gemini-2.5") {
+                                for v in &["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"] {
+                                    gated.insert(v.to_string());
+                                    gated.insert(format!("models/{}", v));
+                                }
+                            }
+                        }
+                    } else {
+                        if let Some(health_state) = app.try_state::<ProviderHealthState>() {
+                            let mut m_cooldowns = health_state.model_cooldowns.write().await;
+                            m_cooldowns.insert(cloud_model.model.clone(), std::time::Instant::now() + std::time::Duration::from_secs(60));
+                        }
+                    }
+                    log_event(
+                        app,
+                        "WARN",
+                        &cloud_model.provider.to_uppercase(),
+                        &format!("In-stream error detected before first token on model '{}': {}. Failing over to next candidate.", cloud_model.model, err_msg),
+                    );
+                    return Err(format!("{} in-stream error on model '{}': {}", cloud_model.provider, cloud_model.model, err_msg));
                 }
-            };
+
+                let text = std::str::from_utf8(&chunk_bytes).unwrap_or("");
+                let trimmed = text.trim();
+                // If it's just a keepalive comment (e.g. ": OPENROUTER PROCESSING") without data, buffer and continue
+                if trimmed.starts_with(':') && !trimmed.contains("data:") {
+                    prefix_chunks.push(chunk_bytes);
+                    continue;
+                }
+
+                prefix_chunks.push(chunk_bytes);
+                break;
+            }
 
             update_provider_status(app, &cloud_model.provider, "200 OK").await;
             if let Some(health_state) = app.try_state::<ProviderHealthState>() {
@@ -511,13 +596,20 @@ async fn try_cloud_provider(
                 p_cooldowns.remove(&cloud_model.provider);
             }
 
-            let _ = &drop_guard;
-            process_stream_chunk_for_tokens(&first_chunk, &drop_guard);
-            let sanitized_first = sanitize_reprimand_chunk(&first_chunk, &app_clone);
+            for chunk in &prefix_chunks {
+                process_stream_chunk_for_tokens(chunk, &drop_guard);
+            }
 
-            let chained_stream = futures_util::stream::once(async move {
-                Ok::<axum::body::Bytes, reqwest::Error>(sanitized_first)
-            }).chain(byte_stream.map(move |chunk| {
+            let initial_streams = prefix_chunks.into_iter().map({
+                let app_c = app_clone.clone();
+                move |bytes| {
+                    let sanitized = sanitize_reprimand_chunk(&bytes, &app_c);
+                    Ok::<axum::body::Bytes, reqwest::Error>(sanitized)
+                }
+            });
+            let prefix_stream = futures_util::stream::iter(initial_streams);
+
+            let chained_stream = prefix_stream.chain(byte_stream.map(move |chunk| {
                 match chunk {
                     Ok(bytes) => {
                         let _ = &drop_guard;
@@ -588,6 +680,15 @@ async fn try_cloud_provider(
             if let Some(health_state) = app.try_state::<ProviderHealthState>() {
                 let mut gated = health_state.gated_models.write().await;
                 gated.insert(cloud_model.model.clone());
+                let clean_model = cloud_model.model.strip_prefix("models/").unwrap_or(&cloud_model.model);
+                gated.insert(clean_model.to_string());
+                gated.insert(format!("models/{}", clean_model));
+                if clean_model.contains("gemini-2.5") {
+                    for v in &["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"] {
+                        gated.insert(v.to_string());
+                        gated.insert(format!("models/{}", v));
+                    }
+                }
                 log_event(
                     app,
                     "WARN",
@@ -911,11 +1012,10 @@ async fn chat_completions(
                         }
                         continue;
                     }
-                    if e.contains("HTTP timeout") || e.contains("503") {
-                        if !cooldown_candidates.iter().any(|m| m.model == target_model.model) {
+                    if (e.contains("HTTP timeout") || e.contains("503"))
+                        && !cooldown_candidates.iter().any(|m| m.model == target_model.model) {
                             cooldown_candidates.push(target_model.clone());
                         }
-                    }
                 }
             }
         }
@@ -1084,6 +1184,32 @@ pub fn parse_google_models(json: &serde_json::Value) -> Vec<RankedModel> {
     ranked
 }
 
+pub fn extract_valid_google_models(json: &serde_json::Value) -> Vec<String> {
+    let mut valid_models = Vec::new();
+    if let Some(models) = json.get("models").and_then(|m| m.as_array()) {
+        for m in models {
+            let name = m.get("name").and_then(|n| n.as_str()).unwrap_or("");
+            let clean_name = name.strip_prefix("models/").unwrap_or(name);
+
+            // Strictly skip embedding models and non-chat junk
+            if clean_name.contains("embedding") || clean_name.contains("embed") {
+                continue;
+            }
+
+            // Must contain generateContent in supportedGenerationMethods
+            let supports_generate = m.get("supportedGenerationMethods")
+                .and_then(|sm| sm.as_array())
+                .map(|methods| methods.iter().any(|meth| meth.as_str() == Some("generateContent")))
+                .unwrap_or(false);
+
+            if supports_generate {
+                valid_models.push(clean_name.to_string());
+            }
+        }
+    }
+    valid_models
+}
+
 pub fn evaluate_probe_response(status_code: u16, err_text: &str) -> ProbeStepOutcome {
     if (200..300).contains(&status_code) {
         ProbeStepOutcome::Success
@@ -1119,6 +1245,10 @@ pub async fn probe_google_service_health(
             break;
         }
         let clean_model = candidate.strip_prefix("models/").unwrap_or(candidate);
+        // Strictly prevent probing embedding models
+        if clean_model.contains("embedding") || clean_model.contains("embed") {
+            continue;
+        }
         tried += 1;
 
         let probe_url = format!(
@@ -1199,6 +1329,14 @@ pub async fn probe_google_service_health(
                             if let Some(health_state) = app.try_state::<ProviderHealthState>() {
                                 let mut gated = health_state.gated_models.write().await;
                                 gated.insert(clean_model.to_string());
+                                gated.insert(format!("models/{}", clean_model));
+                                gated.insert(candidate.to_string());
+                                if clean_model.contains("gemini-2.5") {
+                                    for v in &["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"] {
+                                        gated.insert(v.to_string());
+                                        gated.insert(format!("models/{}", v));
+                                    }
+                                }
                                 log_event(
                                     app,
                                     "WARN",
@@ -1305,6 +1443,80 @@ pub fn parse_openrouter_models(json: &serde_json::Value, gated_set: &HashSet<Str
     ranked
 }
 
+pub fn extract_paid_fallback_candidates(
+    json: &serde_json::Value,
+    gated_set: &HashSet<String>,
+    existing_models: &HashSet<String>,
+) -> Vec<RankedModel> {
+    let mut candidates = Vec::new();
+    if let Some(models) = json.get("data").and_then(|m| m.as_array()) {
+        for m in models {
+            if let Some(id) = m.get("id").and_then(|i| i.as_str()) {
+                if is_openrouter_free_alias(id) || gated_set.contains(id) || existing_models.contains(id) {
+                    continue;
+                }
+
+                // Check pricing
+                let is_explicit_free = id.ends_with(":free");
+                let pricing = m.get("pricing");
+                let prompt_str = pricing.and_then(|p| p.get("prompt")).and_then(|p| p.as_str()).unwrap_or("1");
+                let prompt_cost: f64 = prompt_str.parse().unwrap_or(1.0);
+
+                // If prompt is free, skip (already handled by free chain)
+                if is_explicit_free || prompt_cost == 0.0 {
+                    continue;
+                }
+
+                // Strict price ceiling: prompt cost <= $1.00 per 1M tokens ($0.000001 per token)
+                let prompt_per_million = prompt_cost * 1_000_000.0;
+                if prompt_per_million > 1.0 {
+                    continue;
+                }
+
+                // Context window >= 128k
+                let ctx = m.get("context_length").and_then(|c| c.as_u64()).unwrap_or(0);
+                if ctx < MIN_CONTEXT_WINDOW {
+                    continue;
+                }
+
+                // Must support tool calling
+                let mut supports_tools = false;
+                if let Some(params) = m.get("supported_parameters").and_then(|p| p.as_array()) {
+                    for p in params {
+                        if let Some(ps) = p.as_str() {
+                            if ps == "tools" || ps == "tool_choice" {
+                                supports_tools = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if !supports_tools {
+                    continue;
+                }
+
+                let score = crate::model_db::MODEL_REGISTRY.get_score(id);
+                if score > 0.0 {
+                    candidates.push(RankedModel {
+                        model: CloudModel {
+                            model: id.to_string(),
+                            provider: "openrouter".to_string(),
+                            iq: score,
+                            context_length: Some(ctx),
+                        },
+                        priority: score,
+                    });
+                }
+            }
+        }
+    }
+
+    // Rank candidates by intelligence score descending
+    candidates.sort_by(|a, b| b.priority.total_cmp(&a.priority));
+    candidates.truncate(5);
+    candidates
+}
+
 pub fn parse_ollama_models(json: &serde_json::Value) -> Vec<RankedModel> {
     let mut ranked = Vec::new();
     if let Some(models) = json.get("models").and_then(|m| m.as_array()) {
@@ -1398,25 +1610,44 @@ pub async fn fetch_live_routing_chain(app: &tauri::AppHandle) -> Vec<CloudModel>
                             google_models = parse_google_models(json);
                         }
 
-                        // Collect candidate names to probe
+                        // Collect candidate names to probe (strictly generateContent verified)
                         let mut candidate_names: Vec<String> = google_models.iter().map(|m| m.model.model.clone()).collect();
-                        for fallback in &["gemini-flash-latest", "gemini-3.5-flash", "gemma-4-26b-a4b-it"] {
-                            if !candidate_names.contains(&fallback.to_string()) {
-                                candidate_names.push(fallback.to_string());
+                        if candidate_names.is_empty() {
+                            if let Some(ref json) = models_json {
+                                candidate_names = extract_valid_google_models(json);
                             }
+                        }
+                        if candidate_names.is_empty() {
+                            candidate_names = vec![
+                                "gemini-3.8-flash".to_string(),
+                                "gemini-3.1-pro-preview".to_string(),
+                                "gemini-3.5-flash".to_string(),
+                            ];
                         }
 
                         let (gen_status, is_403) = probe_google_service_health(&client, &key, &candidate_names, app).await;
                         update_provider_status(app, "google", &gen_status).await;
 
                         if !is_403 {
-                            ranked_chain.extend(google_models);
+                            let updated_gated = if let Some(health_state) = app.try_state::<ProviderHealthState>() {
+                                health_state.gated_models.read().await.clone()
+                            } else {
+                                gated_set.clone()
+                            };
+                            let active_google_models: Vec<RankedModel> = google_models
+                                .into_iter()
+                                .filter(|m| {
+                                    let clean = m.model.model.strip_prefix("models/").unwrap_or(&m.model.model);
+                                    !updated_gated.contains(&m.model.model) && !updated_gated.contains(clean)
+                                })
+                                .collect();
+                            ranked_chain.extend(active_google_models);
                         } else {
                             log_event(
                                 app,
                                 "WARN",
                                 "ROUTER",
-                                &format!("Google AI Studio API key denied permission (HTTP 403). Models not loaded."),
+                                "Google AI Studio API key denied permission (HTTP 403). Models not loaded.",
                             );
                         }
                     } else {
@@ -1479,6 +1710,7 @@ pub async fn fetch_live_routing_chain(app: &tauri::AppHandle) -> Vec<CloudModel>
             };
 
             if auth_ok {
+                let mut or_models_json: Option<serde_json::Value> = None;
                 match client.get("https://openrouter.ai/api/v1/models")
                     .header("Authorization", format!("Bearer {}", key))
                     .header("HTTP-Referer", "https://github.com/chorned/frugaLLM")
@@ -1491,6 +1723,7 @@ pub async fn fetch_live_routing_chain(app: &tauri::AppHandle) -> Vec<CloudModel>
                             if let Ok(json) = resp.json::<serde_json::Value>().await {
                                 let or_models = parse_openrouter_models(&json, &gated_set);
                                 ranked_chain.extend(or_models);
+                                or_models_json = Some(json);
                             }
                         } else {
                             let status_code_str = if status.as_u16() == 401 || status.as_u16() == 403 {
@@ -1536,24 +1769,33 @@ pub async fn fetch_live_routing_chain(app: &tauri::AppHandle) -> Vec<CloudModel>
                     }
 
                     if openrouter_has_credits {
-                        let paid_models = [
-                            ("google/gemini-2.5-flash", 1_048_576),
-                            ("anthropic/claude-3.5-haiku", 200_000),
-                            ("openai/gpt-4o-mini", 128_000),
-                        ];
-                        for (paid_id, paid_ctx) in paid_models {
-                            if !ranked_chain.iter().any(|rm| rm.model.model == paid_id) {
-                                let score = crate::model_db::MODEL_REGISTRY.get_score(paid_id);
-                                ranked_chain.push(RankedModel {
-                                    model: CloudModel {
-                                        model: paid_id.to_string(),
-                                        provider: "openrouter".to_string(),
-                                        iq: score,
-                                        context_length: Some(paid_ctx),
-                                    },
-                                    priority: score,
-                                });
+                        let existing: HashSet<String> = ranked_chain.iter().map(|rm| rm.model.model.clone()).collect();
+                        let mut paid_candidates = Vec::new();
+                        if let Some(ref json) = or_models_json {
+                            paid_candidates = extract_paid_fallback_candidates(json, &gated_set, &existing);
+                        }
+                        if paid_candidates.is_empty() {
+                            let fallback_paid = [
+                                ("google/gemini-2.0-flash", 1_048_576),
+                                ("anthropic/claude-3.5-haiku", 200_000),
+                                ("openai/gpt-4o-mini", 128_000),
+                            ];
+                            for (paid_id, paid_ctx) in fallback_paid {
+                                if !ranked_chain.iter().any(|rm| rm.model.model == paid_id) {
+                                    let score = crate::model_db::MODEL_REGISTRY.get_score(paid_id);
+                                    ranked_chain.push(RankedModel {
+                                        model: CloudModel {
+                                            model: paid_id.to_string(),
+                                            provider: "openrouter".to_string(),
+                                            iq: score,
+                                            context_length: Some(paid_ctx),
+                                        },
+                                        priority: score,
+                                    });
+                                }
                             }
+                        } else {
+                            ranked_chain.extend(paid_candidates);
                         }
                     }
                 }
@@ -1623,16 +1865,16 @@ pub async fn check_and_retry_providers(app: &tauri::AppHandle, client: &reqwest:
                     if status.is_success() {
                         // If provider was in an error state, probe generateContent before clearing error
                         let gen_ok = if is_currently_error {
-                            let candidate_names = if let Some(roster) = app.try_state::<DynamicRosterState>() {
-                                let guard = roster.fallback_chain.read().await;
-                                let list: Vec<String> = guard.iter().filter(|m| m.provider == "google").map(|m| m.model.clone()).collect();
-                                if list.is_empty() {
-                                    vec!["gemini-flash-latest".to_string(), "gemini-3.5-flash".to_string(), "gemma-4-26b-a4b-it".to_string()]
+                            let models_json = resp.json::<serde_json::Value>().await.ok();
+                            let candidate_names = if let Some(ref json) = models_json {
+                                let valid = extract_valid_google_models(json);
+                                if !valid.is_empty() {
+                                    valid
                                 } else {
-                                    list
+                                    vec!["gemini-3.8-flash".to_string(), "gemini-3.1-pro-preview".to_string(), "gemini-3.5-flash".to_string()]
                                 }
                             } else {
-                                vec!["gemini-flash-latest".to_string(), "gemini-3.5-flash".to_string(), "gemma-4-26b-a4b-it".to_string()]
+                                vec!["gemini-3.8-flash".to_string(), "gemini-3.1-pro-preview".to_string(), "gemini-3.5-flash".to_string()]
                             };
 
                             let (gen_status, is_403) = probe_google_service_health(client, &key, &candidate_names, app).await;

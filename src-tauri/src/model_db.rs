@@ -19,6 +19,12 @@ pub struct ModelIntelligenceRegistry {
     scores: Arc<RwLock<HashMap<String, ModelScore>>>,
 }
 
+impl Default for ModelIntelligenceRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ModelIntelligenceRegistry {
     #[allow(dead_code)]
     pub fn new() -> Self {
@@ -29,17 +35,22 @@ impl ModelIntelligenceRegistry {
         // Seed default foundational intelligence benchmarks to guarantee baseline scores
         let seed_models = [
             // Modern Google Frontier & Flash Models
-            ("google/gemini-3.8-flash", 70.0),
-            ("google/gemini-3.7-flash", 68.0),
-            ("google/gemini-3.5-flash", 72.0),
-            ("google/gemini-3.5-flash-lite", 65.0),
-            ("google/gemini-3.1-flash-lite", 62.0),
-            ("google/gemini-3.1-flash-lite-preview", 61.0),
-            ("google/gemini-2.5-pro", 88.0),
-            ("google/gemini-2.5-flash", 78.0),
-            ("google/gemini-2.0-pro", 84.0),
-            ("google/gemini-2.0-flash", 74.0),
-            ("google/gemini-2.0-flash-lite", 66.0),
+            ("google/gemini-3.1-pro-preview", 88.0),
+            ("google/gemini-pro", 88.0),
+            ("google/gemini-3.8-flash", 78.0),
+            ("google/gemini-3.7-flash", 77.0),
+            ("google/gemini-3.6-flash", 76.0),
+            ("google/gemini-3.5-flash", 75.0),
+            ("google/gemini-flash", 76.0),
+            ("google/gemini-3.5-flash-lite", 67.0),
+            ("google/gemini-flash-lite", 66.0),
+            ("google/gemini-3.1-flash-lite", 65.0),
+            ("google/gemini-3.1-flash-lite-preview", 64.0),
+            ("google/gemini-3-flash-preview", 73.0),
+            ("google/gemini-omni-flash-preview", 73.0),
+            ("google/gemini-2.0-pro", 82.0),
+            ("google/gemini-2.0-flash", 70.0),
+            ("google/gemini-2.0-flash-lite", 63.0),
             ("google/gemini-1.5-pro", 76.0),
             ("google/gemini-1.5-flash", 65.0),
             ("google/gemini-1.5-flash-8b", 55.0),
@@ -105,7 +116,10 @@ impl ModelIntelligenceRegistry {
         ];
 
         for (model, score) in seed_models {
-            db.entry(model.to_string()).or_insert(ModelScore { score });
+            let entry = db.entry(model.to_string()).or_insert(ModelScore { score });
+            if score > entry.score {
+                entry.score = score;
+            }
         }
 
         Self {
@@ -176,8 +190,17 @@ impl ModelIntelligenceRegistry {
         if id.starts_with("deepseek-r1:") {
             return "deepseek/deepseek-r1".to_string();
         }
-        if id.starts_with("qwen2.5:") {
-            return "qwen/qwen-2.5-7b-instruct".to_string();
+        if id.starts_with("qwen2.5:") || id.starts_with("qwen-2.5:") {
+            let tag = id.split(':').nth(1).unwrap_or("");
+            return if tag.starts_with("72b") {
+                "qwen/qwen-2.5-72b-instruct".to_string()
+            } else if tag.starts_with("32b") {
+                "qwen/qwen-2.5-coder-32b-instruct".to_string()
+            } else if tag.starts_with("14b") {
+                "qwen/qwen-2.5-14b-instruct".to_string()
+            } else {
+                "qwen/qwen-2.5-7b-instruct".to_string()
+            };
         }
 
         // Strip OpenRouter tier suffixes like :free, :nitro, :extended
@@ -254,24 +277,35 @@ impl ModelIntelligenceRegistry {
         // 6. Fuzzy match: If the query is "minimax/minimax-m3", it should match "minimax/minimax-m3-20260531"
         for (k, v) in guard.iter() {
             let k_norm = Self::normalize_model_id(k);
-            if k_norm.starts_with(&normalized) {
-                if k_norm.len() == normalized.len()
-                    || k_norm.as_bytes().get(normalized.len()) == Some(&b'-')
+            if k_norm.starts_with(&normalized)
+                && (k_norm.len() == normalized.len()
+                    || k_norm.as_bytes().get(normalized.len()) == Some(&b'-'))
                 {
                     return v.score;
                 }
-            }
         }
 
         // 7. Reverse fuzzy match: If query has date suffix "google/gemma-4-31b-it-20260402", matches "google/gemma-4-31b-it"
         for (k, v) in guard.iter() {
             let k_norm = Self::normalize_model_id(k);
-            if normalized.starts_with(&k_norm) {
-                if normalized.len() == k_norm.len()
-                    || normalized.as_bytes().get(k_norm.len()) == Some(&b'-')
+            if normalized.starts_with(&k_norm)
+                && (normalized.len() == k_norm.len()
+                    || normalized.as_bytes().get(k_norm.len()) == Some(&b'-'))
                 {
                     return v.score;
                 }
+        }
+
+        // 8. Family heuristic fallbacks: ensure newly released frontier/flash models never get left on the floor
+        if normalized.starts_with("google/gemini-") {
+            if normalized.contains("-pro") || normalized.ends_with("/gemini-pro") {
+                return 85.0;
+            }
+            if normalized.contains("-flash-lite") || normalized.ends_with("/gemini-flash-lite") {
+                return 64.0;
+            }
+            if normalized.contains("-flash") || normalized.ends_with("/gemini-flash") {
+                return 72.0;
             }
         }
 
@@ -498,13 +532,31 @@ mod tests {
 
     #[test]
     fn test_expanded_model_scoring_and_unprefixed_resolution() {
-        // Test that global registry resolves scores for unprefixed and tagged model names
-        assert_eq!(MODEL_REGISTRY.get_score("models/gemini-2.5-flash"), 78.0);
-        assert_eq!(MODEL_REGISTRY.get_score("gemini-2.5-flash"), 78.0);
+        // Test that global registry resolves scores for active Google models and aliases
+        assert_eq!(MODEL_REGISTRY.get_score("models/gemini-3.1-pro-preview"), 88.0);
+        assert_eq!(MODEL_REGISTRY.get_score("models/gemini-3.8-flash"), 78.0);
+        assert_eq!(MODEL_REGISTRY.get_score("gemini-3.8-flash"), 78.0);
+        assert_eq!(MODEL_REGISTRY.get_score("gemini-3.6-flash"), 76.0);
+        assert_eq!(MODEL_REGISTRY.get_score("models/gemini-pro-latest"), 88.0);
+        assert_eq!(MODEL_REGISTRY.get_score("models/gemini-flash-latest"), 76.0);
         assert_eq!(MODEL_REGISTRY.get_score("gemini-1.5-flash-latest"), 65.0);
-        assert_eq!(MODEL_REGISTRY.get_score("google/gemini-2.0-flash"), 74.0);
+        assert_eq!(MODEL_REGISTRY.get_score("google/gemini-2.0-flash"), 70.0);
         assert_eq!(MODEL_REGISTRY.get_score("llama3.1:8b"), 52.0);
         assert_eq!(MODEL_REGISTRY.get_score("gemma2:9b"), 52.0);
         assert_eq!(MODEL_REGISTRY.get_score("deepseek-r1:8b"), 89.0);
+    }
+
+    #[test]
+    fn test_family_heuristics_and_qwen_scaling() {
+        // Unseeded future models must resolve via family heuristics, never returning 0.0
+        assert_eq!(MODEL_REGISTRY.get_score("models/gemini-4.0-flash"), 72.0);
+        assert_eq!(MODEL_REGISTRY.get_score("models/gemini-4.0-pro"), 85.0);
+        assert_eq!(MODEL_REGISTRY.get_score("models/gemini-4.0-flash-lite"), 64.0);
+
+        // Qwen2.5 parameter size resolution
+        assert_eq!(MODEL_REGISTRY.get_score("qwen2.5:72b"), 76.0);
+        assert_eq!(MODEL_REGISTRY.get_score("qwen2.5:32b"), 74.0);
+        assert_eq!(MODEL_REGISTRY.get_score("qwen2.5:14b"), 62.0);
+        assert_eq!(MODEL_REGISTRY.get_score("qwen2.5:7b"), 50.0);
     }
 }

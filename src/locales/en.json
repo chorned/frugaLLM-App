@@ -41,6 +41,10 @@
       }
     },
     "nodeConfigPanel": {
+      "saveButton": {
+        "saveChanges": "SAVE CHANGES",
+        "saving": "SAVING"
+      },
       "badges": {
         "systemManaged": "External Installation (System Managed)"
       },
@@ -380,7 +384,9 @@
     "actionOrChange": "Or choose a different port in Hub settings.",
     "badge": "PORT CONFLICT",
     "configurePort": "Configure Port",
+    "retry": "Retry Port",
     "dismiss": "Dismiss",
+    "resolveAction": "Port {{port}} Conflict",
     "helperText": "Port {{port}} is in use. Close the conflicting service and restart, or enter a new port."
   },
   "exitConfirmation": {

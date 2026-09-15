@@ -421,7 +421,7 @@ test.describe('Node Configuration Panel', () => {
     expect(saveCall).toBeDefined();
   });
 
-  test('should display port conflict banner, error badge on FrugaLLM node, and allow editing port', async ({ page }) => {
+  test('should display port conflict status on FrugaLLM node without banner, and allow editing port', async ({ page }) => {
     await page.addInitScript(() => {
       const origInvoke = (window as any).__TAURI_INTERNALS__?.invoke;
       if (origInvoke) {
@@ -451,19 +451,20 @@ test.describe('Node Configuration Panel', () => {
     const canvas = new MainCanvas(page);
     await canvas.goto();
 
-    // Verify Port Conflict Banner is visible
+    // Verify Port Conflict Banner is skipped / not attached
     const banner = page.getByTestId('port-conflict-banner');
-    await expect(banner).toBeVisible();
-    await expect(banner).toContainText('PORT CONFLICT DETECTED');
-    await expect(banner).toContainText('Close the service currently using port [5050] and restart the app.');
+    await expect(banner).not.toBeAttached();
 
-    // Verify FrugaLLM node badge
+    // Verify FrugaLLM center node badge and interactive conflict warning
     const badge = page.getByTestId('frugallm-port-conflict-badge');
     await expect(badge).toBeVisible();
     await expect(badge).toHaveText('PORT CONFLICT');
 
-    // Click "Configure Port" in the banner
-    await page.getByTestId('port-conflict-configure').click();
+    const warningAction = page.getByTestId('frugallm-node-conflict-warning');
+    await expect(warningAction).toBeVisible();
+
+    // Click interactive conflict warning on the center node to open Hub settings
+    await warningAction.click();
 
     // Verify the Hub settings panel opens with editable port field
     const portInput = page.getByTestId('input-frugallm-port');

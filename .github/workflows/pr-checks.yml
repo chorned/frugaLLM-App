@@ -48,22 +48,29 @@ jobs:
       - name: Install Frontend Dependencies
         run: npm install
 
-      # 1. FRONTEND TESTS
+      # 1. TYPECHECK & LINT CHECKS
+      - name: TypeScript Typecheck
+        run: npx tsc --noEmit
+
+      - name: Rust Clippy Linters
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+
+      # 2. FRONTEND TESTS
       - name: Run React/Vite Tests
         run: npx vitest run
 
-      # 2. BACKEND TESTS
+      # 3. BACKEND TESTS
       - name: Run Rust Tests
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           FRUGAL_OFFLINE_BUILD: "1"
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
-      # 3. E2E TESTS
+      # 4. E2E TESTS
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
 
-      # 4. RUN PLAYWRIGHT
+      # 5. RUN PLAYWRIGHT
       - name: Run Playwright E2E
         run: npx playwright test
 

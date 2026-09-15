@@ -409,6 +409,169 @@ use std::collections::{HashMap, HashSet};
     }
 
     #[test]
+    fn test_is_window_rect_visible_on_monitors_single_monitor() {
+        let monitors = vec![MonitorBounds {
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1080,
+        }];
+
+        // Centered window: visible
+        assert!(is_window_rect_visible_on_monitors(100, 100, 1024, 768, &monitors));
+
+        // Window partially visible (100px overlap): visible
+        assert!(is_window_rect_visible_on_monitors(1820, 500, 1024, 768, &monitors));
+
+        // Window completely off-screen to the right: NOT visible
+        assert!(!is_window_rect_visible_on_monitors(2000, 100, 1024, 768, &monitors));
+
+        // Window completely off-screen above: NOT visible
+        assert!(!is_window_rect_visible_on_monitors(100, -800, 1024, 768, &monitors));
+
+        // Window with < 100px overlap: NOT visible (insufficient visible area)
+        assert!(!is_window_rect_visible_on_monitors(1880, 500, 1024, 768, &monitors));
+    }
+
+    #[test]
+    fn test_is_window_rect_visible_on_monitors_disconnected_monitor_fallback() {
+        // Laptop screen was 1920x1080 at (0,0), secondary monitor was 2560x1440 at (1920, 0).
+        // Secondary monitor is now disconnected! Only primary remains:
+        let active_monitors = vec![MonitorBounds {
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1080,
+        }];
+
+        // Saved position from previous session was on the secondary monitor (e.g. x: 2100, y: 100)
+        let saved_x = 2100;
+        let saved_y = 100;
+        let saved_w = 1024;
+        let saved_h = 768;
+
+        assert!(!is_window_rect_visible_on_monitors(saved_x, saved_y, saved_w, saved_h, &active_monitors));
+    }
+
+    #[test]
+    fn test_is_window_rect_visible_on_monitors_multi_display_spanning() {
+        let dual_monitors = vec![
+            MonitorBounds { x: 0, y: 0, width: 1920, height: 1080 },
+            MonitorBounds { x: 1920, y: 0, width: 2560, height: 1440 },
+        ];
+
+        // Placed on second monitor: visible
+        assert!(is_window_rect_visible_on_monitors(2000, 100, 1024, 768, &dual_monitors));
+
+        // Placed spanning seam between monitors: visible
+        assert!(is_window_rect_visible_on_monitors(1500, 100, 1024, 768, &dual_monitors));
+
+        // Empty monitors list (headless or query failed): defaults to true to prevent spurious moves
+        assert!(is_window_rect_visible_on_monitors(5000, 5000, 1024, 768, &[]));
+    }
+
+    #[test]
+    fn test_frugal_config_close_to_tray_default() {
+        let config = FrugalConfig::default();
+        assert!(config.close_to_tray);
+
+        // Deserializing empty JSON object should default close_to_tray to true
+        let parsed: FrugalConfig = serde_json::from_str("{}").unwrap();
+        assert!(parsed.close_to_tray);
+
+        // Explicitly setting close_to_tray to false should be preserved
+        let custom: FrugalConfig = serde_json::from_str(r#"{"close_to_tray": false}"#).unwrap();
+        assert!(!custom.close_to_tray);
+    }
+
+    #[test]
+    fn test_is_time_jump_detected_scenarios() {
+        use std::time::Duration;
+        let expected = Duration::from_secs(1);
+        let multiplier = 2.5;
+
+        // Normal execution (1.0s elapsed) -> false
+        assert!(!crate::telemetry::is_time_jump_detected(Duration::from_millis(1000), expected, multiplier));
+
+        // Minor scheduling jitter (1.8s elapsed) -> false
+        assert!(!crate::telemetry::is_time_jump_detected(Duration::from_millis(1800), expected, multiplier));
+
+        // Exactly at boundary (2.5s elapsed) -> false
+        assert!(!crate::telemetry::is_time_jump_detected(Duration::from_millis(2500), expected, multiplier));
+
+        // OS sleep / suspend resume (5.0s elapsed) -> true
+        assert!(crate::telemetry::is_time_jump_detected(Duration::from_millis(5000), expected, multiplier));
+
+        // Long sleep (60.0s elapsed) -> true
+        assert!(crate::telemetry::is_time_jump_detected(Duration::from_secs(60), expected, multiplier));
+    }
+
+    #[test]
+    fn test_log_rotation_rollover_and_file_capping() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let log_path = temp_dir.path().join("frugallm.log");
+
+        // Write an initial log file of size 100 bytes
+        std::fs::write(&log_path, "A".repeat(100)).unwrap();
+        assert!(log_path.exists());
+
+        // Rotate with max_size = 150 bytes, incoming = 60 bytes -> total 160 > 150 -> trigger rotation!
+        crate::commands::system::rotate_logs_if_needed(&log_path, 60, 150, 3).unwrap();
+
+        let rotated_1 = temp_dir.path().join("frugallm.1.log");
+        assert!(rotated_1.exists(), "frugallm.1.log should exist after first rotation");
+
+        // Now simulate second rotation: write new content into frugallm.log
+        std::fs::write(&log_path, "B".repeat(100)).unwrap();
+        crate::commands::system::rotate_logs_if_needed(&log_path, 60, 150, 3).unwrap();
+
+        let rotated_2 = temp_dir.path().join("frugallm.2.log");
+        assert!(rotated_2.exists(), "frugallm.2.log should exist after second rotation");
+        assert!(rotated_1.exists(), "frugallm.1.log should contain the newer rotated file");
+
+        // Now simulate third rotation exceeding max_files = 3:
+        std::fs::write(&log_path, "C".repeat(100)).unwrap();
+        crate::commands::system::rotate_logs_if_needed(&log_path, 60, 150, 3).unwrap();
+
+        let rotated_3 = temp_dir.path().join("frugallm.3.log");
+        let rotated_4 = temp_dir.path().join("frugallm.4.log");
+        assert!(rotated_3.exists(), "frugallm.3.log should exist");
+        assert!(!rotated_4.exists(), "frugallm.4.log should NOT exist because max_files is 3");
+    }
+
+    #[test]
+    fn test_read_last_n_lines_bounded() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let log_path = temp_dir.path().join("test_lines.log");
+
+        let mut content = String::new();
+        for i in 1..=50 {
+            content.push_str(&format!("Log line number {}\n", i));
+        }
+        std::fs::write(&log_path, content).unwrap();
+
+        let last_5 = crate::commands::system::read_last_n_lines(&log_path, 5).unwrap();
+        let lines: Vec<&str> = last_5.lines().collect();
+        assert_eq!(lines.len(), 5);
+        assert_eq!(lines[0], "Log line number 46");
+        assert_eq!(lines[4], "Log line number 50");
+    }
+
+    #[test]
+    fn test_path_joining_unicode_and_spaces_safety() {
+        let base_path = std::path::PathBuf::from("/Users/José Müller/Applications with spaces/FrugaLLM");
+        let sub_path = base_path.join("models").join("gemma4 12b");
+
+        let path_list = vec![base_path.clone(), sub_path.clone()];
+        let joined = std::env::join_paths(path_list).unwrap();
+
+        let split: Vec<std::path::PathBuf> = std::env::split_paths(&joined).collect();
+        assert_eq!(split.len(), 2);
+        assert_eq!(split[0], base_path);
+        assert_eq!(split[1], sub_path);
+    }
+
+    #[test]
     fn test_child_process_manager_lifecycle() {
         let pm = ChildProcessManager::new();
         assert!(!pm.has_active_services());
@@ -1863,3 +2026,198 @@ HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bf
         assert_eq!(json_val["is_installed"], true);
         assert_eq!(json_val["is_managed"], false);
     }
+
+    #[test]
+    fn test_detect_stream_error_before_token() {
+        use crate::proxy::server::detect_stream_error_before_token;
+
+        // 1. Explicit SSE error event
+        let sse_error = b"event: error\ndata: {\"error\":{\"code\":404,\"message\":\"models/gemini-2.5-pro is no longer available to new users\",\"status\":\"NOT_FOUND\"}}\n\n";
+        let detected = detect_stream_error_before_token(sse_error);
+        assert!(detected.is_some());
+        assert!(detected.unwrap().contains("event: error"));
+
+        // 2. Direct JSON error object
+        let raw_json_error = b"{\"error\": {\"code\": 429, \"message\": \"Resource has been exhausted\"}}";
+        let detected2 = detect_stream_error_before_token(raw_json_error);
+        assert!(detected2.is_some());
+        assert!(detected2.unwrap().contains("Resource has been exhausted"));
+
+        // 3. SSE data-wrapped error
+        let sse_data_error = b": ping\ndata: {\"error\": {\"message\": \"Gate Free Endpoints by Agentic Harness\"}}\n\n";
+        let detected3 = detect_stream_error_before_token(sse_data_error);
+        assert!(detected3.is_some());
+        assert!(detected3.unwrap().contains("Gate Free Endpoints by Agentic Harness"));
+
+        // 4. Valid normal token chunk (should NOT be detected as error)
+        let token_chunk = b"data: {\"choices\": [{\"delta\": {\"content\": \"Hello world\"}}]}\n\n";
+        assert!(detect_stream_error_before_token(token_chunk).is_none());
+
+        // 5. OpenRouter processing keepalive comment
+        let keepalive = b": OPENROUTER PROCESSING\n\n";
+        assert!(detect_stream_error_before_token(keepalive).is_none());
+
+        // 6. Empty / whitespace chunk
+        assert!(detect_stream_error_before_token(b"").is_none());
+        assert!(detect_stream_error_before_token(b"   \n\t  ").is_none());
+
+        // 7. Hostile binary payload
+        let hostile_bytes = vec![0xFF, 0xFE, 0x00, 0x01, 0xDE, 0xAD, 0xBE, 0xEF];
+        assert!(detect_stream_error_before_token(&hostile_bytes).is_none());
+    }
+
+    #[test]
+    fn test_parse_google_models_and_gating() {
+        use crate::proxy::server::parse_google_models;
+
+        let google_api_payload = serde_json::json!({
+            "models": [
+                {
+                    "name": "models/gemini-3.1-pro-preview",
+                    "version": "001",
+                    "displayName": "Gemini 3.1 Pro Preview",
+                    "description": "Preview of Gemini 3.1 Pro",
+                    "inputTokenLimit": 1048576,
+                    "outputTokenLimit": 8192,
+                    "supportedGenerationMethods": ["generateContent", "countTokens"]
+                },
+                {
+                    "name": "models/gemini-3.8-flash",
+                    "version": "001",
+                    "displayName": "Gemini 3.8 Flash",
+                    "description": "Fast and intelligent multimodal model",
+                    "inputTokenLimit": 1048576,
+                    "outputTokenLimit": 8192,
+                    "supportedGenerationMethods": ["generateContent", "countTokens"]
+                },
+                {
+                    "name": "models/text-embedding-004",
+                    "version": "001",
+                    "displayName": "Text Embedding 004",
+                    "description": "Embedding model",
+                    "inputTokenLimit": 2048,
+                    "outputTokenLimit": 1,
+                    "supportedGenerationMethods": ["embedContent"]
+                },
+                {
+                    "name": "models/gemini-audio-preview",
+                    "version": "001",
+                    "displayName": "Audio Preview",
+                    "inputTokenLimit": 1048576,
+                    "supportedGenerationMethods": ["generateContent"]
+                }
+            ]
+        });
+
+        let parsed = parse_google_models(&google_api_payload);
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].model.model, "gemini-3.1-pro-preview");
+        assert_eq!(parsed[0].model.provider, "google");
+        assert_eq!(parsed[0].model.iq, 88.0);
+        assert_eq!(parsed[0].priority, 88.0);
+
+        assert_eq!(parsed[1].model.model, "gemini-3.8-flash");
+        assert_eq!(parsed[1].model.provider, "google");
+        assert_eq!(parsed[1].model.iq, 78.0);
+        assert_eq!(parsed[1].priority, 78.0);
+    }
+
+    #[test]
+    fn test_extract_valid_google_models_filters_embeddings() {
+        let payload = serde_json::json!({
+            "models": [
+                {
+                    "name": "models/text-embedding-004",
+                    "supportedGenerationMethods": ["embedContent"]
+                },
+                {
+                    "name": "models/embedding-001",
+                    "supportedGenerationMethods": ["embedContent"]
+                },
+                {
+                    "name": "models/gemini-2.5-flash",
+                    "supportedGenerationMethods": ["generateContent", "countTokens"]
+                },
+                {
+                    "name": "models/aqa",
+                    "supportedGenerationMethods": ["generateAnswer"]
+                }
+            ]
+        });
+
+        let valid = extract_valid_google_models(&payload);
+        assert_eq!(valid, vec!["gemini-2.5-flash".to_string()]);
+    }
+
+    #[test]
+    fn test_extract_paid_fallback_candidates_price_ceiling() {
+        let payload = serde_json::json!({
+            "data": [
+                {
+                    "id": "anthropic/claude-3.7-sonnet",
+                    "pricing": {
+                        "prompt": "0.000003", // $3.00 per 1M tokens - exceeds ceiling!
+                        "completion": "0.000015"
+                    },
+                    "context_length": 200000,
+                    "supported_parameters": ["tools"]
+                },
+                {
+                    "id": "openai/o1",
+                    "pricing": {
+                        "prompt": "0.000015", // $15.00 per 1M tokens - exceeds ceiling!
+                        "completion": "0.000060"
+                    },
+                    "context_length": 200000,
+                    "supported_parameters": ["tools"]
+                },
+                {
+                    "id": "google/gemini-2.0-flash",
+                    "pricing": {
+                        "prompt": "0.0000001", // $0.10 per 1M tokens - well under $1.00
+                        "completion": "0.0000004"
+                    },
+                    "context_length": 1048576,
+                    "supported_parameters": ["tools"]
+                },
+                {
+                    "id": "openai/gpt-4o-mini",
+                    "pricing": {
+                        "prompt": "0.00000015", // $0.15 per 1M tokens - well under $1.00
+                        "completion": "0.0000006"
+                    },
+                    "context_length": 128000,
+                    "supported_parameters": ["tools", "tool_choice"]
+                },
+                {
+                    "id": "google/gemini-2.0-flash:free",
+                    "pricing": { "prompt": "0", "completion": "0" },
+                    "context_length": 1048576,
+                    "supported_parameters": ["tools"]
+                },
+                {
+                    "id": "cheap/small-ctx",
+                    "pricing": { "prompt": "0.0000001", "completion": "0.0000001" },
+                    "context_length": 32000, // less than 128k
+                    "supported_parameters": ["tools"]
+                }
+            ]
+        });
+
+        let gated_set = HashSet::new();
+        let existing_models = HashSet::new();
+
+        let candidates = extract_paid_fallback_candidates(&payload, &gated_set, &existing_models);
+        
+        let candidate_ids: Vec<String> = candidates.iter().map(|c| c.model.model.clone()).collect();
+        // claude-3.7-sonnet and o1 must NOT be in candidates due to price ceiling
+        assert!(!candidate_ids.contains(&"anthropic/claude-3.7-sonnet".to_string()));
+        assert!(!candidate_ids.contains(&"openai/o1".to_string()));
+        assert!(!candidate_ids.contains(&"google/gemini-2.0-flash:free".to_string()));
+        assert!(!candidate_ids.contains(&"cheap/small-ctx".to_string()));
+
+        // Under $1.00/1M models must be included
+        assert!(candidate_ids.contains(&"google/gemini-2.0-flash".to_string()));
+        assert!(candidate_ids.contains(&"openai/gpt-4o-mini".to_string()));
+    }
+

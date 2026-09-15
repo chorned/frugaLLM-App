@@ -273,23 +273,20 @@ describe('App Component Integration', () => {
 
     render(<App />);
 
-    // Assert: Banner appears with port conflict details
+    // Assert: Banner is skipped, status is on center node and footer
     await waitFor(
       () => {
-        expect(screen.getByTestId('port-conflict-banner')).toBeInTheDocument();
-        expect(screen.getByText('PORT CONFLICT DETECTED')).toBeInTheDocument();
-        expect(
-          screen.getByText(/Close the service currently using port \[5050\] and restart the app\./i)
-        ).toBeInTheDocument();
+        expect(screen.queryByTestId('port-conflict-banner')).not.toBeInTheDocument();
         expect(screen.getByTestId('frugallm-port-conflict-badge')).toBeInTheDocument();
+        expect(screen.getByTestId('frugallm-node-conflict-warning')).toBeInTheDocument();
         expect(screen.getByTestId('footer-status-dot')).toHaveStyle({ backgroundColor: '#ef4444' });
         expect(screen.getByTestId('footer-status-text')).toHaveTextContent('Port Conflict');
       },
       { timeout: 10000 }
     );
 
-    // Act: Click "Configure Port" on the banner
-    const configureBtn = screen.getByTestId('port-conflict-configure');
+    // Act: Click conflict warning on the center node
+    const configureBtn = screen.getByTestId('frugallm-node-conflict-warning');
     fireEvent.click(configureBtn);
 
     // Assert: Hub settings panel opens with editable port field and conflict hint
