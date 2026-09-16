@@ -61,5 +61,10 @@
     "vite": "^7.3.6",
     "vitest": "^4.1.11",
     "webdriverio": "^9.31.6"
+  },
+  "overrides": {
+    "serialize-javascript": "^7.1.1",
+    "sharp": "^0.35.4",
+    "adm-zip": "^0.6.1"
   }
 }
