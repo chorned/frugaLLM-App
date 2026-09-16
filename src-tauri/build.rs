@@ -71,14 +71,13 @@ fn main() {
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR must be set by Cargo");
     let dest_path = Path::new(&out_dir).join("model_db.json");
 
-    let is_debug = env::var("PROFILE").map(|p| p == "debug").unwrap_or(false);
-    let offline_allowed = env::var("FRUGAL_OFFLINE_BUILD").map(|v| v == "1").unwrap_or(false) || is_debug;
+    let offline_allowed = env::var("FRUGAL_OFFLINE_BUILD").map(|v| v == "1").unwrap_or(false);
 
     let api_key = match find_openrouter_key() {
         Some(k) => k,
         None => {
             if offline_allowed {
-                println!("cargo:warning=FRUGAL_OFFLINE_BUILD or debug profile active: Using fallback model benchmark rankings due to missing OPENROUTER_API_KEY.");
+                println!("cargo:warning=FRUGAL_OFFLINE_BUILD=1 active: Skipping live benchmark fetch due to missing OPENROUTER_API_KEY.");
                 let fallback = include_bytes!("model_db_fallback.json");
                 let _ = File::create(&dest_path).and_then(|mut f| f.write_all(fallback));
                 println!("cargo:rerun-if-env-changed=OPENROUTER_API_KEY");
