@@ -1,3 +1,5 @@
+permissions: read-all
+
 name: Release
 run-name: "Release ${{ github.ref_name }}: ${{ github.event.head_commit.message || 'Manual Trigger' }}"
 
@@ -54,7 +56,7 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
 
       - name: Install frontend dependencies
-        run: npm install
+        run: npm ci
 
       - name: Decode App Store Connect API Key
         if: matrix.platform == 'macos-latest'
@@ -101,7 +103,7 @@ jobs:
 
       - name: Run release smoke test (Linux)
         if: matrix.platform == 'ubuntu-latest'
-        run: xvfb-run npx wdio run smoke-tests/wdio.conf.js
+        run: xvfb-run npm run test:smoke
 
       - name: Configure Windows WebDriver & WebView2 Policy
         if: matrix.platform == 'windows-latest'
@@ -127,4 +129,4 @@ jobs:
         if: matrix.platform == 'windows-latest'
         env:
           WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--remote-debugging-port=0 --no-sandbox --disable-gpu --disable-dev-shm-usage --remote-allow-origins=*'
-        run: npx wdio run smoke-tests/wdio.conf.js
+        run: npm run test:smoke

@@ -46,11 +46,11 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
 
       - name: Install Frontend Dependencies
-        run: npm install
+        run: npm ci
 
       # 1. TYPECHECK & LINT CHECKS
       - name: TypeScript Typecheck
-        run: npx tsc --noEmit
+        run: npx --no-install tsc --noEmit
 
       - name: Rust Clippy Linters
         env:
@@ -59,7 +59,7 @@ jobs:
 
       # 2. FRONTEND TESTS
       - name: Run React/Vite Tests
-        run: npx vitest run
+        run: npm run test:unit
 
       # 3. BACKEND TESTS
       - name: Run Rust Tests
@@ -70,11 +70,11 @@ jobs:
 
       # 4. E2E TESTS
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps
+        run: npx playwright@1.63.0 install --with-deps
 
       # 5. RUN PLAYWRIGHT
       - name: Run Playwright E2E
-        run: npx playwright test
+        run: npm run test:e2e
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
