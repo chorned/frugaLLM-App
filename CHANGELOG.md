@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.0.17] - 2026-09-15
+
+### Added
+- **Guarded Dependency Security Hardening**: Enforced patched, modern versions across image processing and serialization libraries while preserving strict SemVer boundaries and API stability.
+
+### Fixed
+- **Vulnerability Remediation within SemVer Bounds**: Remediated high-severity security advisories across npm and Cargo ecosystems, eliminating CVEs in `serialize-javascript` (GHSA-5c6j-r48x-rmvq, GHSA-qj8w-gfj5-8c6v), `sharp` (GHSA-f88m-g3jw-g9cj, GHSA-rgj7-g3m4-5g8c), and `adm-zip` (GHSA-xcpc-8h2w-3j85, GHSA-vwc7-r8mq-g2x9) via non-breaking dependency overrides.
+
+### Changed
+- **CI Security & Least-Privilege Hardening**: Enforced least-privilege token permissions across GitHub Actions workflows and pinned automation commands to safeguard repository pipelines.
+- **Cargo Dependency Synchronization**: Updated transitive crates (`synstructure`, `yoke-derive`, `zerofrom-derive`) in the Cargo lockfile for complete multi-platform stability across macOS, Windows, and Linux.
+
+---
+
 ## [0.0.15] - 2026-09-15
 
 ### Added

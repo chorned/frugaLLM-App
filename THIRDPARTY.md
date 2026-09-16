@@ -47,8 +47,8 @@ The following third-party npm packages are utilized in the FrugaLLM frontend app
 | `@huggingface/tokenizers` | 0.1.3 | Apache-2.0 | [https://github.com/huggingface/tokenizers.js](https://github.com/huggingface/tokenizers.js) |
 | `@huggingface/transformers` | 4.2.0 | Apache-2.0 | [https://github.com/huggingface/transformers.js](https://github.com/huggingface/transformers.js) |
 | `@img/colour` | 1.1.0 | MIT | [https://github.com/lovell/colour](https://github.com/lovell/colour) |
-| `@img/sharp-darwin-x64` | 0.34.5 | Apache-2.0 | [https://github.com/lovell/sharp](https://github.com/lovell/sharp) |
-| `@img/sharp-libvips-darwin-x64` | 1.2.4 | LGPL-3.0-or-later | [https://github.com/lovell/sharp-libvips](https://github.com/lovell/sharp-libvips) |
+| `@img/sharp-darwin-x64` | 0.35.4 | Apache-2.0 | [https://github.com/lovell/sharp](https://github.com/lovell/sharp) |
+| `@img/sharp-libvips-darwin-x64` | 1.3.3 | LGPL-3.0-or-later | [https://github.com/lovell/sharp-libvips](https://github.com/lovell/sharp-libvips) |
 | `@inquirer/ansi` | 1.0.2 | MIT | [https://github.com/SBoudrias/Inquirer.js](https://github.com/SBoudrias/Inquirer.js) |
 | `@inquirer/checkbox` | 4.3.2 | MIT | [https://github.com/SBoudrias/Inquirer.js](https://github.com/SBoudrias/Inquirer.js) |
 | `@inquirer/confirm` | 5.1.21 | MIT | [https://github.com/SBoudrias/Inquirer.js](https://github.com/SBoudrias/Inquirer.js) |
@@ -176,7 +176,7 @@ The following third-party npm packages are utilized in the FrugaLLM frontend app
 | `@xterm/xterm` | 6.0.0 | MIT | [https://github.com/xtermjs/xterm.js](https://github.com/xtermjs/xterm.js) |
 | `@zip.js/zip.js` | 2.9.0 | BSD-3-Clause | [https://github.com/gildas-lormeau/zip.js](https://github.com/gildas-lormeau/zip.js) |
 | `abort-controller` | 3.0.0 | MIT | [https://github.com/mysticatea/abort-controller](https://github.com/mysticatea/abort-controller) |
-| `adm-zip` | 0.5.18 | MIT | [https://github.com/cthackers/adm-zip](https://github.com/cthackers/adm-zip) |
+| `adm-zip` | 0.6.1 | MIT | [https://github.com/cthackers/adm-zip](https://github.com/cthackers/adm-zip) |
 | `agent-base` | 7.1.4 | MIT | [https://github.com/TooTallNate/proxy-agents](https://github.com/TooTallNate/proxy-agents) |
 | `ansi-colors` | 4.1.3 | MIT | [https://github.com/doowb/ansi-colors](https://github.com/doowb/ansi-colors) |
 | `ansi-regex` | 5.0.1 | MIT | [https://github.com/chalk/ansi-regex](https://github.com/chalk/ansi-regex) |
@@ -629,9 +629,9 @@ The following third-party npm packages are utilized in the FrugaLLM frontend app
 | `semver-compare` | 1.0.0 | MIT | [https://github.com/substack/semver-compare](https://github.com/substack/semver-compare) |
 | `serialize-error` | 12.0.0 | MIT | [https://github.com/sindresorhus/serialize-error](https://github.com/sindresorhus/serialize-error) |
 | `serialize-error` | 7.0.1 | MIT | [https://github.com/sindresorhus/serialize-error](https://github.com/sindresorhus/serialize-error) |
-| `serialize-javascript` | 6.0.2 | BSD-3-Clause | [https://github.com/yahoo/serialize-javascript](https://github.com/yahoo/serialize-javascript) |
+| `serialize-javascript` | 7.1.1 | BSD-3-Clause | [https://github.com/yahoo/serialize-javascript](https://github.com/yahoo/serialize-javascript) |
 | `setimmediate` | 1.0.5 | MIT | [https://github.com/YuzuJS/setImmediate](https://github.com/YuzuJS/setImmediate) |
-| `sharp` | 0.34.5 | Apache-2.0 | [https://github.com/lovell/sharp](https://github.com/lovell/sharp) |
+| `sharp` | 0.35.4 | Apache-2.0 | [https://github.com/lovell/sharp](https://github.com/lovell/sharp) |
 | `shebang-command` | 2.0.0 | MIT | [https://github.com/kevva/shebang-command](https://github.com/kevva/shebang-command) |
 | `shebang-regex` | 3.0.0 | MIT | [https://github.com/sindresorhus/shebang-regex](https://github.com/sindresorhus/shebang-regex) |
 | `siginfo` | 2.0.0 | ISC | [https://github.com/emilbayes/siginfo](https://github.com/emilbayes/siginfo) |
@@ -1193,9 +1193,9 @@ The following Rust crates are utilized in the FrugaLLM backend and desktop runti
 | `swift-rs` | 1.0.7 | MIT OR Apache-2.0 | [https://github.com/Brendonovich/swift-rs](https://github.com/Brendonovich/swift-rs) |
 | `syn` | 1.0.109 | MIT OR Apache-2.0 | [https://github.com/dtolnay/syn](https://github.com/dtolnay/syn) |
 | `syn` | 2.0.119 | MIT OR Apache-2.0 | [https://github.com/dtolnay/syn](https://github.com/dtolnay/syn) |
-| `syn` | 3.0.3 | MIT OR Apache-2.0 | [https://github.com/dtolnay/syn](https://github.com/dtolnay/syn) |
+| `syn` | 3.0.5 | MIT OR Apache-2.0 | [https://github.com/dtolnay/syn](https://github.com/dtolnay/syn) |
 | `sync_wrapper` | 1.0.2 | Apache-2.0 | [https://github.com/Actyx/sync_wrapper](https://github.com/Actyx/sync_wrapper) |
-| `synstructure` | 0.13.2 | MIT | [https://github.com/mystor/synstructure](https://github.com/mystor/synstructure) |
+| `synstructure` | 0.14.0 | MIT | [https://github.com/mystor/synstructure](https://github.com/mystor/synstructure) |
 | `sysinfo` | 0.39.6 | MIT | [https://github.com/GuillaumeGomez/sysinfo](https://github.com/GuillaumeGomez/sysinfo) |
 | `system-configuration` | 0.7.0 | MIT OR Apache-2.0 | [https://github.com/mullvad/system-configuration-rs](https://github.com/mullvad/system-configuration-rs) |
 | `system-configuration-sys` | 0.6.0 | MIT OR Apache-2.0 | [https://github.com/mullvad/system-configuration-rs](https://github.com/mullvad/system-configuration-rs) |
@@ -1380,7 +1380,7 @@ The following Rust crates are utilized in the FrugaLLM backend and desktop runti
 | `x11rb` | 0.13.2 | MIT OR Apache-2.0 | [https://github.com/psychon/x11rb](https://github.com/psychon/x11rb) |
 | `x11rb-protocol` | 0.13.2 | MIT OR Apache-2.0 | [https://github.com/psychon/x11rb](https://github.com/psychon/x11rb) |
 | `yoke` | 0.8.3 | Unicode-3.0 | [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) |
-| `yoke-derive` | 0.8.2 | Unicode-3.0 | [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) |
+| `yoke-derive` | 0.8.3 | Unicode-3.0 | [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) |
 | `zbus` | 5.18.0 | MIT | [https://github.com/z-galaxy/zbus/](https://github.com/z-galaxy/zbus/) |
 | `zbus_macros` | 5.18.0 | MIT | [https://github.com/z-galaxy/zbus/](https://github.com/z-galaxy/zbus/) |
 | `zbus_names` | 4.3.4 | MIT | [https://github.com/z-galaxy/zbus/](https://github.com/z-galaxy/zbus/) |
@@ -1388,7 +1388,7 @@ The following Rust crates are utilized in the FrugaLLM backend and desktop runti
 | `zerocopy` | 0.8.56 | BSD-2-Clause OR Apache-2.0 OR MIT | [https://github.com/google/zerocopy](https://github.com/google/zerocopy) |
 | `zerocopy-derive` | 0.8.56 | BSD-2-Clause OR Apache-2.0 OR MIT | [https://github.com/google/zerocopy](https://github.com/google/zerocopy) |
 | `zerofrom` | 0.1.8 | Unicode-3.0 | [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) |
-| `zerofrom-derive` | 0.1.7 | Unicode-3.0 | [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) |
+| `zerofrom-derive` | 0.1.8 | Unicode-3.0 | [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) |
 | `zeroize` | 1.9.0 | Apache-2.0 OR MIT | [https://github.com/RustCrypto/utils](https://github.com/RustCrypto/utils) |
 | `zerotrie` | 0.2.4 | Unicode-3.0 | [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) |
 | `zerovec` | 0.11.6 | Unicode-3.0 | [https://github.com/unicode-org/icu4x](https://github.com/unicode-org/icu4x) |
