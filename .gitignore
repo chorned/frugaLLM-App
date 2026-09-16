@@ -38,6 +38,7 @@ junit-report.xml
 
 # Secrets
 .env
+.env.build
 .env*.local
 .env.*.local
 
