@@ -13,10 +13,10 @@
     "windows": [
       {
         "title": "frugallm-app",
-        "width": 1024,
-        "height": 768,
+        "width": 1920,
+        "height": 1080,
         "minWidth": 800,
-        "minHeight": 600,
+        "minHeight": 450,
         "center": true,
         "visible": false
       }

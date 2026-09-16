@@ -471,6 +471,67 @@ use std::collections::{HashMap, HashSet};
     }
 
     #[test]
+    fn test_calculate_responsive_viewport_size_large_screens() {
+        // 4K UHD display (3840x2160): defaults to 1080p (1920x1080)
+        let uhd = calculate_responsive_viewport_size(3840, 2160);
+        assert_eq!(uhd.width, 1920);
+        assert_eq!(uhd.height, 1080);
+
+        // 1440p QHD display (2560x1440): defaults to 1080p (1920x1080)
+        let qhd = calculate_responsive_viewport_size(2560, 1440);
+        assert_eq!(qhd.width, 1920);
+        assert_eq!(qhd.height, 1080);
+    }
+
+    #[test]
+    fn test_calculate_responsive_viewport_size_1080p_desktop() {
+        // Standard 1080p display (1920x1080): scales comfortably within 90% height to leave room for taskbar/dock
+        let fhd = calculate_responsive_viewport_size(1920, 1080);
+        assert_eq!(fhd.width, 1728);
+        assert_eq!(fhd.height, 972);
+
+        // Aspect ratio must be exact 16:9
+        let ratio = fhd.width as f64 / fhd.height as f64;
+        assert!((ratio - (16.0 / 9.0)).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_calculate_responsive_viewport_size_laptops() {
+        // 16" MacBook Pro (1728x1117 logical)
+        let mac16 = calculate_responsive_viewport_size(1728, 1117);
+        assert!(mac16.width <= 1728);
+        assert!(mac16.height <= 1117);
+        let ratio16 = mac16.width as f64 / mac16.height as f64;
+        assert!((ratio16 - (16.0 / 9.0)).abs() < 0.01);
+
+        // 14" MacBook Pro (1512x982 logical)
+        let mac14 = calculate_responsive_viewport_size(1512, 982);
+        assert!(mac14.width <= 1512);
+        assert!(mac14.height <= 982);
+        let ratio14 = mac14.width as f64 / mac14.height as f64;
+        assert!((ratio14 - (16.0 / 9.0)).abs() < 0.01);
+
+        // 13" MacBook (1440x900 logical)
+        let mac13 = calculate_responsive_viewport_size(1440, 900);
+        assert!(mac13.width <= 1440);
+        assert!(mac13.height <= 900);
+        let ratio13 = mac13.width as f64 / mac13.height as f64;
+        assert!((ratio13 - (16.0 / 9.0)).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_calculate_responsive_viewport_size_minimum_bounds() {
+        // Small screens clamp to minimum bounds (800x450)
+        let small = calculate_responsive_viewport_size(800, 600);
+        assert_eq!(small.width, 800);
+        assert_eq!(small.height, 450);
+
+        let tiny = calculate_responsive_viewport_size(640, 480);
+        assert_eq!(tiny.width, 800);
+        assert_eq!(tiny.height, 450);
+    }
+
+    #[test]
     fn test_frugal_config_close_to_tray_default() {
         let config = FrugalConfig::default();
         assert!(config.close_to_tray);

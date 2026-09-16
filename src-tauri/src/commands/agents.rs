@@ -1024,6 +1024,12 @@ pub async fn execute_deep_wipe(app: &tauri::AppHandle) {
         let _ = tokio::fs::remove_file(app_dir.join("tool_gateway_installed")).await;
         let _ = tokio::fs::remove_dir_all(app_dir.join("models")).await;
         let _ = tokio::fs::remove_file(app_dir.join("frugal_config.json")).await;
+        let _ = tokio::fs::remove_file(app_dir.join(".window-state.json")).await;
+        let _ = tokio::fs::remove_file(app_dir.join("window-state.json")).await;
+    }
+    if let Ok(config_dir) = app.path().app_config_dir() {
+        let _ = tokio::fs::remove_file(config_dir.join(".window-state.json")).await;
+        let _ = tokio::fs::remove_file(config_dir.join("window-state.json")).await;
     }
 }
 

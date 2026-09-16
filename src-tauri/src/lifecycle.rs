@@ -48,7 +48,81 @@ pub fn is_window_rect_visible_on_monitors(
     false
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WindowSize {
+    pub width: u32,
+    pub height: u32,
+}
+
+pub const TARGET_VIEWPORT_WIDTH: u32 = 1920;
+pub const TARGET_VIEWPORT_HEIGHT: u32 = 1080;
+pub const MIN_VIEWPORT_WIDTH: u32 = 800;
+pub const MIN_VIEWPORT_HEIGHT: u32 = 450;
+
+/// Calculates a responsive 16:9 viewport size that defaults to 1080p (1920x1080)
+/// but scales down proportionally to fit comfortably on smaller displays (e.g. laptops)
+/// with safe margins for OS docks, taskbars, and window decorations.
+pub fn calculate_responsive_viewport_size(screen_width: u32, screen_height: u32) -> WindowSize {
+    let max_avail_w = ((screen_width as f64) * 0.95).floor();
+    let max_avail_h = ((screen_height as f64) * 0.90).floor();
+
+    if max_avail_w >= (TARGET_VIEWPORT_WIDTH as f64) && max_avail_h >= (TARGET_VIEWPORT_HEIGHT as f64) {
+        return WindowSize {
+            width: TARGET_VIEWPORT_WIDTH,
+            height: TARGET_VIEWPORT_HEIGHT,
+        };
+    }
+
+    let target_ratio = 16.0 / 9.0;
+    let bound_w = max_avail_w.min(TARGET_VIEWPORT_WIDTH as f64);
+    let bound_h = max_avail_h.min(TARGET_VIEWPORT_HEIGHT as f64);
+
+    let (calc_w, _calc_h) = if bound_w / bound_h >= target_ratio {
+        let h = bound_h;
+        let w = h * target_ratio;
+        (w, h)
+    } else {
+        let w = bound_w;
+        let h = w / target_ratio;
+        (w, h)
+    };
+
+    let clamped_w = calc_w.max(MIN_VIEWPORT_WIDTH as f64).round() as u32;
+    let clamped_h = (clamped_w as f64 / target_ratio).round() as u32;
+
+    WindowSize {
+        width: clamped_w,
+        height: clamped_h.max(MIN_VIEWPORT_HEIGHT),
+    }
+}
+
 pub fn validate_and_clamp_window_coordinates(window: &tauri::WebviewWindow) {
+    let monitor_opt = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.primary_monitor().ok().flatten());
+
+    if let Some(monitor) = monitor_opt {
+        let scale_factor = monitor.scale_factor();
+        let phys_size = monitor.size();
+        let logical_w = ((phys_size.width as f64) / scale_factor).round() as u32;
+        let logical_h = ((phys_size.height as f64) / scale_factor).round() as u32;
+
+        let target_size = calculate_responsive_viewport_size(logical_w, logical_h);
+        let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
+            width: target_size.width as f64,
+            height: target_size.height as f64,
+        }));
+        let _ = window.center();
+    } else {
+        let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
+            width: TARGET_VIEWPORT_WIDTH as f64,
+            height: TARGET_VIEWPORT_HEIGHT as f64,
+        }));
+        let _ = window.center();
+    }
+
     if let Ok(monitors) = window.available_monitors() {
         let bounds: Vec<MonitorBounds> = monitors
             .iter()
