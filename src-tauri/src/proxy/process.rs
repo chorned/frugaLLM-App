@@ -20,7 +20,7 @@ impl WindowsJobObject {
         
         unsafe {
             let handle = CreateJobObjectW(std::ptr::null(), std::ptr::null());
-            if handle == 0 || handle == INVALID_HANDLE_VALUE {
+            if handle.is_null() || handle == INVALID_HANDLE_VALUE {
                 return None;
             }
             
@@ -45,7 +45,7 @@ impl WindowsJobObject {
     
     pub fn assign_process(&self, process_handle: windows_sys::Win32::Foundation::HANDLE) -> bool {
         use windows_sys::Win32::System::JobObjects::AssignProcessToJobObject;
-        if self.handle == 0 || self.handle == windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE {
+        if self.handle.is_null() || self.handle == windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE {
             return false;
         }
         unsafe {
@@ -58,7 +58,7 @@ impl WindowsJobObject {
         use windows_sys::Win32::Foundation::*;
         unsafe {
             let handle = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, pid);
-            if handle != 0 && handle != INVALID_HANDLE_VALUE {
+            if !handle.is_null() && handle != INVALID_HANDLE_VALUE {
                 let success = self.assign_process(handle);
                 CloseHandle(handle);
                 success
@@ -72,7 +72,7 @@ impl WindowsJobObject {
 #[cfg(windows)]
 impl Drop for WindowsJobObject {
     fn drop(&mut self) {
-        if self.handle != 0 && self.handle != windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE {
+        if !self.handle.is_null() && self.handle != windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE {
             unsafe {
                 windows_sys::Win32::Foundation::CloseHandle(self.handle);
             }
