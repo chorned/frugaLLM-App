@@ -108,7 +108,9 @@ test.describe('Node Configuration Panel', () => {
 
     // Verify API Key field is password masked and has expected placeholder
     await expect(configPanel.apiKey).toHaveAttribute('type', 'password');
-    await expect(configPanel.apiKey).toHaveAttribute('placeholder', 'Insert key here');
+    await expect(configPanel.apiKey).toHaveAttribute('placeholder', 'Get Key');
+    await expect(page.locator('[data-testid="link-get-openrouter-key"]')).toBeVisible();
+    await expect(page.locator('[data-testid="link-get-openrouter-key"]')).toHaveAttribute('href', 'https://openrouter.ai');
 
     // Fill API key and save
     await configPanel.apiKey.fill('sk-or-v1-mock-key');
@@ -139,7 +141,9 @@ test.describe('Node Configuration Panel', () => {
 
     // Verify Google API Key field is password masked and has expected placeholder
     await expect(configPanel.googleApiKey).toHaveAttribute('type', 'password');
-    await expect(configPanel.googleApiKey).toHaveAttribute('placeholder', 'Insert key here');
+    await expect(configPanel.googleApiKey).toHaveAttribute('placeholder', 'Get Key');
+    await expect(page.locator('[data-testid="link-get-google-key"]')).toBeVisible();
+    await expect(page.locator('[data-testid="link-get-google-key"]')).toHaveAttribute('href', 'https://aistudio.google.com');
 
     // Fill Google API key and save
     await configPanel.googleApiKey.fill('AIzaSyMockGoogleKey123');

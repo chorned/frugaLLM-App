@@ -5,6 +5,7 @@ import { enable as enableAutostart, disable as disableAutostart, isEnabled as is
 import { Store } from '@tauri-apps/plugin-store';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { formatApiBaseUrl, copyToClipboard } from '../utils/clipboard';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { getProviderIcon } from './icons/ProviderIcons';
 import { MemoryPipelineWidget } from './MemoryPipelineWidget';
 import { CloudRoutingPanel } from './CloudRoutingPanel';
@@ -694,8 +695,48 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
                       <span>{en.routingGraph.nodeConfigPanel.inputs.openRouterApiKey.label}</span>
                     </Tooltip>
                   </label>
-                  <input type="password" name="apiKey" value={formData.apiKey || ''} onChange={handleChange} placeholder={Boolean(node.data.keyPrefix || node.data.status === 'active') ? en.routingGraph.nodeConfigPanel.inputs.openRouterApiKey.configuredPlaceholder : en.routingGraph.nodeConfigPanel.inputs.openRouterApiKey.placeholder}
-                    style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem', boxShadow: 'none' }} />
+                  <div style={{ position: 'relative', width: '100%' }}>
+                    <input
+                      type="password"
+                      name="apiKey"
+                      value={formData.apiKey || ''}
+                      onChange={handleChange}
+                      placeholder={Boolean(node.data.keyPrefix || node.data.status === 'active') ? en.routingGraph.nodeConfigPanel.inputs.openRouterApiKey.configuredPlaceholder : en.routingGraph.nodeConfigPanel.inputs.openRouterApiKey.placeholder}
+                      className={!Boolean(node.data.keyPrefix || node.data.status === 'active') && !formData.apiKey ? 'placeholder-transparent' : ''}
+                      style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem', boxShadow: 'none' }}
+                    />
+                    {!Boolean(node.data.keyPrefix || node.data.status === 'active') && !formData.apiKey && (
+                      <a
+                        href="https://openrouter.ai"
+                        target="_blank"
+                        rel="noreferrer"
+                        data-testid="link-get-openrouter-key"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openUrl('https://openrouter.ai').catch(() => {});
+                        }}
+                        className="hover:text-[var(--zen-text)] transition-colors"
+                        style={{
+                          position: 'absolute',
+                          left: '14px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          fontSize: '0.82rem',
+                          fontWeight: 500,
+                          color: 'var(--zen-text-secondary)',
+                          textDecoration: 'underline',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          lineHeight: 1,
+                          userSelect: 'none'
+                        }}
+                      >
+                        {en.routingGraph.nodeConfigPanel.inputs.openRouterApiKey.placeholder}
+                      </a>
+                    )}
+                  </div>
                 </div>
               )}
               {node.id === 'node-google' && (
@@ -705,8 +746,48 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
                       <span>{en.routingGraph.nodeConfigPanel.inputs.googleApiKey.label}</span>
                     </Tooltip>
                   </label>
-                  <input type="password" name="googleApiKey" value={formData.googleApiKey || ''} onChange={handleChange} placeholder={Boolean(node.data.keyPrefix || node.data.status === 'active') ? en.routingGraph.nodeConfigPanel.inputs.googleApiKey.configuredPlaceholder : en.routingGraph.nodeConfigPanel.inputs.googleApiKey.placeholder}
-                    style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem', boxShadow: 'none' }} />
+                  <div style={{ position: 'relative', width: '100%' }}>
+                    <input
+                      type="password"
+                      name="googleApiKey"
+                      value={formData.googleApiKey || ''}
+                      onChange={handleChange}
+                      placeholder={Boolean(node.data.keyPrefix || node.data.status === 'active') ? en.routingGraph.nodeConfigPanel.inputs.googleApiKey.configuredPlaceholder : en.routingGraph.nodeConfigPanel.inputs.googleApiKey.placeholder}
+                      className={!Boolean(node.data.keyPrefix || node.data.status === 'active') && !formData.googleApiKey ? 'placeholder-transparent' : ''}
+                      style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem', boxShadow: 'none' }}
+                    />
+                    {!Boolean(node.data.keyPrefix || node.data.status === 'active') && !formData.googleApiKey && (
+                      <a
+                        href="https://aistudio.google.com"
+                        target="_blank"
+                        rel="noreferrer"
+                        data-testid="link-get-google-key"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openUrl('https://aistudio.google.com').catch(() => {});
+                        }}
+                        className="hover:text-[var(--zen-text)] transition-colors"
+                        style={{
+                          position: 'absolute',
+                          left: '14px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          fontSize: '0.82rem',
+                          fontWeight: 500,
+                          color: 'var(--zen-text-secondary)',
+                          textDecoration: 'underline',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          lineHeight: 1,
+                          userSelect: 'none'
+                        }}
+                      >
+                        {en.routingGraph.nodeConfigPanel.inputs.googleApiKey.placeholder}
+                      </a>
+                    )}
+                  </div>
                 </div>
               )}
             </>

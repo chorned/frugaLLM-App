@@ -55,10 +55,11 @@ This document outlines the hardcoded user-facing strings discovered in the Fruga
 | `routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.apply` | `APPLY PASSWORD` | `src/components/NodeConfigPanel.tsx` |
 | `routingGraph.nodeConfigPanel.inputs.apiPassword.buttons.remove` | `REMOVE` | `src/components/NodeConfigPanel.tsx` |
 | `routingGraph.nodeConfigPanel.inputs.openRouterApiKey.label` | `API KEY` | `src/components/NodeConfigPanel.tsx` |
-| `routingGraph.nodeConfigPanel.inputs.openRouterApiKey.placeholder` | `Insert key here` | `src/components/NodeConfigPanel.tsx` |
+| `routingGraph.nodeConfigPanel.inputs.openRouterApiKey.placeholder` | `Get Key` | `src/components/NodeConfigPanel.tsx` |
+| `routingGraph.nodeConfigPanel.inputs.openRouterApiKey.configuredPlaceholder` | `•••••••••••••••• (Key Configured)` | `src/components/NodeConfigPanel.tsx` |
 | `routingGraph.nodeConfigPanel.inputs.googleApiKey.label` | `API KEY` | `src/components/NodeConfigPanel.tsx` |
 | `routingGraph.nodeConfigPanel.inputs.googleApiKey.helpText` | `Your Google AI Studio API Key. This will be securely saved into your operating system's native Keychain!` | `src/components/NodeConfigPanel.tsx` |
-| `routingGraph.nodeConfigPanel.inputs.googleApiKey.placeholder` | `Insert key here` | `src/components/NodeConfigPanel.tsx` |
+| `routingGraph.nodeConfigPanel.inputs.googleApiKey.placeholder` | `Get Key` | `src/components/NodeConfigPanel.tsx` |
 | `routingGraph.nodeConfigPanel.stats.sessionTokens` | `SESSION TOKENS` | `src/components/NodeConfigPanel.tsx` |
 | `routingGraph.nodeConfigPanel.stats.lifetimeTokens` | `LIFETIME TOKENS` | `src/components/NodeConfigPanel.tsx` |
 | `routingGraph.nodeConfigPanel.stats.estLifetimeSavings` | `EST. LIFETIME SAVINGS` | `src/components/NodeConfigPanel.tsx` |

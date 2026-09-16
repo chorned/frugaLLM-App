@@ -143,7 +143,7 @@
         },
         "openRouterApiKey": {
           "label": "API KEY",
-          "placeholder": "Insert key here",
+          "placeholder": "Get Key",
           "configuredPlaceholder": "•••••••••••••••• (Key Configured)",
           "helpText": "Your OpenRouter API key. Stored securely in your operating system's native Keychain or Secret Service.",
           "tooltip": "Stored securely in your system keychain. Generate a key at openrouter.ai/keys to access diverse cloud models.",
@@ -151,7 +151,7 @@
         },
         "googleApiKey": {
           "label": "API KEY",
-          "placeholder": "Insert key here",
+          "placeholder": "Get Key",
           "configuredPlaceholder": "•••••••••••••••• (Key Configured)",
           "helpText": "Your Google AI Studio API key. Stored securely in your operating system's native Keychain or Secret Service.",
           "tooltip": "Stored securely in your system keychain. Generate a free key at aistudio.google.com to access Gemini models.",
