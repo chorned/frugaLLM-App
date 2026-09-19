@@ -183,4 +183,34 @@ describe('FrugaLLM Node Dual Tooltips (CHO-57 / CHO-122)', () => {
     fireEvent.click(warningPill);
     expect(mockSetSelectedNodeId).toHaveBeenCalledWith('node-frugallm');
   });
+
+  it('renders Ready in green (#10B981) for installed agent nodes when idle', () => {
+    render(
+      <TopologyCanvas
+        {...defaultProps}
+        nodes={[
+          {
+            id: 'node-hermes',
+            data: { label: 'Hermes', subheader: 'Open source', status: 'ready', description: 'Autonomous agent' }
+          },
+          {
+            id: 'node-opencode',
+            data: { label: 'Opencode', subheader: 'Open source', status: 'ready', description: 'Software builder' }
+          }
+        ] as any}
+        isHermesInstalled={true}
+        isOpenCodeInstalled={true}
+        activeProcesses={{}}
+      />
+    );
+
+    const hermesStatus = screen.getByTestId('node-hermes-status');
+    const opencodeStatus = screen.getByTestId('node-opencode-status');
+
+    expect(hermesStatus).toHaveTextContent('Ready');
+    expect(hermesStatus).toHaveStyle({ color: '#10B981' });
+
+    expect(opencodeStatus).toHaveTextContent('Ready');
+    expect(opencodeStatus).toHaveStyle({ color: '#10B981' });
+  });
 });

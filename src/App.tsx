@@ -48,7 +48,6 @@ function AppContent() {
     memoryRef.current = memory;
   }, [memory]);
 
-  const { onboardingState, handleDecision, isLoaded } = useOnboarding();
   const { theme, toggleTheme, isDark } = useTheme();
   const [nodes, setNodes] = useState(() => {
     if (import.meta.env.DEV && isScreenshotMode()) {
@@ -83,6 +82,7 @@ function AppContent() {
   });
 
   const [terminalMode, setTerminalMode] = useState<'install-hermes' | 'run-hermes' | 'run-hermes-web' | 'run-hermes-gateway' | 'run-hermes-desktop' | 'install-opencode' | 'run-opencode' | 'run-opencode-web' | 'install-ollama' | 'run-ollama' | 'install-tool-gateway' | 'uninstall-tool-gateway' | null>(null);
+  const [minimizedTerminal, setMinimizedTerminal] = useState<{ mode: string; title: string } | null>(null);
   const [isHermesInstalled, setIsHermesInstalled] = useState<boolean>(() => {
     if (import.meta.env.DEV && isScreenshotMode()) return true;
     return false;
@@ -153,6 +153,28 @@ function AppContent() {
   const [portConflict, setPortConflict] = useState<{ port: number; message: string } | null>(null);
   const [daemonError, setDaemonError] = useState<string | null>(null);
 
+  const {
+    onboardingState,
+    currentStep,
+    isFooterDismissed,
+    hasSourceLinked,
+    hasHarnessInstalled,
+    handleDecision,
+    nextStep,
+    prevStep,
+    goToStep,
+    resetTour,
+    dismissFooter,
+    checkStatus,
+    isLoaded,
+  } = useOnboarding({
+    isHermesInstalled,
+    isOpenCodeInstalled,
+    isOllamaInstalled,
+    hasGoogleKey: Boolean(frugalConfig?.google_api_key),
+    hasOpenRouterKey: Boolean(frugalConfig?.openrouter_api_key),
+  });
+
   const { activeProxyState, handleProxyActivityEvent, cleanup: cleanupProxyIndicator } = useProxyActivityIndicator();
 
   // App Global Event Listeners Hook
@@ -205,6 +227,7 @@ function AppContent() {
     setIsOpenCodeManaged,
     setIsOllamaInstalled,
     setIsOllamaManaged,
+    setIsToolGatewayInstalled,
     setNodes,
     frugalConfig,
     setFrugalConfig,
@@ -335,8 +358,39 @@ function AppContent() {
         hermesVersion={hermesVersion}
         opencodeVersion={opencodeVersion}
       />
-
-      <Footer portConflict={portConflict} daemonError={daemonError} />
+      <Footer
+        portConflict={portConflict}
+        daemonError={daemonError}
+        isDark={isDark}
+        minimizedTerminal={
+          minimizedTerminal
+            ? {
+                mode: minimizedTerminal.mode,
+                title: minimizedTerminal.title,
+                onResume: () => {
+                  setTerminalMode(minimizedTerminal.mode as any);
+                  setMinimizedTerminal(null);
+                },
+              }
+            : null
+        }
+        onboarding={{
+          state: onboardingState,
+          currentStep,
+          isFooterDismissed,
+          hasSourceLinked,
+          hasHarnessInstalled,
+          onNext: nextStep,
+          onPrev: prevStep,
+          onSkip: () => handleDecision('completed'),
+          onResume: () => {
+            handleDecision('learning');
+            goToStep(1);
+          },
+          onReset: resetTour,
+          onDismiss: dismissFooter,
+        }}
+      />
 
       {selectedNode && !terminalMode && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.3)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setSelectedNodeId(null)}>
@@ -402,9 +456,19 @@ function AppContent() {
         <OnboardingDecision onSelect={handleDecision} />
       )}
 
-      {onboardingState === 'learning' && (
+      {onboardingState === 'learning' && !terminalMode && (
         <OnboardingOverlay
+          currentStep={currentStep}
+          onNext={nextStep}
+          onPrev={prevStep}
+          onGoToStep={goToStep}
           onComplete={() => handleDecision('completed')}
+          onStatusChange={checkStatus}
+          onInstallHermes={handleInitializeHermes}
+          onInstallOpenCode={handleInitializeOpenCode}
+          isHermesInstalled={isHermesInstalled}
+          isOpenCodeInstalled={isOpenCodeInstalled}
+          onOpenIssueReporter={() => setIsIssueReporterOpen(true)}
         />
       )}
     </div>

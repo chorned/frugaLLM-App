@@ -147,7 +147,10 @@
           "configuredPlaceholder": "•••••••••••••••• (Key Configured)",
           "helpText": "Your OpenRouter API key. Stored securely in your operating system's native Keychain or Secret Service.",
           "tooltip": "Stored securely in your system keychain. Generate a key at openrouter.ai/keys to access diverse cloud models.",
-          "outcomeHelp": "Obtain an API key at openrouter.ai/keys to route requests across multi-provider cloud models with unified billing."
+          "outcomeHelp": "Obtain an API key at openrouter.ai/keys to route requests across multi-provider cloud models with unified billing.",
+          "errorMismatched": "This looks like a Google AI Studio key. Please paste it into the Google AI Studio box above.",
+          "errorVerificationFailed": "Key verification failed (HTTP {{status}}). Please check that your key is valid and active.",
+          "errorOffline": "Connection timed out or network offline. Failed to verify API key."
         },
         "googleApiKey": {
           "label": "API KEY",
@@ -155,7 +158,10 @@
           "configuredPlaceholder": "•••••••••••••••• (Key Configured)",
           "helpText": "Your Google AI Studio API key. Stored securely in your operating system's native Keychain or Secret Service.",
           "tooltip": "Stored securely in your system keychain. Generate a free key at aistudio.google.com to access Gemini models.",
-          "outcomeHelp": "Create an API key at aistudio.google.com using your Google account to access Gemini models with high rate limits on the free tier."
+          "outcomeHelp": "Create an API key at aistudio.google.com using your Google account to access Gemini models with high rate limits on the free tier.",
+          "errorMismatched": "This looks like an OpenRouter key. Please paste it into the OpenRouter box below.",
+          "errorVerificationFailed": "Key verification failed (HTTP {{status}}). Please check that your key is valid and active.",
+          "errorOffline": "Connection timed out or network offline. Failed to verify API key."
         },
         "vramDetected": {
           "label": "VRAM DETECTED (GB)",
@@ -329,7 +335,15 @@
       "exitedWithCode": "{{name}} exited with code {{code}}",
       "speed": "Speed",
       "eta": "ETA",
-      "left": "left"
+      "left": "left",
+      "breakoutFloating": "Break out to floating window",
+      "expandModal": "Expand to full view",
+      "hideTerminal": "Hide terminal and keep process running in background",
+      "closeProcess": "Close process",
+      "popOutWindow": "Pop out to dedicated window",
+      "redock": "Re-dock to Main Window",
+      "runningExternal": "Running in dedicated OS window",
+      "focusWindow": "Focus Window"
     },
     "cloudRoutingPanel": {
       "title": "GLOBAL ROUTING POOL",
@@ -367,15 +381,110 @@
     }
   },
   "onboarding": {
-    "welcomeTitle": "Welcome to FrugalLLM",
-    "welcomeSubtitle": "The ultimate local-first AI orchestrator. Do you want a quick tour of the nodes, or are you ready to dive straight in?",
-    "learnTitle": "I want to learn, walk me through it",
+    "welcomeTitle": "Welcome to FrugaLLM",
+    "welcomeSubtitle": "Run autonomous agentic harnesses (Open Code & Hermes) against free cloud tiers and local models with zero API bills.",
+    "startGuided": "Set Up in 5 Minutes (Guided)",
+    "skipTutorial": "Skip to Workspace",
+    "learnTitle": "Set Up in 5 Minutes (Guided)",
     "learnSubtitle": "Starts a quick interactive tutorial.",
-    "skipTitle": "Doing is learning (skip tutorial)",
+    "skipTitle": "Skip to Workspace",
     "skipSubtitle": "Jump right into the app.",
-    "hardwareNodeTitle": "Local Hardware Node",
-    "hardwareNodeDescription": "This node represents your machine's physical GPU and CPU. FrugalLLM monitors telemetry in real-time to optimize local AI inference.",
-    "finishTour": "Finish Tour"
+    "nav": {
+      "back": "Back",
+      "next": "Next",
+      "skip": "Skip Tour"
+    },
+    "steps": {
+      "step1": {
+        "badge": "Step 1: Intelligence Sources",
+        "title": "Where the Brains Live",
+        "desc": "At the top are your AI models. You can run 100% private models locally on your hardware via Ollama, or connect generous free cloud tiers from Google AI Studio and OpenRouter.",
+        "ramWarning": "Detected: {{ram}} GB RAM. Local models are private and work offline, but cloud models run faster and are more intelligent."
+      },
+      "step2": {
+        "badge": "Step 2: Agentic Harnesses",
+        "title": "Giving the AI Hands",
+        "desc": "Out of the box, models only talk. Harnesses give them hands to build apps, edit files, and automate tasks. Open Code specializes in building full software projects, while Hermes acts as your autonomous digital butler.",
+        "safetyNote": "The AI has hands, but you're the boss. Both tools ask for your permission before modifying files or running commands. You can always reply: 'Explain what that does before I agree.'"
+      },
+      "step3": {
+        "badge": "Step 3: The FrugaLLM Bridge",
+        "title": "Smart Routing & Cost Shield",
+        "desc": "FrugaLLM sits in the center, routing harness tasks through the smartest available free models. When free tiers hit per-minute limits, it automatically cascades to the next best model so your agent never crashes.",
+        "streamingLabel": "Session Streaming",
+        "commercialRateLabel": "Commercial Rate",
+        "sliderLabel": "Simulate Token Flow:",
+        "sliderMin": "Just Vibin'",
+        "sliderMax": "The Tokens must Flow",
+        "aliasHeader": "FrugaLLM",
+        "aliasSubheader": "Smart Router & Cost Shield",
+        "aliasHubOnline": "HUB ONLINE",
+        "rateLimitTip": "Free-Tier Etiquette: Stick to one active project at a time to prevent rate-limit throttling.",
+        "sonnetBaseline": "Estimated savings based on Anthropic Sonnet pricing ($3/M input, $15/M output tokens)."
+      },
+      "step4": {
+        "badge": "Step 4: Connect Intelligence",
+        "title": "Add a Free Cloud Key",
+        "desc": "Free tiers trade data for intelligence. Providers log your requests to train future models—blending your prompts into massive, aggregated datasets to keep it theoretically anonymous. Paste a key below for maximum speed and smarts at zero dollar cost, or choose local models for total privacy.",
+        "googleKeyPlaceholder": "Paste Google AI Studio key (AIzaSy...)",
+        "openrouterKeyPlaceholder": "Paste OpenRouter key (sk-or-...)",
+        "getKeyGoogle": "Get Free Key (ai.dev)",
+        "getKeyOpenRouter": "Get Free Key (openrouter.ai)",
+        "saveKey": "Save Key",
+        "keySaved": "Key configured",
+        "saving": "Validating...",
+        "googleLabel": "Google AI Studio",
+        "openrouterLabel": "OpenRouter",
+        "errorInvalidKey": "Failed to set credential. Check key format.",
+        "errorMismatchedGoogle": "This looks like a Google AI Studio key. Please paste it into the Google AI Studio box above.",
+        "errorMismatchedOpenRouter": "This looks like an OpenRouter key. Please paste it into the OpenRouter box below.",
+        "errorInvalidGoogleKey": "Invalid Google AI Studio key. Keys typically begin with 'AIzaSy...'",
+        "errorInvalidOpenRouterKey": "Invalid OpenRouter key. Keys typically begin with 'sk-or-...'",
+        "errorVerificationFailed": "Key verification failed (HTTP {{status}}). Please check that your key is valid and active.",
+        "sourcesReady": "Both intelligence sources configured and ready to route!"
+      },
+      "step5": {
+        "badge": "Step 5: Deploy a Harness",
+        "title": "Install Your First Tool",
+        "desc": "Pick your first companion. Both install official vanilla binaries with interactive confirmation guardrails.",
+        "installOpenCode": "Install Open Code (Software Builder)",
+        "installHermes": "Install Hermes (Digital Butler)",
+        "goldenRule": "The Golden Rule: Your agent should almost never need your password. Writing code, installing project packages, and running local apps should all happen safely inside your project folder. If the agent asks for your Mac or Windows password, hit pause. Ask it to explain what it is installing before you even think about approving it.",
+        "opencodeTitle": "Build Websites & Apps",
+        "opencodeDesc": "Full-stack software engineer agent.",
+        "opencodeSubtitle": "Full project builder",
+        "hermesTitle": "Automate Tasks & Digital Butler",
+        "hermesDesc": "Personal assistant with tools and terminal access.",
+        "hermesSubtitle": "Autonomous digital butler",
+        "installBtn": "Install (1-Click)",
+        "installing": "Installing...",
+        "installed": "Installed",
+        "failed": "Installation failed"
+      },
+      "step6": {
+        "badge": "Setup Complete",
+        "title": "Ready to Vibe Code",
+        "desc": "Your environment is linked! All CLI binaries are symlinked to your terminal ($PATH), or you can control them from this canvas.",
+        "whatsNextTitle": "Recommended Next Steps:",
+        "top10Link": "Top 10 Things to Build with Open Code & Hermes",
+        "reportIssues": "Report Issue",
+        "finishBtn": "Launch Workspace",
+        "docsLink": "Documentation"
+      }
+    },
+    "footerTracker": {
+      "stepProgress": "Step {{current}} of {{total}}",
+      "checklistSource": "Source Linked",
+      "checklistHarness": "Harness Installed",
+      "readyBadge": "FrugaLLM Ready",
+      "reopen": "Resume Tour",
+      "reset": "Reset Onboarding",
+      "tour": "Tour",
+      "hide": "Dismiss",
+      "prev": "< Back",
+      "next": "Next >",
+      "skip": "Skip Tour"
+    }
   },
   "portConflict": {
     "title": "PORT CONFLICT DETECTED",

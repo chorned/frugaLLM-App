@@ -54,12 +54,12 @@ pub struct WindowSize {
     pub height: u32,
 }
 
-pub const TARGET_VIEWPORT_WIDTH: u32 = 1920;
-pub const TARGET_VIEWPORT_HEIGHT: u32 = 1080;
+pub const TARGET_VIEWPORT_WIDTH: u32 = 1150;
+pub const TARGET_VIEWPORT_HEIGHT: u32 = 750;
 pub const MIN_VIEWPORT_WIDTH: u32 = 800;
 pub const MIN_VIEWPORT_HEIGHT: u32 = 450;
 
-/// Calculates a responsive 16:9 viewport size that defaults to 1080p (1920x1080)
+/// Calculates a responsive viewport size that defaults to 1150x750
 /// but scales down proportionally to fit comfortably on smaller displays (e.g. laptops)
 /// with safe margins for OS docks, taskbars, and window decorations.
 pub fn calculate_responsive_viewport_size(screen_width: u32, screen_height: u32) -> WindowSize {
@@ -73,7 +73,7 @@ pub fn calculate_responsive_viewport_size(screen_width: u32, screen_height: u32)
         };
     }
 
-    let target_ratio = 16.0 / 9.0;
+    let target_ratio = (TARGET_VIEWPORT_WIDTH as f64) / (TARGET_VIEWPORT_HEIGHT as f64);
     let bound_w = max_avail_w.min(TARGET_VIEWPORT_WIDTH as f64);
     let bound_h = max_avail_h.min(TARGET_VIEWPORT_HEIGHT as f64);
 
@@ -148,7 +148,28 @@ pub fn handle_single_instance(app: &tauri::AppHandle, argv: Vec<String>) {
     let is_wipe = argv.iter().any(|arg| arg == "--wipe");
 
     if is_wipe {
-        eprintln!("[SINGLE_INSTANCE] Warning: --wipe requested while primary instance is active. Rejecting secondary wipe to preserve store and database locks.");
+        eprintln!("[SINGLE_INSTANCE] --wipe requested: executing live deep wipe and resetting workspace...");
+        let app_handle = app.clone();
+        tauri::async_runtime::spawn(async move {
+            crate::commands::agents::execute_deep_wipe(&app_handle).await;
+            let _ = crate::db::wipe_credentials();
+            if let Some(state) = app_handle.try_state::<FrugalConfigState>() {
+                if let Ok(mut config) = state.config.try_lock() {
+                    *config = FrugalConfig::default();
+                    state.is_dirty.store(true, std::sync::atomic::Ordering::Release);
+                }
+            }
+            if let Some(window) = app_handle.get_webview_window("main") {
+                #[cfg(target_os = "macos")]
+                {
+                    let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Regular);
+                }
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+                let _ = window.eval("try { localStorage.clear(); sessionStorage.clear(); } catch(e){} window.location.reload();");
+            }
+        });
         return;
     }
 

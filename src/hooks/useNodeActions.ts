@@ -13,10 +13,12 @@ import {
   getFrugallmConfig,
   getFrugallmServerStatus,
   setCredential,
+  launchNativeAppSession,
 } from '../services/tauri';
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import confetti from 'canvas-confetti';
 import { AppNode } from '../constants/canvas';
+import en from '../locales/en.json';
 
 interface UseNodeActionsProps {
   terminalMode: string | null;
@@ -28,6 +30,7 @@ interface UseNodeActionsProps {
   setIsOpenCodeManaged?: (val: boolean) => void;
   setIsOllamaInstalled: (val: boolean) => void;
   setIsOllamaManaged?: (val: boolean) => void;
+  setIsToolGatewayInstalled?: (val: boolean) => void;
   setNodes: React.Dispatch<React.SetStateAction<AppNode[]>>;
   frugalConfig: any;
   setFrugalConfig: (conf: any) => void;
@@ -45,6 +48,7 @@ export function useNodeActions({
   setIsOpenCodeManaged,
   setIsOllamaInstalled,
   setIsOllamaManaged,
+  setIsToolGatewayInstalled: _setIsToolGatewayInstalled,
   setNodes,
   frugalConfig,
   setFrugalConfig,
@@ -52,7 +56,9 @@ export function useNodeActions({
   setSelectedNodeId,
 }: UseNodeActionsProps) {
   const handleInitializeHermes = () => setTerminalMode('install-hermes');
-  const handleOpenHermes = () => setTerminalMode('run-hermes');
+  const handleOpenHermes = () => {
+    launchNativeAppSession('hermes', undefined, frugalConfig?.hermes_workspace || undefined).catch(console.error);
+  };
   const handleOpenHermesGateway = () => setTerminalMode('run-hermes-gateway');
   const handleOpenHermesDesktop = () => setTerminalMode('run-hermes-desktop');
   const handleOpenHermesWeb = () => setTerminalMode('run-hermes-web');
@@ -95,10 +101,14 @@ export function useNodeActions({
     }
   };
   const handleInitializeOpenCode = () => setTerminalMode('install-opencode');
-  const handleOpenOpenCode = () => setTerminalMode('run-opencode');
+  const handleOpenOpenCode = () => {
+    launchNativeAppSession('opencode', undefined, frugalConfig?.opencode_workspace || undefined).catch(console.error);
+  };
   const handleOpenOpenCodeWeb = () => setTerminalMode('run-opencode-web');
   const handleInitializeOllama = () => setTerminalMode('install-ollama');
-  const handleOpenOllama = () => setTerminalMode('run-ollama');
+  const handleOpenOllama = () => {
+    launchNativeAppSession('ollama').catch(console.error);
+  };
   const handleInstallToolGateway = () => setTerminalMode('install-tool-gateway');
   const handleUninstallToolGateway = () => setTerminalMode('uninstall-tool-gateway');
 
@@ -224,59 +234,62 @@ export function useNodeActions({
     
 
     
+    let saveResult: { ok: boolean; status?: string; error?: string } = { ok: true };
+
     if (nodeId === 'node-google') {
       if (finalConfig.googleApiKey) {
-        await setCredential('google', finalConfig.googleApiKey);
-        await refreshRoutingChain().catch(console.error);
-        finalConfig.status = 'active';
-        finalConfig.keyPrefix = finalConfig.googleApiKey.slice(0, 5);
+        let probeOk = false;
+        let probeStatus = '';
+        let probeError = '';
 
         try {
-          const probeCandidates = [
-            'gemini-flash-latest',
-            'gemini-3.5-flash',
-            'gemma-4-26b-a4b-it'
-          ];
-          let lastStat = 'offline';
-          let verifiedOk = false;
-
-          for (const cand of probeCandidates) {
-            const res = await tauriFetch(
-              `https://generativelanguage.googleapis.com/v1beta/models/${cand}:generateContent?key=${finalConfig.googleApiKey}`,
-              {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  contents: [{ parts: [{ text: 'ping' }] }],
-                  generationConfig: { maxOutputTokens: 1 }
-                })
-              }
-            );
-            if (res.ok) {
-              verifiedOk = true;
-              finalConfig.lastStatus = '200 OK';
-              confetti({
-                particleCount: 150,
-                spread: 70,
-                origin: { y: 0.6 },
-                colors: ['#3b82f6', '#ffffff', '#111827']
-              });
-              break;
-            } else {
-              lastStat = `${res.status}`;
-              if (res.status === 403) {
-                break;
-              }
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 6000);
+          const res = await tauriFetch(
+            `https://generativelanguage.googleapis.com/v1beta/models?key=${finalConfig.googleApiKey}`,
+            {
+              method: 'GET',
+              headers: { 'Content-Type': 'application/json' },
+              signal: controller.signal,
             }
-          }
+          );
+          clearTimeout(timeoutId);
 
-          if (!verifiedOk) {
-            console.error("Google API key test failed", lastStat);
-            finalConfig.lastStatus = lastStat;
+          if (res.ok) {
+            probeOk = true;
+          } else {
+            console.error("Google API key test failed", res.status);
+            probeStatus = `${res.status}`;
+            probeError = en.routingGraph.nodeConfigPanel.inputs.googleApiKey.errorVerificationFailed.replace('{{status}}', String(res.status));
           }
         } catch (e) {
-          console.error("Failed to test google credential", e);
-          finalConfig.lastStatus = 'offline';
+          console.error("Google probe network error", e);
+          probeStatus = 'offline';
+          probeError = en.routingGraph.nodeConfigPanel.inputs.googleApiKey.errorOffline;
+        }
+
+        if (probeOk) {
+          await setCredential('google', finalConfig.googleApiKey);
+          await refreshRoutingChain().catch(console.error);
+          finalConfig.keyPrefix = finalConfig.googleApiKey.slice(0, 5);
+          finalConfig.status = 'active';
+          finalConfig.lastStatus = '200 OK';
+          confetti({
+            particleCount: 150,
+            spread: 70,
+            origin: { y: 0.6 },
+            colors: ['#3b82f6', '#ffffff', '#111827']
+          });
+        } else {
+          // Do not switch into connected/disconnect state: return to original state
+          saveResult = {
+            ok: false,
+            status: probeStatus,
+            error: probeError,
+          };
+          delete finalConfig.keyPrefix;
+          delete finalConfig.status;
+          delete finalConfig.lastStatus;
         }
         delete finalConfig.googleApiKey;
       }
@@ -284,10 +297,9 @@ export function useNodeActions({
     
     if (nodeId === 'node-openrouter') {
       if (finalConfig.apiKey) {
-        await setCredential('openrouter', finalConfig.apiKey);
-        await refreshRoutingChain().catch(console.error);
-        finalConfig.status = 'active';
-        finalConfig.keyPrefix = finalConfig.apiKey.slice(0, 5);
+        let probeOk = false;
+        let probeStatus = '';
+        let probeError = '';
 
         try {
           const res = await tauriFetch(`https://openrouter.ai/api/v1/auth/key`, { 
@@ -299,20 +311,40 @@ export function useNodeActions({
             }
           });
           if (res.ok) {
-            finalConfig.lastStatus = '200 OK';
-            confetti({
-              particleCount: 150,
-              spread: 70,
-              origin: { y: 0.6 },
-              colors: ['#ea580c', '#ffffff', '#111827']
-            });
+            probeOk = true;
           } else {
             console.error("OpenRouter API key test failed", res.status);
-            finalConfig.lastStatus = `${res.status}`;
+            probeStatus = `${res.status}`;
+            probeError = en.routingGraph.nodeConfigPanel.inputs.openRouterApiKey.errorVerificationFailed.replace('{{status}}', String(res.status));
           }
         } catch (e) {
           console.error("Failed to test openrouter credential", e);
-          finalConfig.lastStatus = 'offline';
+          probeStatus = 'offline';
+          probeError = en.routingGraph.nodeConfigPanel.inputs.openRouterApiKey.errorOffline;
+        }
+
+        if (probeOk) {
+          await setCredential('openrouter', finalConfig.apiKey);
+          await refreshRoutingChain().catch(console.error);
+          finalConfig.keyPrefix = finalConfig.apiKey.slice(0, 5);
+          finalConfig.status = 'active';
+          finalConfig.lastStatus = '200 OK';
+          confetti({
+            particleCount: 150,
+            spread: 70,
+            origin: { y: 0.6 },
+            colors: ['#ea580c', '#ffffff', '#111827']
+          });
+        } else {
+          // Do not switch into connected/disconnect state: return to original state
+          saveResult = {
+            ok: false,
+            status: probeStatus,
+            error: probeError,
+          };
+          delete finalConfig.keyPrefix;
+          delete finalConfig.status;
+          delete finalConfig.lastStatus;
         }
         delete finalConfig.apiKey;
       }
@@ -349,6 +381,7 @@ export function useNodeActions({
     }
     
     setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, ...finalConfig } } : n));
+    return saveResult;
   };
 
   return {

@@ -125,6 +125,12 @@ fn main() {
 
     let status = resp.status();
     if status.as_u16() == 401 || status.as_u16() == 403 {
+        if offline_allowed {
+            println!("cargo:warning=OpenRouter benchmarks API returned HTTP {}. Using cached fallback because FRUGAL_OFFLINE_BUILD=1.", status);
+            let fallback = include_bytes!("model_db_fallback.json");
+            let _ = File::create(&dest_path).and_then(|mut f| f.write_all(fallback));
+            return;
+        }
         panic!(
             "\n\n================================================================================\n\
              BUILD FAILURE: OpenRouter benchmarks API returned HTTP {} (Unauthorized/Forbidden)!\n\

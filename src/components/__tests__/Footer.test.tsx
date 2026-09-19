@@ -84,4 +84,47 @@ describe('Footer Component', () => {
     fireEvent.click(githubLink);
     expect(openerPlugin.openUrl).toHaveBeenCalledWith('https://github.com/chorned');
   });
+
+  it('renders OnboardingFooterTracker in center slot when onboarding prop is provided', () => {
+    const onNext = vi.fn();
+    const onPrev = vi.fn();
+    const onSkip = vi.fn();
+
+    render(
+      <Footer
+        onboarding={{
+          state: 'learning',
+          currentStep: 3,
+          isFooterDismissed: false,
+          onNext,
+          onPrev,
+          onSkip,
+        }}
+      />
+    );
+
+    expect(screen.getByTestId('footer-center-slot')).toBeInTheDocument();
+    expect(screen.getByTestId('footer-tracker-learning')).toBeInTheDocument();
+    expect(screen.getByText(/Step 3 of 6/i)).toBeInTheDocument();
+  });
+
+  it('renders minimized terminal CTA and triggers onResume when clicked', () => {
+    const onResume = vi.fn();
+    render(
+      <Footer
+        minimizedTerminal={{
+          mode: 'run-hermes',
+          title: 'Hermes Terminal',
+          onResume,
+        }}
+      />
+    );
+
+    const cta = screen.getByTestId('footer-minimized-terminal-cta');
+    expect(cta).toBeInTheDocument();
+    expect(cta).toHaveTextContent('Hermes Terminal (Click to resume)');
+
+    fireEvent.click(cta);
+    expect(onResume).toHaveBeenCalledTimes(1);
+  });
 });

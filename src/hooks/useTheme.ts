@@ -32,42 +32,55 @@ export function applyThemeToDOM(theme: Theme) {
   }
 }
 
+let globalTheme: Theme = getInitialTheme();
+const listeners = new Set<(t: Theme) => void>();
+
+function updateGlobalTheme(next: Theme) {
+  globalTheme = next;
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(THEME_STORAGE_KEY, next);
+    }
+  } catch {
+    // Ignore storage errors
+  }
+  applyThemeToDOM(next);
+  listeners.forEach((fn) => fn(next));
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === THEME_STORAGE_KEY && (e.newValue === 'dark' || e.newValue === 'light')) {
+      updateGlobalTheme(e.newValue);
+    }
+  });
+}
+
 export function useTheme() {
   const [theme, setThemeState] = useState<Theme>(() => {
     const initial = getInitialTheme();
+    globalTheme = initial;
     applyThemeToDOM(initial);
     return initial;
   });
 
   useEffect(() => {
-    applyThemeToDOM(theme);
-  }, [theme]);
+    const listener = (newTheme: Theme) => {
+      setThemeState(newTheme);
+    };
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  }, []);
 
   const setTheme = useCallback((newTheme: Theme) => {
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.setItem(THEME_STORAGE_KEY, newTheme);
-      }
-    } catch {
-      // Ignore storage errors
-    }
-    applyThemeToDOM(newTheme);
-    setThemeState(newTheme);
+    updateGlobalTheme(newTheme);
   }, []);
 
   const toggleTheme = useCallback(() => {
-    setThemeState((prev) => {
-      const next: Theme = prev === 'dark' ? 'light' : 'dark';
-      try {
-        if (typeof window !== 'undefined' && window.localStorage) {
-          window.localStorage.setItem(THEME_STORAGE_KEY, next);
-        }
-      } catch {
-        // Ignore storage errors
-      }
-      applyThemeToDOM(next);
-      return next;
-    });
+    const next: Theme = globalTheme === 'dark' ? 'light' : 'dark';
+    updateGlobalTheme(next);
   }, []);
 
   return {

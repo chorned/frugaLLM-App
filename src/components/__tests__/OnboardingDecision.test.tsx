@@ -12,19 +12,19 @@ describe('OnboardingDecision Component', () => {
 
     // Assert
     expect(screen.getByRole('heading', { level: 2 })).toBeInTheDocument();
-    expect(screen.getByText(/I want to learn, walk me through it/i)).toBeInTheDocument();
-    expect(screen.getByText(/Doing is learning/i)).toBeInTheDocument();
+    expect(screen.getByText(/Set Up in 5 Minutes \(Guided\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Skip to Workspace/i)).toBeInTheDocument();
   });
 
-  it('triggers onSelect("learning") when the learning option is clicked', () => {
+  it('triggers onSelect("learning") when the guided setup option is clicked', () => {
     // Arrange
     const onSelect = vi.fn();
     render(<OnboardingDecision onSelect={onSelect} />);
 
     // Act
-    const learnButton = screen.getByText(/I want to learn, walk me through it/i).closest('button');
+    const learnButton = screen.getByTestId('onboarding-guided-btn');
     expect(learnButton).not.toBeNull();
-    fireEvent.click(learnButton!);
+    fireEvent.click(learnButton);
 
     // Assert
     expect(onSelect).toHaveBeenCalledWith('learning');
@@ -36,9 +36,9 @@ describe('OnboardingDecision Component', () => {
     render(<OnboardingDecision onSelect={onSelect} />);
 
     // Act
-    const skipButton = screen.getByText(/Doing is learning/i).closest('button');
+    const skipButton = screen.getByTestId('onboarding-skip-btn');
     expect(skipButton).not.toBeNull();
-    fireEvent.click(skipButton!);
+    fireEvent.click(skipButton);
 
     // Assert
     expect(onSelect).toHaveBeenCalledWith('completed');
