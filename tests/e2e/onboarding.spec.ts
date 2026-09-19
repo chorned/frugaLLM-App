@@ -6,13 +6,20 @@ test.describe('Onboarding Flow', () => {
     // Mock Tauri IPC
     await page.addInitScript(() => {
       Object.defineProperty(window, '__TAURI_INTERNALS__', {
-        value: { transformCallback: () => 1234, plugins: { event: { unregisterListener: () => {} } },
-          invoke: (cmd: string, args: any) => {
+        value: {
+          transformCallback: () => 1234,
+          plugins: { event: { unregisterListener: () => {} } },
+          invoke: (cmd: string) => {
             if (cmd === 'is_wipe_mode') return Promise.resolve(false);
             if (cmd === 'get_model_tag_for_vram') return Promise.resolve('gemma4:e2b');
+            if (cmd === 'detect_hardware_profile') return Promise.resolve({ system_ram: 16 * 1024 * 1024 * 1024 });
+            if (cmd === 'check_hermes_status') return Promise.resolve({ is_installed: false });
+            if (cmd === 'check_opencode_status') return Promise.resolve({ is_installed: false });
+            if (cmd === 'check_ollama_status') return Promise.resolve({ is_installed: false });
+            if (cmd === 'get_credential') return Promise.resolve(null);
             return Promise.resolve();
-          }
-        }
+          },
+        },
       });
     });
   });
@@ -22,15 +29,15 @@ test.describe('Onboarding Flow', () => {
     await canvas.goto();
 
     // Verify modal is visible
-    const modalHeading = page.locator('text="Welcome to FrugalLLM"');
+    const modalHeading = page.locator('text="Welcome to FrugaLLM"');
     await expect(modalHeading).toBeVisible();
 
-    // Click "Doing is learning"
-    await page.locator('button:has-text("Doing is learning")').click();
+    // Click "Skip to Workspace"
+    await page.locator('[data-testid="onboarding-skip-btn"]').click();
 
     // Modal should disappear
     await expect(modalHeading).not.toBeVisible();
-    
+
     // Check localStorage
     const onboardingState = await page.evaluate(() => localStorage.getItem('onboardingState'));
     expect(onboardingState).toBe('completed');
@@ -40,23 +47,23 @@ test.describe('Onboarding Flow', () => {
     const canvas = new MainCanvas(page);
     await canvas.goto();
 
-    // Click "I want to learn"
-    await page.locator('button:has-text("I want to learn")').click();
+    // Click "Set Up in 5 Minutes"
+    await page.locator('[data-testid="onboarding-guided-btn"]').click();
 
     // Tooltip should appear
-    const tooltipHeading = page.locator('text="Local Hardware Node"');
+    const tooltipHeading = page.locator('text="Where the Brains Live"');
     await expect(tooltipHeading).toBeVisible();
 
     // Check localStorage
     const onboardingState = await page.evaluate(() => localStorage.getItem('onboardingState'));
     expect(onboardingState).toBe('learning');
 
-    // Click "Finish Tour"
-    await page.locator('button:has-text("Finish Tour")').click();
+    // Click "Skip Tour"
+    await page.locator('[data-testid="onboarding-skip-tour-btn"]').click();
 
     // Tooltip should disappear
     await expect(tooltipHeading).not.toBeVisible();
-    
+
     // Check localStorage
     const finalState = await page.evaluate(() => localStorage.getItem('onboardingState'));
     expect(finalState).toBe('completed');
@@ -67,15 +74,15 @@ test.describe('Onboarding Flow', () => {
     await canvas.goto();
 
     // Start tutorial
-    await page.locator('button:has-text("I want to learn")').click();
+    await page.locator('[data-testid="onboarding-guided-btn"]').click();
 
     // Wait for tooltip card
-    const tooltipHeading = page.locator('text="Local Hardware Node"');
+    const tooltipHeading = page.locator('text="Where the Brains Live"');
     await expect(tooltipHeading).toBeVisible();
 
     // Assert tooltip container stays strictly within viewport margins
     const tooltipBoundingBox = await tooltipHeading.evaluate((el) => {
-      const card = el.closest('div.bg-zen-surface');
+      const card = el.closest('div[data-testid="onboarding-tooltip-card"]');
       if (!card) return null;
       const rect = card.getBoundingClientRect();
       return {
@@ -103,4 +110,3 @@ test.describe('Onboarding Flow', () => {
     await expect(page.locator('[data-testid="spotlight-right"]')).toBeVisible();
   });
 });
-

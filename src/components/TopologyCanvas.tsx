@@ -402,8 +402,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 ? !!(activeProcesses['run-hermes'] || activeProcesses['run-hermes-gateway'] || activeProcesses['run-hermes-desktop'] || activeProcesses['run-hermes-web'] || activeProcesses['hermes-gateway'] || activeProcesses['hermes-dashboard'] || node.data.status === 'active')
                 : !!(activeProcesses['run-opencode'] || activeProcesses['run-opencode-web'] || node.data.status === 'active');
               
-              const statusText = !isInstalled ? 'N/A' : (isRunning ? 'Active' : 'Standby');
-              const statusColor = !isInstalled ? 'var(--zen-text-secondary)' : (isRunning ? '#10B981' : '#eab308');
+              const statusText = !isInstalled ? 'N/A' : (isRunning ? 'Active' : 'Ready');
+              const statusColor = !isInstalled ? 'var(--zen-text-secondary)' : '#10B981';
               const versionText = !isInstalled ? 'N/A' : (isHermes ? hermesVersion : opencodeVersion);
 
               return (

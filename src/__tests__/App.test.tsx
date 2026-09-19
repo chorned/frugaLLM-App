@@ -159,32 +159,82 @@ describe('App Component Integration', () => {
     // Assert: Onboarding decision popup appears
     await waitFor(
       () => {
-        expect(screen.getByText(/I want to learn, walk me through it/i)).toBeInTheDocument();
+        expect(screen.getByText(/Set Up in 5 Minutes \(Guided\)/i)).toBeInTheDocument();
       },
       { timeout: 10000 }
     );
 
     // Act: Click learning walk-through
-    const learnBtn = screen.getByText(/I want to learn, walk me through it/i).closest('button');
+    const learnBtn = screen.getByTestId('onboarding-guided-btn');
     expect(learnBtn).not.toBeNull();
-    fireEvent.click(learnBtn!);
+    fireEvent.click(learnBtn);
 
     // Assert: Overlay with tutorial displays
     await waitFor(
       () => {
-        expect(screen.getByText(/Local Hardware Node/i)).toBeInTheDocument();
-        expect(screen.getByText(/Finish Tour/i)).toBeInTheDocument();
+        expect(screen.getByText(/Where the Brains Live/i)).toBeInTheDocument();
+        expect(screen.getByTestId('onboarding-skip-tour-btn')).toBeInTheDocument();
       },
       { timeout: 10000 }
     );
 
-    // Act: Finish tour
-    fireEvent.click(screen.getByText(/Finish Tour/i));
+    // Act: Skip / finish tour
+    fireEvent.click(screen.getByTestId('onboarding-skip-tour-btn'));
 
     // Assert: Overlay completes
     await waitFor(
       () => {
-        expect(screen.queryByText(/Finish Tour/i)).not.toBeInTheDocument();
+        expect(screen.queryByTestId('onboarding-skip-tour-btn')).not.toBeInTheDocument();
+      },
+      { timeout: 10000 }
+    );
+  }, 15000);
+
+  it('yields onboarding overlay and displays terminal on top when installing a tool in Step 5', async () => {
+    const baseInvoke = (invoke as any).getMockImplementation();
+    (invoke as any).mockImplementation((cmd: string, args: any) => {
+      if (cmd === 'check_opencode_status') return Promise.resolve(false);
+      if (cmd === 'check_hermes_status') return Promise.resolve(false);
+      return baseInvoke(cmd, args);
+    });
+
+    // Arrange: start directly in learning mode on Step 5
+    localStorage.setItem('onboardingState', 'learning');
+    localStorage.setItem('onboardingStep', '5');
+
+    // Act
+    render(<App />);
+
+    // Assert: Step 5 Deploy a Harness appears
+    await waitFor(
+      () => {
+        expect(screen.getByText('Install Your First Tool')).toBeInTheDocument();
+        expect(screen.getByTestId('btn-install-opencode')).toBeInTheDocument();
+      },
+      { timeout: 10000 }
+    );
+
+    // Act: Click Install Open Code (1-Click)
+    fireEvent.click(screen.getByTestId('btn-install-opencode'));
+
+    // Assert: Terminal runner opens and onboarding overlay yields
+    await waitFor(
+      () => {
+        expect(screen.getByText('OpenCode Installation')).toBeInTheDocument();
+        expect(screen.queryByText('Install Your First Tool')).not.toBeInTheDocument();
+      },
+      { timeout: 10000 }
+    );
+
+    // Act: Close the terminal via the hide/close button
+    const hideBtn = screen.getByLabelText('Hide terminal');
+    fireEvent.click(hideBtn);
+
+    // Assert: Onboarding overlay reappears on Step 5 after terminal closes/hides
+    await waitFor(
+      () => {
+        expect(screen.getByText('Install Your First Tool')).toBeInTheDocument();
+        expect(screen.getByText('OpenCode Installation')).not.toBeVisible();
       },
       { timeout: 10000 }
     );
@@ -591,24 +641,18 @@ describe('App Component Integration', () => {
       fireEvent.click(launchHermesBtn);
     });
 
-    // Verify Terminal View opened with Hermes Terminal title
+    // Verify launch_native_app_session was called with appName 'hermes'
     await waitFor(() => {
-      expect(screen.getByText('Hermes Terminal')).toBeInTheDocument();
+      expect(invoke).toHaveBeenCalledWith(
+        'launch_native_app_session',
+        expect.objectContaining({
+          appName: 'hermes',
+        })
+      );
     });
 
-    // Verify spawn_pty was called with sessionId 'run-hermes' and includes $HOME/.local/bin in PATH
-    expect(spawnedCommands).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          sessionId: 'run-hermes',
-          command: 'bash',
-          args: [
-            '-c',
-            expect.stringMatching(/\$HOME\/\.local\/bin.*HERMES_BIN.*"\$HERMES_BIN"/),
-          ],
-        }),
-      ])
-    );
+    // In-app Terminal View overlay should NOT be opened for native CLI CTA
+    expect(screen.queryByText('Hermes Terminal')).not.toBeInTheDocument();
   }, 15000);
 
   it('handles TerminalView close confirmation, cancellation, and termination', async () => {
@@ -903,7 +947,7 @@ describe('App Component Integration', () => {
     }, { timeout: 10000 });
   }, 15000);
 
-  it('allows replacing an existing configured API key and persists credentials even when probe returns 403', async () => {
+  it('shows error banner and does not overwrite credential or switch to connected state when probe returns 403', async () => {
     (tauriFetch as any).mockResolvedValue({
       ok: false,
       status: 403,
@@ -980,7 +1024,7 @@ describe('App Component Integration', () => {
       expect(screen.getByText('DISCONNECT')).toBeInTheDocument();
     });
 
-    // Replace the API key with a new key with prefix 'NEWKY'
+    // Replace the API key with a new bad key with prefix 'NEWKY'
     const input = screen.getByPlaceholderText('•••••••••••••••• (Key Configured)');
     fireEvent.change(input, { target: { value: 'NEWKY_test_replaced_google_api_key' } });
 
@@ -991,25 +1035,20 @@ describe('App Component Integration', () => {
     // Click SAVE CHANGES
     fireEvent.click(saveButton);
 
-    // Verify set_credential was called with the new key!
+    // Verify error banner is displayed
     await waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith('set_credential', {
-        service: 'google',
-        secret: 'NEWKY_test_replaced_google_api_key',
-      });
+      expect(screen.getByTestId('node-google-key-error')).toHaveTextContent('Key verification failed (HTTP 403)');
     });
 
-    // Verify the canvas node now displays the new prefix and 403 error in red
-    await waitFor(() => {
-      const apiKeyDisplay = screen.getByTestId('node-google-api-key');
-      expect(apiKeyDisplay).toHaveTextContent('NEWKY...');
-      const statusDisplay = screen.getByTestId('node-google-status');
-      expect(statusDisplay).toHaveTextContent('403');
-      expect(statusDisplay).toHaveStyle({ color: 'rgb(239, 68, 68)' });
+    // Verify set_credential was NOT called with the bad key!
+    expect(invoke).not.toHaveBeenCalledWith('set_credential', {
+      service: 'google',
+      secret: 'NEWKY_test_replaced_google_api_key',
     });
 
-    // Verify Disconnect button remains visible even when status is 403
-    expect(screen.getByText('DISCONNECT')).toBeInTheDocument();
+    // Verify original key remains on canvas node
+    const apiKeyDisplay = screen.getByTestId('node-google-api-key');
+    expect(apiKeyDisplay).toHaveTextContent('AIzaS...');
   }, 15000);
 
   it('renders report issue CTA button at the bottom of NodeConfigPanel and opens IssueReporterModal', async () => {

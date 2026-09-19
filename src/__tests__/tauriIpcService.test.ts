@@ -44,6 +44,8 @@ describe('Typed Tauri IPC Service Layer (CHO-117)', () => {
     expect(typeof tauriService.installOllama).toBe('function');
     expect(typeof tauriService.installHermes).toBe('function');
     expect(typeof tauriService.installOpenCode).toBe('function');
+    expect(typeof tauriService.launchNativeTerminal).toBe('function');
+    expect(typeof tauriService.launchNativeAppSession).toBe('function');
   });
 
   it('delegates to invoke with exact command names and argument signatures', async () => {
@@ -65,6 +67,23 @@ describe('Typed Tauri IPC Service Layer (CHO-117)', () => {
     mockInvoke.mockResolvedValueOnce(undefined);
     await tauriService.spawnPty('bash', ['-c', 'echo hello'], 'run-test');
     expect(mockInvoke).toHaveBeenCalledWith('spawn_pty', { sessionId: 'run-test', command: 'bash', args: ['-c', 'echo hello'] });
+
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await tauriService.launchNativeTerminal('echo hi', '/tmp', { FOO: 'bar' }, 'My Title');
+    expect(mockInvoke).toHaveBeenCalledWith('launch_native_terminal', {
+      command: 'echo hi',
+      cwd: '/tmp',
+      envVars: { FOO: 'bar' },
+      title: 'My Title',
+    });
+
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await tauriService.launchNativeAppSession('hermes', undefined, '/workspace');
+    expect(mockInvoke).toHaveBeenCalledWith('launch_native_app_session', {
+      appName: 'hermes',
+      model: null,
+      workspaceOverride: '/workspace',
+    });
 
     mockInvoke.mockResolvedValueOnce(undefined);
     await tauriService.deleteLocalModel();

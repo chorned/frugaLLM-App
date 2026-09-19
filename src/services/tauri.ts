@@ -285,3 +285,24 @@ export async function retryFrugallmServer(): Promise<any> {
 export async function checkHermesReady(): Promise<boolean> {
   return invoke<boolean>('check_hermes_ready');
 }
+
+export async function launchNativeTerminal(
+  command: string,
+  cwd?: string,
+  envVars?: Record<string, string>,
+  title?: string
+): Promise<void> {
+  return invoke<void>('launch_native_terminal', { command, cwd, envVars, title });
+}
+
+export async function launchNativeAppSession(
+  appName: 'hermes' | 'opencode' | 'ollama',
+  model?: string,
+  workspaceOverride?: string
+): Promise<void> {
+  return invoke<void>('launch_native_app_session', {
+    appName,
+    model: model || null,
+    workspaceOverride: workspaceOverride || null,
+  });
+}

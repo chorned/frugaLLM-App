@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { TerminalView } from './TerminalView';
 import { checkHermesStatus, checkOpencodeStatus, checkOllamaStatus, checkToolGatewayStatus, getOllamaChatModel, refreshRoutingChain } from '../services/tauri';
 import { AppNode } from '../constants/canvas';
@@ -53,13 +54,28 @@ export const TerminalOverlays: React.FC<TerminalOverlaysProps> = ({
   setNodes,
   memoryRef,
 }) => {
-  return (
+  const content = (
     <>
       {TERMINAL_MODES.map((mode) => {
         const isActive = activeProcesses[mode] || terminalMode === mode;
         if (!isActive) return null;
         return (
-          <div key={mode} style={{ display: terminalMode === mode ? 'flex' : 'none', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, zIndex: 50, backgroundColor: 'rgba(0, 0, 0, 0.3)', backdropFilter: 'blur(8px)' }}>
+          <div
+            key={mode}
+            data-testid={`terminal-overlay-${mode}`}
+            style={{
+              display: terminalMode === mode ? 'flex' : 'none',
+              width: '100%',
+              height: '100%',
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              zIndex: 10000,
+              backgroundColor: 'rgba(0, 0, 0, 0.45)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+            }}
+          >
             <TerminalView
                mode={mode}
                sessionId={mode}
@@ -105,5 +121,10 @@ export const TerminalOverlays: React.FC<TerminalOverlaysProps> = ({
       })}
     </>
   );
+
+  if (typeof document !== 'undefined' && document.body) {
+    return createPortal(content, document.body);
+  }
+  return content;
 };
 

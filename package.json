@@ -10,8 +10,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview",
-    "tauri": "tauri",
+    "tauri": "node scripts/run-tauri.mjs",
+    "wipe": "node scripts/run-tauri.mjs dev -- -- --wipe",
     "test:rust": "cd src-tauri && CARGO_TARGET_DIR=target_test FRUGAL_OFFLINE_BUILD=1 cargo test -- --test-threads=1",
     "test:unit": "vitest run",
     "test:coverage": "vitest run --coverage",

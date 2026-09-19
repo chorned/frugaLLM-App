@@ -27,7 +27,7 @@ if (import.meta.env.DEV) {
 export interface NodeConfigPanelProps {
   node: any;
   onClose: () => void;
-  onSave: (nodeId: string, data: any) => Promise<void> | void;
+  onSave: (nodeId: string, data: any) => Promise<any> | void;
   onOpenIssueReporter?: () => void;
   isHermesInstalled: boolean;
   isHermesManaged?: boolean;
@@ -78,6 +78,11 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
   const [initialData, setInitialData] = useState<any>(null);
   const [initialEnablePassword, setInitialEnablePassword] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setKeyError(null);
+  }, [node.id]);
 
   useEffect(() => {
     const vramNum = Number(detectedVram) || 0;
@@ -237,9 +242,46 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
     );
   })();
 
-  const handleChange = (e: any) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+  const handleChange = (e: any) => {
+    if (keyError) setKeyError(null);
+    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+  };
+
+  const effectiveKeyError = keyError || (
+    (node.id === 'node-google' || node.id === 'node-openrouter') &&
+    node.data.lastStatus &&
+    node.data.lastStatus !== '200 OK' &&
+    node.data.lastStatus !== 'active' &&
+    !formData.googleApiKey &&
+    !formData.apiKey
+      ? (node.data.lastStatus === 'offline'
+          ? (node.id === 'node-google'
+              ? en.routingGraph.nodeConfigPanel.inputs.googleApiKey.errorOffline
+              : en.routingGraph.nodeConfigPanel.inputs.openRouterApiKey.errorOffline)
+          : (node.id === 'node-google'
+              ? en.routingGraph.nodeConfigPanel.inputs.googleApiKey.errorVerificationFailed.replace('{{status}}', String(node.data.lastStatus))
+              : en.routingGraph.nodeConfigPanel.inputs.openRouterApiKey.errorVerificationFailed.replace('{{status}}', String(node.data.lastStatus))))
+      : null
+  );
+
   const handleSave = async () => {
     if (!hasChanges || isSaving) return;
+
+    if (node.id === 'node-google' && formData.googleApiKey) {
+      const trimmed = formData.googleApiKey.trim();
+      if (trimmed.startsWith('sk-or-') || trimmed.startsWith('sk-')) {
+        setKeyError(en.routingGraph.nodeConfigPanel.inputs.googleApiKey.errorMismatched);
+        return;
+      }
+    }
+    if (node.id === 'node-openrouter' && formData.apiKey) {
+      const trimmed = formData.apiKey.trim();
+      if (trimmed.startsWith('AIza')) {
+        setKeyError(en.routingGraph.nodeConfigPanel.inputs.openRouterApiKey.errorMismatched);
+        return;
+      }
+    }
+
     setIsSaving(true);
     try {
       if (node.id === 'node-frugallm') {
@@ -265,7 +307,12 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
         api_password: enablePassword ? formData.api_password : '',
         manual_model_overrides: formData.manual_model_overrides
       };
-      await onSave(node.id, dataToSave);
+      const saveRes = await onSave(node.id, dataToSave);
+      if (saveRes && !saveRes.ok) {
+        setKeyError(saveRes.error || 'Key verification failed');
+      } else {
+        setKeyError(null);
+      }
       const resetForm = {
         ...formData,
         apiKey: '',
@@ -274,8 +321,9 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
       setFormData(resetForm);
       setInitialData({ ...resetForm });
       setInitialEnablePassword(enablePassword);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to save node config:', err);
+      setKeyError(err?.message || 'Failed to save configuration');
     } finally {
       setIsSaving(false);
     }
@@ -737,6 +785,23 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
                       </a>
                     )}
                   </div>
+                  {effectiveKeyError && (
+                    <div
+                      data-testid="node-openrouter-key-error"
+                      style={{
+                        marginTop: '8px',
+                        fontSize: '0.75rem',
+                        color: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        borderRadius: '8px',
+                        padding: '8px 12px',
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      {effectiveKeyError}
+                    </div>
+                  )}
                 </div>
               )}
               {node.id === 'node-google' && (
@@ -788,6 +853,23 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
                       </a>
                     )}
                   </div>
+                  {effectiveKeyError && (
+                    <div
+                      data-testid="node-google-key-error"
+                      style={{
+                        marginTop: '8px',
+                        fontSize: '0.75rem',
+                        color: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        borderRadius: '8px',
+                        padding: '8px 12px',
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      {effectiveKeyError}
+                    </div>
+                  )}
                 </div>
               )}
             </>
@@ -1282,7 +1364,7 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 600 }}>ARE YOU SURE?</span>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={(e) => { e.stopPropagation(); handleDisconnectOpenRouter(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>YES</button>
+                <button onClick={(e) => { e.stopPropagation(); handleDisconnectOpenRouter(); setKeyError(null); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>YES</button>
                 <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>NO</button>
               </div>
             </div>
@@ -1305,7 +1387,7 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 600 }}>ARE YOU SURE?</span>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={(e) => { e.stopPropagation(); handleDisconnectGoogle(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>YES</button>
+                <button onClick={(e) => { e.stopPropagation(); handleDisconnectGoogle(); setKeyError(null); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>YES</button>
                 <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>NO</button>
               </div>
             </div>

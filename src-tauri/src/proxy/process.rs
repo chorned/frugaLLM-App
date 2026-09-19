@@ -123,6 +123,14 @@ impl ChildProcessManager {
         let _ = pid;
     }
 
+    pub fn is_running(&self, key: &str) -> bool {
+        if let Ok(lock) = self.processes.lock() {
+            lock.contains_key(key)
+        } else {
+            false
+        }
+    }
+
     pub fn unregister(&self, key: &str) {
         if let Ok(mut lock) = self.processes.lock() {
             lock.remove(key);

@@ -817,6 +817,50 @@ pub fn wipe_opencode(home: &std::path::Path) {
     }
 }
 
+pub fn wipe_hermes(home: &std::path::Path) {
+    let _ = std::fs::remove_dir_all(home.join(".hermes"));
+    let _ = std::fs::remove_dir_all(home.join(".config").join("hermes"));
+    let _ = std::fs::remove_dir_all(home.join(".cache").join("hermes"));
+    let _ = std::fs::remove_file(home.join(".local").join("bin").join(if cfg!(windows) { "hermes.exe" } else { "hermes" }));
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::fs::remove_file(home.join(".local").join("bin").join("hermes.cmd"));
+        if let Ok(local) = std::env::var("LOCALAPPDATA") {
+            let _ = std::fs::remove_dir_all(std::path::PathBuf::from(local).join("hermes"));
+        }
+        if let Ok(roaming) = std::env::var("APPDATA") {
+            let _ = std::fs::remove_dir_all(std::path::PathBuf::from(roaming).join("hermes"));
+        }
+    }
+}
+
+pub fn execute_cli_wipe() {
+    println!("Wiping credentials, store, and agent configurations...");
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = std::process::Command::new("pkill").args(["-9", "-f", "hermes"]).output();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let mut kill = std::process::Command::new("taskkill");
+        kill.args(["/F", "/IM", "hermes.exe", "/T"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            kill.creation_flags(0x08000000);
+        }
+        let _ = kill.output();
+    }
+    let _ = crate::db::wipe_credentials();
+    if let Some(h) = dirs::home_dir() {
+        wipe_opencode(&h);
+        wipe_hermes(&h);
+        let _ = std::fs::remove_dir_all(h.join(".ollama"));
+    }
+}
+
 #[tauri::command(async)]
 pub async fn uninstall_opencode(app: tauri::AppHandle) -> Result<(), String> {
     if !is_installation_managed(&app, "opencode").await {
@@ -974,49 +1018,33 @@ pub async fn execute_deep_wipe(app: &tauri::AppHandle) {
     let _ = uninstall_opencode(app.clone()).await;
     let _ = uninstall_hermes(app.clone()).await;
 
+    // Terminate any running hermes processes
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = tokio::process::Command::new("pkill").args(["-9", "-f", "hermes"]).output().await;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let mut kill = tokio::process::Command::new("taskkill");
+        kill.args(["/F", "/IM", "hermes.exe", "/T"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .creation_flags(0x08000000);
+        let _ = kill.output().await;
+    }
+
     if let Ok(home) = app.path().home_dir() {
-        if is_installation_managed(app, "opencode").await {
-            wipe_opencode(&home);
-        }
-        if is_installation_managed(app, "hermes").await {
-            let _ = tokio::fs::remove_dir_all(home.join(".hermes")).await;
-        }
-        if is_installation_managed(app, "ollama").await {
-            let _ = tokio::fs::remove_dir_all(home.join(".ollama")).await;
-        }
+        wipe_opencode(&home);
+        wipe_hermes(&home);
+        let _ = tokio::fs::remove_dir_all(home.join(".ollama")).await;
     }
 
     #[cfg(target_os = "windows")]
     {
-        if is_installation_managed(app, "hermes").await {
-            if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-                let _ = tokio::fs::remove_dir_all(std::path::PathBuf::from(&local_app_data).join("hermes")).await;
-            }
-            if let Ok(app_data) = std::env::var("APPDATA") {
-                let _ = tokio::fs::remove_dir_all(std::path::PathBuf::from(&app_data).join("hermes")).await;
-            }
-        }
-        if is_installation_managed(app, "ollama").await {
-            if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-                let p = std::path::PathBuf::from(&local_app_data);
-                let _ = tokio::fs::remove_dir_all(p.join("Ollama")).await;
-                let _ = tokio::fs::remove_dir_all(p.join("Programs").join("Ollama")).await;
-            }
-        }
-        if is_installation_managed(app, "opencode").await {
-            if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-                let _ = tokio::fs::remove_dir_all(std::path::PathBuf::from(&local_app_data).join("Programs").join("opencode")).await;
-            }
-            if let Ok(app_data) = std::env::var("APPDATA") {
-                let p = std::path::PathBuf::from(&app_data);
-                let _ = tokio::fs::remove_dir_all(p.join("opencode")).await;
-                let npm_dir = p.join("npm");
-                let _ = tokio::fs::remove_file(npm_dir.join("opencode.exe")).await;
-                let _ = tokio::fs::remove_file(npm_dir.join("opencode.cmd")).await;
-                let _ = tokio::fs::remove_file(npm_dir.join("opencode")).await;
-                let _ = tokio::fs::remove_dir_all(npm_dir.join("node_modules").join("opencode")).await;
-                let _ = tokio::fs::remove_dir_all(npm_dir.join("node_modules").join("opencode-ai")).await;
-            }
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let p = std::path::PathBuf::from(&local_app_data);
+            let _ = tokio::fs::remove_dir_all(p.join("Ollama")).await;
+            let _ = tokio::fs::remove_dir_all(p.join("Programs").join("Ollama")).await;
         }
     }
 

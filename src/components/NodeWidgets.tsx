@@ -542,7 +542,7 @@ export const HardwareNode = ({
             <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>Active Model</span>
             {(() => {
               const rawName = isOllamaOnline
-                ? (telemetry?.ollama?.model_name || memory.activeModelName || 'None')
+                ? (telemetry?.ollama?.model_name || 'None')
                 : 'None';
               const displayName = rawName.replace(/^library\//, '').replace(/frugallm-active.*/, 'gemma4').replace(/:latest$/, '');
               const hasActiveModel = isOllamaOnline && displayName !== 'None';
