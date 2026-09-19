@@ -71,4 +71,73 @@ describe('Release Draft and Version Synchronization', () => {
       expect(notes).toContain(`https://github.com/chorned/frugaLLM-App/releases/download/v${pkg.version}/${asset}`);
     }
   });
+
+  it('validates CHANGELOG.md Keep a Changelog format, SemVer ordering, and release entries', () => {
+    const packageJsonPath = path.join(rootDir, 'package.json');
+    const changelogPath = path.join(rootDir, 'CHANGELOG.md');
+
+    const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+    const changelogContent = fs.readFileSync(changelogPath, 'utf-8');
+
+    // Header validation
+    expect(changelogContent).toContain('# Changelog');
+    expect(changelogContent).toContain('Keep a Changelog');
+    expect(changelogContent).toContain('Semantic Versioning');
+
+    // Extract all version entries: ## [X.Y.Z] - YYYY-MM-DD
+    const versionHeaderRegex = /^## \[(\d+\.\d+\.\d+)\]\s*-\s*(\d{4}-\d{2}-\d{2})$/gm;
+    const entries: { version: string; date: string; index: number }[] = [];
+    let match;
+
+    while ((match = versionHeaderRegex.exec(changelogContent)) !== null) {
+      entries.push({
+        version: match[1],
+        date: match[2],
+        index: match.index,
+      });
+    }
+
+    expect(entries.length).toBeGreaterThanOrEqual(4);
+
+    // Latest version matches package.json
+    expect(entries[0].version).toBe(pkg.version);
+
+    // Verify specifically documented releases: 0.0.18, 0.0.17, and 0.0.16
+    const versions = entries.map((e) => e.version);
+    expect(versions).toContain('0.0.18');
+    expect(versions).toContain('0.0.17');
+    expect(versions).toContain('0.0.16');
+
+    // Verify descending SemVer ordering
+    for (let i = 0; i < entries.length - 1; i++) {
+      const vCurrent = entries[i].version.split('.').map(Number);
+      const vNext = entries[i + 1].version.split('.').map(Number);
+
+      const isGreater =
+        vCurrent[0] > vNext[0] ||
+        (vCurrent[0] === vNext[0] && vCurrent[1] > vNext[1]) ||
+        (vCurrent[0] === vNext[0] && vCurrent[1] === vNext[1] && vCurrent[2] > vNext[2]);
+
+      expect(isGreater, `Version ${entries[i].version} must be greater than ${entries[i + 1].version}`).toBe(true);
+    }
+
+    // Verify valid standard section headers (Added, Fixed, Changed) for documented releases
+    const expectedSections = ['### Added', '### Fixed', '### Changed'];
+    for (const v of ['0.0.18', '0.0.17', '0.0.16']) {
+      const sectionStart = changelogContent.indexOf(`## [${v}]`);
+      expect(sectionStart).toBeGreaterThan(-1);
+
+      const nextSectionStart = changelogContent.indexOf('## [', sectionStart + 10);
+      const releaseBlock = changelogContent.substring(
+        sectionStart,
+        nextSectionStart !== -1 ? nextSectionStart : undefined
+      );
+
+      const hasValidSubheading = expectedSections.some((heading) => releaseBlock.includes(heading));
+      expect(hasValidSubheading, `Release ${v} must contain standard Keep a Changelog subheadings`).toBe(true);
+
+      // Verify list items exist in the release block
+      expect(releaseBlock).toMatch(/- \*\*[^*]+\*\*:/);
+    }
+  });
 });
