@@ -5,6 +5,41 @@ All notable changes to the **FrugaLLM** project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.18] - 2026-09-18
+
+### Added
+- **Guided Onboarding Experience & Interactive Setup**: Introduced an interactive 7-step guided onboarding tutorial overlay, first-launch decision modal, native terminal runner for agent installation, and live step progress tracking.
+- **Quick Provider Key Acquisition**: Replaced static key placeholders with direct "Get Key" provider hyperlinks for streamlined initial credential configuration.
+- **Native Terminal Execution Engine**: Added cross-platform pseudo-terminal command execution and streaming in the Tauri backend for tool installations.
+- **Comprehensive QA Test Suite**: Added rigorous test coverage across onboarding state transitions, footer trackers, credential validation boundaries, and single-instance deep-wipe handlers.
+
+### Fixed
+- **Responsive Window Viewport Sizing**: Defaulted initial viewport dimensions to 1150x750 with safe screen boundary clamping, preventing oversized or stale window restoration across varied display resolutions.
+- **Build Credential Protection**: Protected local and CI build credentials via `.env.build` resolution while ensuring reliable debug profile fallbacks and offline build support.
+
+---
+
+## [0.0.17] - 2026-09-15
+
+### Fixed
+- **Vulnerability Remediation within SemVer Bounds**: Remediated high-severity security advisories across npm and Cargo ecosystems, eliminating CVEs in `serialize-javascript` (GHSA-5c6j-r48x-rmvq, GHSA-qj8w-gfj5-8c6v), `sharp` (GHSA-f88m-g3jw-g9cj, GHSA-rgj7-g3m4-5g8c), and `adm-zip` (GHSA-xcpc-8h2w-3j85, GHSA-vwc7-r8mq-g2x9) via non-breaking dependency overrides.
+
+### Changed
+- **CI Security & Least-Privilege Hardening**: Enforced least-privilege token permissions across GitHub Actions workflows and pinned automation commands to safeguard repository pipelines.
+- **Cargo Dependency Synchronization**: Updated transitive crates (`synstructure`, `yoke-derive`, `zerofrom-derive`) in the Cargo lockfile for complete multi-platform stability across macOS, Windows, and Linux.
+
+---
+
+## [0.0.16] - 2026-09-15
+
+### Added
+- **OpenSSF Best Practices & Scorecard Remediation**: Integrated OpenSSF Best Practices badge, expanded security criteria compliance, and added automated Scorecard security auditing.
+- **Lifecycle Installation Provenance Tracking**: Added guarded installation provenance tracking across supported external agent tools.
+
+### Fixed
+- **Windows Handle Pointer Type Mismatch**: Resolved integer/pointer comparison type mismatch for Windows ConPTY process handle management.
+- **CI Matrix Offline Fallback**: Added `FRUGAL_OFFLINE_BUILD=1` fallback across the cross-platform release matrix.
+
 ---
 
 ## [0.0.15] - 2026-09-15
