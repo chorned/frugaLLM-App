@@ -1,20 +1,22 @@
-# FrugaLLM v0.0.17 Release Notes
+# FrugaLLM v0.0.18 Release Notes
 
 ### 🚀 Features
-- **Guarded Dependency Security Hardening**: Enforced patched, modern versions across image processing and serialization libraries while preserving strict SemVer boundaries and API stability.
+- **Guided Onboarding Experience & Interactive Setup**: Introduced an interactive 7-step guided onboarding overlay, first-launch decision modal, native terminal runner for agent installation, and live progress tracking.
+- **Quick Provider Key Acquisition**: Replaced static key placeholders with direct "Get Key" provider hyperlinks for streamlined initial credential configuration.
 
 ### 🐛 Fixes
-- **Vulnerability Remediation within SemVer Bounds**: Remediated high-severity security advisories across npm and Cargo ecosystems, eliminating CVEs in `serialize-javascript` (GHSA-5c6j-r48x-rmvq, GHSA-qj8w-gfj5-8c6v), `sharp` (GHSA-f88m-g3jw-g9cj, GHSA-rgj7-g3m4-5g8c), and `adm-zip` (GHSA-xcpc-8h2w-3j85, GHSA-vwc7-r8mq-g2x9) via non-breaking dependency overrides.
+- **Responsive Window Viewport Sizing**: Defaulted initial viewport dimensions to 1150x750 with safe screen boundary clamping, preventing oversized or stale window restoration across varied display resolutions.
+- **Build Credential Protection**: Protected local and CI build credentials via `.env.build` resolution while ensuring reliable debug profile fallbacks and offline build support.
 
 ### 🔧 Under the Hood
-- **CI Security & Least-Privilege Hardening**: Enforced least-privilege token permissions across GitHub Actions workflows and pinned automation commands to safeguard repository pipelines.
-- **Cargo Dependency Synchronization**: Updated transitive crates (`synstructure`, `yoke-derive`, `zerofrom-derive`) in the Cargo lockfile for complete multi-platform stability across macOS, Windows, and Linux.
+- **Native Terminal Execution Engine**: Added cross-platform pseudo-terminal command execution and streaming in the Tauri backend for tool installations.
+- **Comprehensive QA Test Suite**: Added rigorous test coverage across onboarding state transitions, footer trackers, credential validation boundaries, and single-instance deep-wipe handlers.
 
 ### 📦 Downloads & Installation
 
 | Platform | Variant / Architecture | Direct Download |
 | :--- | :--- | :--- |
-| **macOS** | Universal (Apple Silicon & Intel) | [frugallm-app_0.0.17_universal.dmg](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.17/frugallm-app_0.0.17_universal.dmg) |
-| **Windows** | Standard Installer (`.exe`) | [frugallm-app_0.0.17_x64-setup.exe](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.17/frugallm-app_0.0.17_x64-setup.exe) |
-| **Ubuntu** | Debian Installer (`.deb`) | [frugallm-app_0.0.17_amd64.deb](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.17/frugallm-app_0.0.17_amd64.deb) |
-| **SteamOS** | Universal Portable (`.AppImage`) | [frugallm-app_0.0.17_amd64.AppImage](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.17/frugallm-app_0.0.17_amd64.AppImage) |
+| **macOS** | Universal (Apple Silicon & Intel) | [frugallm-app_0.0.18_universal.dmg](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.18/frugallm-app_0.0.18_universal.dmg) |
+| **Windows** | Standard Installer (`.exe`) | [frugallm-app_0.0.18_x64-setup.exe](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.18/frugallm-app_0.0.18_x64-setup.exe) |
+| **Ubuntu** | Debian Installer (`.deb`) | [frugallm-app_0.0.18_amd64.deb](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.18/frugallm-app_0.0.18_amd64.deb) |
+| **SteamOS** | Universal Portable (`.AppImage`) | [frugallm-app_0.0.18_amd64.AppImage](https://github.com/chorned/frugaLLM-App/releases/download/v0.0.18/frugallm-app_0.0.18_amd64.AppImage) |
