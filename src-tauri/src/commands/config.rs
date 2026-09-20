@@ -277,9 +277,11 @@ pub fn sync_windows_path(home: &std::path::Path, enable: bool) -> Result<(), Str
         )
     };
 
-    let _ = std::process::Command::new("powershell")
-        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
-        .output();
+    use std::os::windows::process::CommandExt;
+    let mut cmd = std::process::Command::new("powershell");
+    cmd.creation_flags(0x08000000);
+    cmd.args(["-NoProfile", "-NonInteractive", "-Command", &script]);
+    let _ = cmd.output();
 
     Ok(())
 }
@@ -324,11 +326,12 @@ pub fn get_global_cli_commands_status(_app: tauri::AppHandle) -> Result<bool, St
 
     #[cfg(windows)]
     {
+        use std::os::windows::process::CommandExt;
         let script = "[Environment]::GetEnvironmentVariable('Path', 'User')";
-        if let Ok(output) = std::process::Command::new("powershell")
-            .args(["-NoProfile", "-NonInteractive", "-Command", script])
-            .output()
-        {
+        let mut cmd = std::process::Command::new("powershell");
+        cmd.creation_flags(0x08000000);
+        cmd.args(["-NoProfile", "-NonInteractive", "-Command", script]);
+        if let Ok(output) = cmd.output() {
             let stdout = String::from_utf8_lossy(&output.stdout);
             if stdout.contains(".hermes\\bin") || stdout.contains(".local\\bin") {
                 return Ok(true);

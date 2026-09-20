@@ -182,12 +182,14 @@ use std::collections::{HashMap, HashSet};
         drop(pair.slave); // close slave so reader gets EOF when child exits
 
         let mut reader = pair.master.try_clone_reader().unwrap();
+        let mut _writer = pair.master.take_writer().ok();
         #[cfg(windows)]
         {
             use std::io::Write;
-            let mut writer = pair.master.take_writer().unwrap();
-            let _ = writer.write_all(b"\x1b[1;1R");
-            let _ = writer.flush();
+            if let Some(ref mut w) = _writer {
+                let _ = w.write_all(b"\x1b[1;1R");
+                let _ = w.flush();
+            }
         }
         
         std::thread::spawn(move || {
@@ -246,12 +248,14 @@ use std::collections::{HashMap, HashSet};
         drop(pair.slave);
 
         let mut reader = pair.master.try_clone_reader().unwrap();
+        let mut _writer = pair.master.take_writer().ok();
         #[cfg(windows)]
         {
             use std::io::Write;
-            let mut writer = pair.master.take_writer().unwrap();
-            let _ = writer.write_all(b"\x1b[1;1R");
-            let _ = writer.flush();
+            if let Some(ref mut w) = _writer {
+                let _ = w.write_all(b"\x1b[1;1R");
+                let _ = w.flush();
+            }
         }
 
         std::thread::spawn(move || {
@@ -845,6 +849,13 @@ use std::collections::{HashMap, HashSet};
         assert_eq!(models_custom.len(), 1);
         assert_eq!(models_custom[0].model.model, "llama3:8b");
         assert_eq!(models_custom[0].model.context_length, Some(131_072));
+
+        // 4. Empty models list returned (e.g. Ollama installed but no models pulled)
+        let json_empty = serde_json::json!({
+            "models": []
+        });
+        let models_empty = parse_ollama_models(&json_empty);
+        assert_eq!(models_empty.len(), 0);
     }
 
     #[test]

@@ -12,7 +12,7 @@
     "build": "tsc && vite build",
     "tauri": "node scripts/run-tauri.mjs",
     "wipe": "node scripts/run-tauri.mjs dev -- -- --wipe",
-    "test:rust": "cd src-tauri && CARGO_TARGET_DIR=target_test FRUGAL_OFFLINE_BUILD=1 cargo test -- --test-threads=1",
+    "test:rust": "node scripts/test-rust.mjs",
     "test:unit": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
