@@ -422,6 +422,7 @@ pub fn check_available_disk_space(target_path: &std::path::Path, required_bytes:
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn format_diagnostic_snapshot_header(
     app_version: &str,
     os_info: &str,

@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
         let home = temp_dir.path();
         
         // Initially not installed
-        assert_eq!(is_hermes_installed(home), false);
+        assert!(!is_hermes_installed(home));
         
         // Mock installation in .hermes/bin
         let bin_dir = home.join(".hermes").join("bin");
@@ -20,7 +20,7 @@ use std::collections::{HashMap, HashSet};
         let hermes_exe = bin_dir.join(exe_name);
         fs::File::create(&hermes_exe).unwrap();
         
-        assert_eq!(is_hermes_installed(home), true);
+        assert!(is_hermes_installed(home));
         assert_eq!(get_hermes_source_path(home), Some(hermes_exe));
     }
 
@@ -29,7 +29,7 @@ use std::collections::{HashMap, HashSet};
         let temp_dir = tempfile::tempdir().unwrap();
         let home = temp_dir.path();
         
-        assert_eq!(is_hermes_installed(home), false);
+        assert!(!is_hermes_installed(home));
         assert_eq!(get_hermes_source_path(home), None);
         
         // Mock installation in .local/bin (standard install script path)
@@ -40,7 +40,7 @@ use std::collections::{HashMap, HashSet};
         let hermes_exe = bin_dir.join(exe_name);
         fs::File::create(&hermes_exe).unwrap();
         
-        assert_eq!(is_hermes_installed(home), true);
+        assert!(is_hermes_installed(home));
         assert_eq!(get_hermes_source_path(home), Some(hermes_exe));
     }
 
@@ -49,7 +49,7 @@ use std::collections::{HashMap, HashSet};
         let temp_dir = tempfile::tempdir().unwrap();
         let home = temp_dir.path();
         
-        assert_eq!(is_opencode_installed(home), false);
+        assert!(!is_opencode_installed(home));
         
         let bin_dir = home.join(".local").join("bin");
         fs::create_dir_all(&bin_dir).unwrap();
@@ -58,7 +58,7 @@ use std::collections::{HashMap, HashSet};
         let opencode_exe = bin_dir.join(exe_name);
         fs::File::create(&opencode_exe).unwrap();
         
-        assert_eq!(is_opencode_installed(home), true);
+        assert!(is_opencode_installed(home));
     }
 
     #[test]
@@ -116,8 +116,8 @@ use std::collections::{HashMap, HashSet};
         let path_str = mock_ollama_path.to_str().unwrap();
         let paths = vec![path_str];
         
-        assert_eq!(is_ollama_in_paths(&paths), true);
-        assert_eq!(is_ollama_in_paths(&["/invalid/nonexistent/path/to/ollama"]), false);
+        assert!(is_ollama_in_paths(&paths));
+        assert!(!is_ollama_in_paths(&["/invalid/nonexistent/path/to/ollama"]));
     }
 
     #[test]
@@ -1973,21 +1973,21 @@ HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bf
         let bin_subpath1 = app_bundle_dir.join("Contents").join("Resources").join("ollama");
         let bin_subpath2 = app_bundle_dir.join("Contents").join("MacOS").join("Ollama");
 
-        let checked_paths = vec![
+        let checked_paths = [
             bin_subpath1.to_string_lossy().to_string(),
             bin_subpath2.to_string_lossy().to_string(),
         ];
         let str_refs: Vec<&str> = checked_paths.iter().map(|s| s.as_str()).collect();
 
         // Because the bare folder exists but neither executable binary exists inside Contents, is_ollama_in_paths must return false
-        assert_eq!(is_ollama_in_paths(&str_refs), false);
+        assert!(!is_ollama_in_paths(&str_refs));
 
         // Now create an actual binary inside Contents/MacOS/Ollama
         fs::create_dir_all(bin_subpath2.parent().unwrap()).unwrap();
         fs::File::create(&bin_subpath2).unwrap();
 
         // Once the actual binary exists, detection returns true
-        assert_eq!(is_ollama_in_paths(&str_refs), true);
+        assert!(is_ollama_in_paths(&str_refs));
     }
 
     #[tokio::test]

@@ -878,7 +878,7 @@ async fn try_cloud_provider(
                             app,
                             "ERROR",
                             "ROUTER",
-                            &format!("Google provider quota exhausted project-wide. Provider circuit breaker engaged for 60s."),
+                            "Google provider quota exhausted project-wide. Provider circuit breaker engaged for 60s.",
                         );
                     }
                 }
