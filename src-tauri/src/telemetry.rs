@@ -211,6 +211,24 @@ pub fn is_time_jump_detected(elapsed: Duration, expected_interval: Duration, mul
     elapsed.as_secs_f64() > expected_interval.as_secs_f64() * multiplier
 }
 
+pub fn should_trigger_power_resume(
+    sleep_elapsed: Duration,
+    expected_interval: Duration,
+    multiplier: f64,
+    last_resume: Option<std::time::Instant>,
+    debounce_duration: Duration,
+) -> bool {
+    if !is_time_jump_detected(sleep_elapsed, expected_interval, multiplier) {
+        return false;
+    }
+    if let Some(last) = last_resume {
+        if last.elapsed() < debounce_duration {
+            return false;
+        }
+    }
+    true
+}
+
 pub fn start_telemetry_loop(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut client = Client::builder()
@@ -226,6 +244,7 @@ pub fn start_telemetry_loop(app: AppHandle) {
 
         let mut tick_counter = 0;
         let mut last_ollama_state = OllamaState::default();
+        let mut last_power_resume: Option<std::time::Instant> = None;
 
         let profile = crate::get_hardware_profile().await.unwrap_or_default();
         let expected_interval = Duration::from_secs(1);
@@ -375,12 +394,14 @@ pub fn start_telemetry_loop(app: AppHandle) {
             sleep(expected_interval).await;
             let sleep_elapsed = pre_sleep.elapsed();
 
-            if is_time_jump_detected(sleep_elapsed, expected_interval, 2.5) {
+            let debounce = Duration::from_secs(30);
+            if should_trigger_power_resume(sleep_elapsed, expected_interval, 10.0, last_power_resume, debounce) {
+                last_power_resume = Some(std::time::Instant::now());
                 crate::commands::system::log_event(
                     &app,
                     "INFO",
                     "POWER",
-                    &format!("Monotonic time jump detected ({:?} > 2.5x expected). System resumed from sleep/suspend. Re-probing hardware and refreshing connections.", sleep_elapsed),
+                    &format!("Monotonic time jump detected ({:.2}s > 10.0x expected). System resumed from sleep/suspend. Re-probing hardware and refreshing connections.", sleep_elapsed.as_secs_f64()),
                 );
                 #[cfg(not(target_os = "macos"))]
                 {

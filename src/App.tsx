@@ -81,7 +81,7 @@ function AppContent() {
     setSelectedNodeId(null);
   });
 
-  const [terminalMode, setTerminalMode] = useState<'install-hermes' | 'run-hermes' | 'run-hermes-web' | 'run-hermes-gateway' | 'run-hermes-desktop' | 'install-opencode' | 'run-opencode' | 'run-opencode-web' | 'install-ollama' | 'run-ollama' | 'install-tool-gateway' | 'uninstall-tool-gateway' | null>(null);
+  const [terminalMode, setTerminalMode] = useState<'install-hermes' | 'run-hermes' | 'run-hermes-web' | 'run-hermes-gateway' | 'run-hermes-desktop' | 'install-opencode' | 'run-opencode' | 'run-opencode-web' | 'install-ollama' | 'run-ollama' | 'install-tool-gateway' | 'uninstall-tool-gateway' | 'uninstall-hermes' | 'uninstall-opencode' | 'uninstall-ollama' | null>(null);
   const [minimizedTerminal, setMinimizedTerminal] = useState<{ mode: string; title: string } | null>(null);
   const [isHermesInstalled, setIsHermesInstalled] = useState<boolean>(() => {
     if (import.meta.env.DEV && isScreenshotMode()) return true;

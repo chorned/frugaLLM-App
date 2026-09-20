@@ -139,34 +139,14 @@ describe('NodeWidgets Components', () => {
       // Assert: ( i ) info button removed from Ollama node header (moved to backlog CHO-122)
       expect(screen.queryByTestId('hardware-info-btn')).not.toBeInTheDocument();
 
-      // Act 2: Click allocation trigger to open telemetry portal
-      const trigger = screen.getByTestId('hardware-telemetry-trigger');
-      fireEvent.click(trigger);
+      // Assert: Allocation is rendered as a clean read-only metric (CHO-139)
+      const allocationEl = screen.getByTestId('hardware-node-allocation');
+      expect(allocationEl).toBeInTheDocument();
+      expect(allocationEl).toHaveTextContent('13.0 / 8.0 GB');
 
-      // Assert: Telemetry panel opens in portal
-      const panel = screen.getByTestId('hardware-telemetry-panel');
-      expect(panel).toBeInTheDocument();
-
-      // Assert flipped element order inside expanded panel:
-      // 1. Throughput -> 2. Memory -> 3. Load -> 4. MemoryPipelineWidget
-      const throughputEl = screen.getByTestId('live-throughput-stat');
-      const memoryEl = screen.getByTestId('telemetry-memory-label');
-      const loadEl = screen.getByTestId('telemetry-load-label');
-      const pipelineEl = screen.getByTestId('memory-pipeline-widget');
-
-      expect(throughputEl.compareDocumentPosition(memoryEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(memoryEl.compareDocumentPosition(loadEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(loadEl.compareDocumentPosition(pipelineEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-
-      // Assert: ( i ) benchmark info button removed from telemetry panel (moved to backlog CHO-122)
-      expect(screen.queryByTestId('benchmark-info-btn')).not.toBeInTheDocument();
-
-      // Act 3: Click benchmark toggle inside panel
-      const benchmarkToggle = screen.getByTestId('benchmark-toggle');
-      fireEvent.click(benchmarkToggle);
-
-      // Assert: Benchmark panel expands
-      expect(screen.getByTestId('benchmark-panel')).toBeInTheDocument();
+      // Assert: Hardware telemetry portal view and trigger are removed (CHO-139)
+      expect(screen.queryByTestId('hardware-telemetry-trigger')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('hardware-telemetry-panel')).not.toBeInTheDocument();
     });
 
     it('processes PTY byte stream events for throughput metering', async () => {

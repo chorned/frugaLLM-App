@@ -492,6 +492,58 @@ pub fn clean_windows_user_path_ollama() -> Result<(), String> {
     Ok(())
 }
 
+pub fn clean_windows_user_path_opencode() -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let clean_path_script = r#"
+            $target1 = Join-Path $env:LOCALAPPDATA 'Programs\opencode';
+            $target2 = Join-Path $HOME '.opencode\bin';
+            $p = [Environment]::GetEnvironmentVariable('Path', 'User');
+            if ($p) {
+                $parts = $p -split ';' | Where-Object {
+                    $_ -and
+                    $_ -ne $target1 -and $_ -notlike ($target1 + '\*') -and $_ -notlike ('*' + $target1 + '*') -and
+                    $_ -ne $target2 -and $_ -notlike ($target2 + '\*') -and $_ -notlike ('*' + $target2 + '*')
+                };
+                $newP = $parts -join ';';
+                [Environment]::SetEnvironmentVariable('Path', $newP, 'User');
+            }
+        "#;
+        let mut ps_cmd = std::process::Command::new("powershell.exe");
+        ps_cmd.args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", clean_path_script]);
+        use std::os::windows::process::CommandExt;
+        ps_cmd.creation_flags(0x08000000);
+        let _ = ps_cmd.output().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+pub fn clean_windows_user_path_hermes() -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let clean_path_script = r#"
+            $target1 = Join-Path $env:LOCALAPPDATA 'hermes\bin';
+            $target2 = Join-Path $HOME '.hermes\bin';
+            $p = [Environment]::GetEnvironmentVariable('Path', 'User');
+            if ($p) {
+                $parts = $p -split ';' | Where-Object {
+                    $_ -and
+                    $_ -ne $target1 -and $_ -notlike ($target1 + '\*') -and $_ -notlike ('*' + $target1 + '*') -and
+                    $_ -ne $target2 -and $_ -notlike ($target2 + '\*') -and $_ -notlike ('*' + $target2 + '*')
+                };
+                $newP = $parts -join ';';
+                [Environment]::SetEnvironmentVariable('Path', $newP, 'User');
+            }
+        "#;
+        let mut ps_cmd = std::process::Command::new("powershell.exe");
+        ps_cmd.args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", clean_path_script]);
+        use std::os::windows::process::CommandExt;
+        ps_cmd.creation_flags(0x08000000);
+        let _ = ps_cmd.output().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 pub async fn is_ollama_installed() -> bool {
     // 1. Check if it's currently running via its local API
     if reqwest::get("http://127.0.0.1:11434/api/version").await.is_ok() {
@@ -749,15 +801,31 @@ pub async fn uninstall_ollama(app: tauri::AppHandle) -> Result<(), String> {
         let _ = tokio::fs::remove_dir_all(&models_dir).await;
     }
 
-    // 3d. Unix application binaries
+    // 3d. Unix application binaries and service definitions
     #[cfg(target_os = "macos")]
     {
+        if let Ok(home) = app.path().home_dir() {
+            let plist_path = home.join("Library").join("LaunchAgents").join("com.ollama.ollama.plist");
+            if plist_path.exists() {
+                let _ = tokio::process::Command::new("launchctl")
+                    .args(["unload", "-w", &plist_path.to_string_lossy()])
+                    .output()
+                    .await;
+                let _ = tokio::fs::remove_file(&plist_path).await;
+            }
+            let app_support = home.join("Library").join("Application Support").join("Ollama");
+            let _ = tokio::fs::remove_dir_all(&app_support).await;
+        }
         let _ = tokio::fs::remove_dir_all("/Applications/Ollama.app").await;
         let _ = tokio::fs::remove_file("/usr/local/bin/ollama").await;
-        let _ = tokio::process::Command::new("rm").args(["-rf", "/Applications/Ollama.app", "/usr/local/bin/ollama"]).output().await;
+        let _ = tokio::fs::remove_file("/opt/homebrew/bin/ollama").await;
+        let _ = tokio::process::Command::new("rm").args(["-rf", "/Applications/Ollama.app", "/usr/local/bin/ollama", "/opt/homebrew/bin/ollama"]).output().await;
     }
     #[cfg(target_os = "linux")]
     {
+        let _ = tokio::process::Command::new("systemctl").args(["--user", "stop", "ollama"]).output().await;
+        let _ = tokio::process::Command::new("systemctl").args(["stop", "ollama"]).output().await;
+        let _ = tokio::process::Command::new("systemctl").args(["disable", "ollama"]).output().await;
         let _ = tokio::fs::remove_file("/usr/local/bin/ollama").await;
         let _ = tokio::fs::remove_file("/usr/bin/ollama").await;
         let _ = tokio::process::Command::new("rm").args(["-rf", "/usr/local/bin/ollama", "/usr/bin/ollama"]).output().await;
@@ -941,9 +1009,22 @@ pub async fn uninstall_opencode(app: tauri::AppHandle) -> Result<(), String> {
             .stderr(std::process::Stdio::null())
             .creation_flags(0x08000000);
         let _ = npm_uninstall.output().await;
+
+        let _ = clean_windows_user_path_opencode();
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = tokio::process::Command::new("npm")
+            .args(["uninstall", "-g", "opencode", "opencode-ai"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .output()
+            .await;
     }
 
     let _ = set_installation_managed(&app, "opencode", false).await;
+    let _ = app.emit("opencode_uninstalled", ());
     log_event(&app, "INFO", "OPENCODE", "OpenCode uninstalled and state reset successfully");
 
     Ok(())
@@ -1004,9 +1085,11 @@ pub async fn uninstall_hermes(app: tauri::AppHandle) -> Result<(), String> {
             let win_roaming_hermes = std::path::PathBuf::from(app_data).join("hermes");
             let _ = tokio::fs::remove_dir_all(&win_roaming_hermes).await;
         }
+        let _ = clean_windows_user_path_hermes();
     }
 
     let _ = set_installation_managed(&app, "hermes", false).await;
+    let _ = app.emit("hermes_uninstalled", ());
     log_event(&app, "INFO", "HERMES", "Hermes uninstalled and state reset successfully");
 
     Ok(())

@@ -9,6 +9,10 @@ import {
   configureHermesDefaults,
   spawnPty,
   deployLocalModel,
+  deleteLocalModel,
+  uninstallHermes,
+  uninstallOpenCode,
+  uninstallOllama,
   resizePty,
   writePty,
   getOllamaChatModel,
@@ -32,7 +36,7 @@ export function isWindowsPlatform(): boolean {
 }
 
 export interface TerminalViewProps {
-  mode: 'install-hermes' | 'run-hermes' | 'run-hermes-web' | 'run-hermes-gateway' | 'run-hermes-desktop' | 'install-opencode' | 'run-opencode' | 'run-opencode-web' | 'install-ollama' | 'run-ollama' | 'install-tool-gateway' | 'uninstall-tool-gateway';
+  mode: 'install-hermes' | 'run-hermes' | 'run-hermes-web' | 'run-hermes-gateway' | 'run-hermes-desktop' | 'install-opencode' | 'run-opencode' | 'run-opencode-web' | 'install-ollama' | 'run-ollama' | 'install-tool-gateway' | 'uninstall-tool-gateway' | 'uninstall-hermes' | 'uninstall-opencode' | 'uninstall-ollama';
   sessionId: string;
   onExit: () => void;
   onProcessStart?: () => void;
@@ -40,14 +44,17 @@ export interface TerminalViewProps {
   frugalConfig?: any;
   setFrugalConfig?: any;
   setIsHermesInstalled: (installed: boolean) => void;
+  setIsHermesManaged?: (managed: boolean) => void;
   setIsOpenCodeInstalled: (installed: boolean) => void;
+  setIsOpenCodeManaged?: (managed: boolean) => void;
   setIsOllamaInstalled: (installed: boolean) => void;
+  setIsOllamaManaged?: (managed: boolean) => void;
   setIsToolGatewayInstalled?: (installed: boolean) => void;
   setNodes?: React.Dispatch<React.SetStateAction<AppNode[]>>;
   memoryRef?: React.MutableRefObject<any>;
 }
 
-export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, frugalConfig, setFrugalConfig, setIsHermesInstalled, setIsOpenCodeInstalled, setIsOllamaInstalled, setIsToolGatewayInstalled, setNodes, memoryRef }) => {
+export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, frugalConfig, setFrugalConfig, setIsHermesInstalled, setIsHermesManaged, setIsOpenCodeInstalled, setIsOpenCodeManaged, setIsOllamaInstalled, setIsOllamaManaged, setIsToolGatewayInstalled, setNodes, memoryRef }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const [isProvisioningModel, setIsProvisioningModel] = useState(false);
   const [downloadPercent, setDownloadPercent] = useState<number>(0);
@@ -131,6 +138,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
     let isMounted = true;
     let unlistenOutput: (() => void) | undefined;
     let unlistenExit: (() => void) | undefined;
+    let webUiTimer: any = null;
 
     const setupPty = async () => {
       try {
@@ -226,6 +234,54 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
           setTimeout(() => { if (isMounted) onExit(); }, 1500);
         } catch (err) {
           term.writeln(`\r\n\x1b[31mFailed to uninstall: ${err}\x1b[0m\r\n`);
+        }
+      } else if (mode === 'uninstall-hermes') {
+        term.writeln(en.routingGraph?.terminal?.uninstallHermesStart || 'Initiating complete uninstallation of Hermes Agent...');
+        term.writeln(en.routingGraph?.terminal?.uninstallHermesStage1 || '>>> [1/3] Terminating active processes and background daemons...');
+        try {
+          term.writeln(en.routingGraph?.terminal?.uninstallHermesStage2 || '>>> [2/3] Removing virtual environments, binaries, and configurations...');
+          await uninstallHermes();
+          term.writeln(en.routingGraph?.terminal?.uninstallHermesStage3 || '>>> [3/3] Purging user PATH environment and resetting application state...');
+          if (setIsHermesInstalled) setIsHermesInstalled(false);
+          if (setIsHermesManaged) setIsHermesManaged(false);
+          term.writeln(`\r\n\x1b[32m✔ ${en.routingGraph?.terminal?.uninstallHermesSuccess || 'Hermes Agent uninstalled and system cleaned successfully.'}\x1b[0m\r\n`);
+          setTimeout(() => { if (isMounted) onExit(); }, 1500);
+        } catch (err) {
+          term.writeln(`\r\n\x1b[31mFailed to uninstall Hermes Agent: ${err}\x1b[0m\r\n`);
+        }
+      } else if (mode === 'uninstall-opencode') {
+        term.writeln(en.routingGraph?.terminal?.uninstallOpenCodeStart || 'Initiating complete uninstallation of OpenCode...');
+        term.writeln(en.routingGraph?.terminal?.uninstallOpenCodeStage1 || '>>> [1/3] Terminating active OpenCode engine processes...');
+        try {
+          term.writeln(en.routingGraph?.terminal?.uninstallOpenCodeStage2 || '>>> [2/3] Removing binaries, npm packages, and cache directories...');
+          await uninstallOpenCode();
+          term.writeln(en.routingGraph?.terminal?.uninstallOpenCodeStage3 || '>>> [3/3] Purging user PATH environment and resetting application state...');
+          if (setIsOpenCodeInstalled) setIsOpenCodeInstalled(false);
+          if (setIsOpenCodeManaged) setIsOpenCodeManaged(false);
+          term.writeln(`\r\n\x1b[32m✔ ${en.routingGraph?.terminal?.uninstallOpenCodeSuccess || 'OpenCode uninstalled and system cleaned successfully.'}\x1b[0m\r\n`);
+          setTimeout(() => { if (isMounted) onExit(); }, 1500);
+        } catch (err) {
+          term.writeln(`\r\n\x1b[31mFailed to uninstall OpenCode: ${err}\x1b[0m\r\n`);
+        }
+      } else if (mode === 'uninstall-ollama') {
+        term.writeln(en.routingGraph?.terminal?.uninstallOllamaStart || 'Initiating complete uninstallation of Ollama Engine...');
+        term.writeln(en.routingGraph?.terminal?.uninstallOllamaStage1 || '>>> [1/4] Terminating Ollama daemon and background processes...');
+        try {
+          term.writeln(en.routingGraph?.terminal?.uninstallOllamaStage2 || '>>> [2/4] Executing native uninstaller and purging application binaries...');
+          term.writeln(en.routingGraph?.terminal?.uninstallOllamaStage3 || '>>> [3/4] Reclaiming disk space and deleting model repository (~/.ollama)...');
+          await deleteLocalModel().catch(console.error);
+          await uninstallOllama();
+          term.writeln(en.routingGraph?.terminal?.uninstallOllamaStage4 || '>>> [4/4] Purging user PATH environment and resetting application state...');
+          if (setIsOllamaInstalled) setIsOllamaInstalled(false);
+          if (setIsOllamaManaged) setIsOllamaManaged(false);
+          if (setNodes) {
+            setNodes(nds => nds.map(n => n.id === 'node-ollama' ? { ...n, data: { ...n.data, status: 'ready' } } : n));
+          }
+          refreshRoutingChain().catch(() => {});
+          term.writeln(`\r\n\x1b[32m✔ ${en.routingGraph?.terminal?.uninstallOllamaSuccess || 'Ollama Engine and local models uninstalled successfully.'}\x1b[0m\r\n`);
+          setTimeout(() => { if (isMounted) onExit(); }, 2000);
+        } catch (err) {
+          term.writeln(`\r\n\x1b[31mFailed to uninstall Ollama Engine: ${err}\x1b[0m\r\n`);
         }
       } else if (mode.startsWith('install')) {
         let installingText = 'Initializing installation...';
@@ -497,10 +553,26 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
         if (mode.startsWith('run-hermes')) runningText = 'Starting Hermes Agent...';
         if (mode === 'run-ollama') runningText = 'Chatting with Ollama...';
         term.writeln(runningText);
+
+        let webUiAutoClosed = false;
+        const isWebUiMode = mode === 'run-hermes-web' || mode === 'run-opencode-web';
+
         unlistenOutput = await listen<{ session_id: string, data: string }>('pty_output', (event) => {
           if (event.payload.session_id === sessionId) {
             term.write(event.payload.data);
             window.dispatchEvent(new CustomEvent('pty_bytes', { detail: event.payload.data.length }));
+
+            if (isWebUiMode && !webUiAutoClosed) {
+              const text = event.payload.data;
+              if (/https?:\/\/|127\.0\.0\.1|localhost|dashboard|listening|ready/i.test(text)) {
+                webUiAutoClosed = true;
+                if (webUiTimer) clearTimeout(webUiTimer);
+                term.writeln('\r\n\x1b[32mWebUI launched successfully. Closing terminal...\x1b[0m\r\n');
+                webUiTimer = setTimeout(() => {
+                  if (isMounted) onExit();
+                }, 600);
+              }
+            }
           }
         });
         unlistenExit = await listen<{ session_id: string, exit_code: number }>('pty_exit', (event) => {
@@ -599,6 +671,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
             }
           }
           resizePty(sessionId, term.cols, term.rows).catch(console.error);
+
+          if (isWebUiMode && !webUiAutoClosed) {
+            webUiTimer = setTimeout(() => {
+              if (isMounted && !webUiAutoClosed) {
+                webUiAutoClosed = true;
+                term.writeln('\r\n\x1b[32mWebUI process initialized. Closing terminal view...\x1b[0m\r\n');
+                setTimeout(() => {
+                  if (isMounted) onExit();
+                }, 400);
+              }
+            }, 12000);
+          }
         } catch (err: any) {
           console.error('Failed to spawn PTY process:', err);
           term.writeln(`\r\n\x1b[31mFailed to launch process: ${err?.message || err}\x1b[0m\r\n`);
@@ -611,6 +695,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
 
     return () => {
       isMounted = false;
+      if (webUiTimer) clearTimeout(webUiTimer);
       window.clearTimeout(fitTimeout);
       resizeObserver.disconnect();
       dataListener.dispose();
@@ -632,6 +717,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
   if (mode === 'install-ollama') title = 'Ollama';
   if (mode === 'run-ollama') title = 'Ollama Local Chat';
   if (mode === 'install-tool-gateway' || mode === 'uninstall-tool-gateway') title = 'Tool Enforcing Gateway';
+  if (mode === 'uninstall-hermes') title = en.routingGraph?.terminal?.uninstallHermesTitle || 'Uninstall Hermes Agent';
+  if (mode === 'uninstall-opencode') title = en.routingGraph?.terminal?.uninstallOpenCodeTitle || 'Uninstall OpenCode Agent';
+  if (mode === 'uninstall-ollama') title = en.routingGraph?.terminal?.uninstallOllamaTitle || 'Uninstall Ollama Engine';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', backgroundColor: 'var(--zen-surface)', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--zen-border)', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}>

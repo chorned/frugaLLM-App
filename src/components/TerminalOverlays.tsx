@@ -35,6 +35,9 @@ const TERMINAL_MODES = [
   'run-ollama',
   'install-tool-gateway',
   'uninstall-tool-gateway',
+  'uninstall-hermes',
+  'uninstall-opencode',
+  'uninstall-ollama',
 ] as const;
 
 export const TerminalOverlays: React.FC<TerminalOverlaysProps> = ({
@@ -101,6 +104,8 @@ export const TerminalOverlays: React.FC<TerminalOverlaysProps> = ({
                        }
                      } catch(e) {}
                      refreshRoutingChain().catch(() => {});
+                   } else {
+                     setNodes?.(nds => nds.map(n => n.id === 'node-ollama' ? { ...n, data: { ...n.data, status: 'ready' } } : n));
                    }
                  });
                  checkToolGatewayStatus().then((installed) => setIsToolGatewayInstalled?.(installed));
@@ -110,8 +115,11 @@ export const TerminalOverlays: React.FC<TerminalOverlaysProps> = ({
                frugalConfig={frugalConfig}
                setFrugalConfig={setFrugalConfig}
                setIsHermesInstalled={setIsHermesInstalled}
+               setIsHermesManaged={setIsHermesManaged}
                setIsOpenCodeInstalled={setIsOpenCodeInstalled}
+               setIsOpenCodeManaged={setIsOpenCodeManaged}
                setIsOllamaInstalled={setIsOllamaInstalled}
+               setIsOllamaManaged={setIsOllamaManaged}
                setIsToolGatewayInstalled={setIsToolGatewayInstalled}
                setNodes={setNodes}
                memoryRef={memoryRef}

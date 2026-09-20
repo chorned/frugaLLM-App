@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
         let home = temp_dir.path();
         
         // Initially not installed
-        assert_eq!(is_hermes_installed(home), false);
+        assert!(!is_hermes_installed(home));
         
         // Mock installation in .hermes/bin
         let bin_dir = home.join(".hermes").join("bin");
@@ -20,7 +20,7 @@ use std::collections::{HashMap, HashSet};
         let hermes_exe = bin_dir.join(exe_name);
         fs::File::create(&hermes_exe).unwrap();
         
-        assert_eq!(is_hermes_installed(home), true);
+        assert!(is_hermes_installed(home));
         assert_eq!(get_hermes_source_path(home), Some(hermes_exe));
     }
 
@@ -29,7 +29,7 @@ use std::collections::{HashMap, HashSet};
         let temp_dir = tempfile::tempdir().unwrap();
         let home = temp_dir.path();
         
-        assert_eq!(is_hermes_installed(home), false);
+        assert!(!is_hermes_installed(home));
         assert_eq!(get_hermes_source_path(home), None);
         
         // Mock installation in .local/bin (standard install script path)
@@ -40,7 +40,7 @@ use std::collections::{HashMap, HashSet};
         let hermes_exe = bin_dir.join(exe_name);
         fs::File::create(&hermes_exe).unwrap();
         
-        assert_eq!(is_hermes_installed(home), true);
+        assert!(is_hermes_installed(home));
         assert_eq!(get_hermes_source_path(home), Some(hermes_exe));
     }
 
@@ -49,7 +49,7 @@ use std::collections::{HashMap, HashSet};
         let temp_dir = tempfile::tempdir().unwrap();
         let home = temp_dir.path();
         
-        assert_eq!(is_opencode_installed(home), false);
+        assert!(!is_opencode_installed(home));
         
         let bin_dir = home.join(".local").join("bin");
         fs::create_dir_all(&bin_dir).unwrap();
@@ -58,7 +58,7 @@ use std::collections::{HashMap, HashSet};
         let opencode_exe = bin_dir.join(exe_name);
         fs::File::create(&opencode_exe).unwrap();
         
-        assert_eq!(is_opencode_installed(home), true);
+        assert!(is_opencode_installed(home));
     }
 
     #[test]
@@ -116,8 +116,8 @@ use std::collections::{HashMap, HashSet};
         let path_str = mock_ollama_path.to_str().unwrap();
         let paths = vec![path_str];
         
-        assert_eq!(is_ollama_in_paths(&paths), true);
-        assert_eq!(is_ollama_in_paths(&["/invalid/nonexistent/path/to/ollama"]), false);
+        assert!(is_ollama_in_paths(&paths));
+        assert!(!is_ollama_in_paths(&["/invalid/nonexistent/path/to/ollama"]));
     }
 
     #[test]
@@ -562,6 +562,74 @@ use std::collections::{HashMap, HashSet};
 
         // Long sleep (60.0s elapsed) -> true
         assert!(crate::telemetry::is_time_jump_detected(Duration::from_secs(60), expected, multiplier));
+    }
+
+    #[test]
+    fn test_should_trigger_power_resume_debounce_and_threshold() {
+        use std::time::{Duration, Instant};
+        let expected = Duration::from_secs(1);
+        let multiplier = 10.0;
+        let debounce = Duration::from_secs(30);
+
+        // 1. Normal sleep jitter (2.5s) -> should NOT trigger with 10.0 multiplier
+        assert!(!crate::telemetry::should_trigger_power_resume(
+            Duration::from_millis(2500),
+            expected,
+            multiplier,
+            None,
+            debounce
+        ));
+
+        // 2. High scheduling lag (8.0s) -> should NOT trigger
+        assert!(!crate::telemetry::should_trigger_power_resume(
+            Duration::from_millis(8000),
+            expected,
+            multiplier,
+            None,
+            debounce
+        ));
+
+        // 3. Genuine sleep/wake jump (15.0s) with no prior resume -> SHOULD trigger
+        assert!(crate::telemetry::should_trigger_power_resume(
+            Duration::from_millis(15000),
+            expected,
+            multiplier,
+            None,
+            debounce
+        ));
+
+        // 4. Repeated time jump within debounce window (e.g. recent resume) -> should NOT trigger (debounced)
+        let recent_resume = Some(Instant::now());
+        assert!(!crate::telemetry::should_trigger_power_resume(
+            Duration::from_millis(15000),
+            expected,
+            multiplier,
+            recent_resume,
+            debounce
+        ));
+    }
+
+    #[test]
+    fn test_format_diagnostic_snapshot_header_contains_vital_context() {
+        let header = crate::commands::system::format_diagnostic_snapshot_header(
+            "0.0.18",
+            "macos x86_64",
+            32.0,
+            16.5,
+            8,
+            "http://127.0.0.1:61721",
+            true,
+            false,
+        );
+
+        assert!(header.contains("=== FRUGALLM SYSTEM DIAGNOSTICS SNAPSHOT ==="));
+        assert!(header.contains("App Version: 0.0.18"));
+        assert!(header.contains("Platform / Arch: macos x86_64"));
+        assert!(header.contains("32.00 GB total, 16.50 GB available"));
+        assert!(header.contains("CPU Cores: 8"));
+        assert!(header.contains("Proxy Endpoint: http://127.0.0.1:61721"));
+        assert!(header.contains("Paid Fallback: true"));
+        assert!(header.contains("Tool Enforcement: false"));
     }
 
     #[test]
@@ -1905,21 +1973,21 @@ HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bf
         let bin_subpath1 = app_bundle_dir.join("Contents").join("Resources").join("ollama");
         let bin_subpath2 = app_bundle_dir.join("Contents").join("MacOS").join("Ollama");
 
-        let checked_paths = vec![
+        let checked_paths = [
             bin_subpath1.to_string_lossy().to_string(),
             bin_subpath2.to_string_lossy().to_string(),
         ];
         let str_refs: Vec<&str> = checked_paths.iter().map(|s| s.as_str()).collect();
 
         // Because the bare folder exists but neither executable binary exists inside Contents, is_ollama_in_paths must return false
-        assert_eq!(is_ollama_in_paths(&str_refs), false);
+        assert!(!is_ollama_in_paths(&str_refs));
 
         // Now create an actual binary inside Contents/MacOS/Ollama
         fs::create_dir_all(bin_subpath2.parent().unwrap()).unwrap();
         fs::File::create(&bin_subpath2).unwrap();
 
         // Once the actual binary exists, detection returns true
-        assert_eq!(is_ollama_in_paths(&str_refs), true);
+        assert!(is_ollama_in_paths(&str_refs));
     }
 
     #[tokio::test]
@@ -2028,6 +2096,20 @@ HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bf
     fn test_clean_windows_user_path_ollama_safety() {
         // Verify function executes without errors
         let res = clean_windows_user_path_ollama();
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_clean_windows_user_path_opencode_safety() {
+        // Verify function executes without errors
+        let res = clean_windows_user_path_opencode();
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_clean_windows_user_path_hermes_safety() {
+        // Verify function executes without errors
+        let res = clean_windows_user_path_hermes();
         assert!(res.is_ok());
     }
 
@@ -2330,4 +2412,195 @@ HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bf
         assert!(std::env::var("OPENROUTER_KEY").is_err());
         assert!(std::env::var("OPENROUTER_API_KEY").is_err());
     }
+
+    #[test]
+    fn test_classify_google_429_zero_quota() {
+        use crate::proxy::server::{classify_google_429, QuotaFailureScope};
+        use reqwest::header::HeaderMap;
+
+        let headers = HeaderMap::new();
+
+        // 1. Structured JSON payload matching Google's QuotaFailure limit '0'
+        let body_json = r#"{
+            "error": {
+                "code": 429,
+                "message": "Resource has been exhausted (e.g. check quota).",
+                "status": "RESOURCE_EXHAUSTED",
+                "details": [
+                    {
+                        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+                        "reason": "RATE_LIMIT_EXCEEDED",
+                        "domain": "googleapis.com",
+                        "metadata": {
+                            "consumer": "projects/1234567890",
+                            "quota_metric": "generativelanguage.googleapis.com/generate_content_requests_per_model_per_minute",
+                            "quota_limit": "0",
+                            "quota_limit_value": "0"
+                        }
+                    },
+                    {
+                        "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                        "violations": [
+                            {
+                                "subject": "models/gemini-3.1-pro",
+                                "description": "Quota exceeded for quota metric 'generate_content_requests_per_model_per_minute' and limit '0' of service 'generativelanguage.googleapis.com' for consumer 'project_number:1234567890'."
+                            }
+                        ]
+                    }
+                ]
+            }
+        }"#;
+
+        let scope = classify_google_429(429, &headers, body_json, "gemini-3.1-pro");
+        assert_eq!(
+            scope,
+            QuotaFailureScope::ModelDisabled("gemini-3.1-pro".to_string())
+        );
+
+        // 2. Unstructured string with limit: 0
+        let body_text = "Quota exceeded for quota metric 'generate_content_requests_per_model_per_minute' and limit: 0";
+        let scope_text = classify_google_429(429, &headers, body_text, "gemini-pro-latest");
+        assert_eq!(
+            scope_text,
+            QuotaFailureScope::ModelDisabled("gemini-pro-latest".to_string())
+        );
+    }
+
+    #[test]
+    fn test_classify_google_429_rate_limit_with_retry_after() {
+        use crate::proxy::server::{classify_google_429, QuotaFailureScope};
+        use reqwest::header::{HeaderMap, HeaderValue};
+
+        let mut headers = HeaderMap::new();
+        headers.insert("retry-after", HeaderValue::from_static("45"));
+
+        let body_json = r#"{
+            "error": {
+                "code": 429,
+                "message": "Resource has been exhausted (e.g. check quota).",
+                "status": "RESOURCE_EXHAUSTED",
+                "details": [
+                    {
+                        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+                        "reason": "RATE_LIMIT_EXCEEDED",
+                        "domain": "googleapis.com",
+                        "metadata": {
+                            "quota_metric": "generativelanguage.googleapis.com/generate_content_requests_per_model_per_minute",
+                            "quota_limit": "15"
+                        }
+                    },
+                    {
+                        "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                        "violations": [
+                            {
+                                "subject": "models/gemini-2.5-flash",
+                                "description": "Quota exceeded for quota metric 'generate_content_requests_per_model_per_minute' and limit '15'."
+                            }
+                        ]
+                    }
+                ]
+            }
+        }"#;
+
+        let scope = classify_google_429(429, &headers, body_json, "gemini-2.5-flash");
+        assert_eq!(
+            scope,
+            QuotaFailureScope::ModelRateLimited {
+                model_id: "gemini-2.5-flash".to_string(),
+                retry_after_secs: 45,
+            }
+        );
+
+        // Without retry-after header -> defaults to 60s
+        let empty_headers = HeaderMap::new();
+        let scope_default = classify_google_429(429, &empty_headers, body_json, "gemini-2.5-flash");
+        assert_eq!(
+            scope_default,
+            QuotaFailureScope::ModelRateLimited {
+                model_id: "gemini-2.5-flash".to_string(),
+                retry_after_secs: 60,
+            }
+        );
+    }
+
+    #[test]
+    fn test_classify_google_429_provider_exhaustion() {
+        use crate::proxy::server::{classify_google_429, QuotaFailureScope};
+        use reqwest::header::HeaderMap;
+
+        let headers = HeaderMap::new();
+
+        let body_json = r#"{
+            "error": {
+                "code": 429,
+                "message": "Resource has been exhausted (e.g. check quota).",
+                "status": "RESOURCE_EXHAUSTED",
+                "details": [
+                    {
+                        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+                        "reason": "PROJECT_SUSPENDED",
+                        "domain": "googleapis.com",
+                        "metadata": {
+                            "consumer": "projects/1234567890",
+                            "quota_metric": "requests_per_project_per_day"
+                        }
+                    }
+                ]
+            }
+        }"#;
+
+        let scope = classify_google_429(429, &headers, body_json, "gemini-2.0-flash");
+        assert_eq!(scope, QuotaFailureScope::ProviderExhausted);
+    }
+
+    #[tokio::test]
+    async fn test_google_model_disabled_allows_flash_fallback() {
+        use crate::state::{partition_candidates, CloudModel, ProviderHealthState};
+        use crate::proxy::server::{classify_google_429, QuotaFailureScope};
+        use reqwest::header::HeaderMap;
+
+        let state = ProviderHealthState::default();
+        let pro_model = CloudModel {
+            model: "gemini-3.1-pro".to_string(),
+            provider: "google".to_string(),
+            iq: 88.0,
+            context_length: Some(1_000_000),
+        };
+        let flash_model = CloudModel {
+            model: "gemini-2.0-flash".to_string(),
+            provider: "google".to_string(),
+            iq: 82.0,
+            context_length: Some(1_000_000),
+        };
+        let chain = vec![pro_model.clone(), flash_model.clone()];
+
+        // Simulate zero-quota error on pro_model
+        let headers = HeaderMap::new();
+        let error_body = r#"{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","details":[{"metadata":{"quota_limit":"0"}}]}}"#;
+        let scope = classify_google_429(429, &headers, error_body, &pro_model.model);
+
+        match scope {
+            QuotaFailureScope::ModelDisabled(model_id) => {
+                let mut gated = state.gated_models.write().await;
+                let clean = model_id.strip_prefix("models/").unwrap_or(&model_id);
+                gated.insert(clean.to_string());
+                gated.insert(format!("models/{}", clean));
+            }
+            _ => panic!("Expected ModelDisabled"),
+        }
+
+        // Verify partition_candidates places flash_model in healthy and pro_model is filtered out
+        let now = std::time::Instant::now();
+        let p_guard = state.provider_cooldowns.read().await;
+        let g_guard = state.gated_models.read().await;
+        let m_guard = state.model_cooldowns.read().await;
+
+        let (healthy, cooldown) = partition_candidates(&chain, &p_guard, &g_guard, &m_guard, now);
+        assert_eq!(healthy.len(), 1);
+        assert_eq!(healthy[0].model, "gemini-2.0-flash");
+        assert_eq!(cooldown.len(), 0);
+        // Provider cooldown is NOT engaged
+        assert!(!p_guard.contains_key("google"));
+    }
+
 

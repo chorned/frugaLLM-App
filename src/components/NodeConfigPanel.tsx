@@ -66,7 +66,7 @@ export interface NodeConfigPanelProps {
   portConflict: boolean;
 }
 
-export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose, onSave, onOpenIssueReporter, isHermesInstalled, isHermesManaged = false, isOpenCodeInstalled, isOpenCodeManaged = false, isOllamaInstalled, isOllamaManaged = false, isToolGatewayInstalled, detectedVram, setDetectedVram, hasActiveBackend, handleInitializeHermes, handleOpenHermes, handleUninstallHermes, handleInitializeOpenCode, handleOpenOpenCode, handleUninstallOpenCode, handleInitializeOllama, handleOpenOllama, handleUninstallOllama, handleDeleteLocalModel, handleInstallToolGateway, handleUninstallToolGateway, handleDisconnectOpenRouter, handleDisconnectGoogle, frugalConfig, handleOpenHermesGateway, handleOpenHermesDesktop, handleOpenHermesWeb, handleOpenOpenCodeWeb, activeProcesses, handleKillProcess, setFrugalConfig, latestTelemetry, hardwareProfile, portConflict }: any) => {
+export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose, onSave, onOpenIssueReporter, isHermesInstalled, isHermesManaged = false, isOpenCodeInstalled, isOpenCodeManaged = false, isOllamaInstalled, isOllamaManaged = false, isToolGatewayInstalled, detectedVram, setDetectedVram, hasActiveBackend, handleInitializeHermes, handleOpenHermes, handleUninstallHermes, handleInitializeOpenCode, handleOpenOpenCode, handleUninstallOpenCode, handleInitializeOllama, handleOpenOllama, handleUninstallOllama, handleDeleteLocalModel: _handleDeleteLocalModel, handleInstallToolGateway, handleUninstallToolGateway, handleDisconnectOpenRouter, handleDisconnectGoogle, frugalConfig, handleOpenHermesGateway, handleOpenHermesDesktop, handleOpenHermesWeb, handleOpenOpenCodeWeb, activeProcesses, handleKillProcess, setFrugalConfig, latestTelemetry, hardwareProfile, portConflict }: any) => {
   const memory = useMemory();
   const [confirmUninstall, setConfirmUninstall] = useState<string | null>(null);
   const [showToolGatewayPrompt, setShowToolGatewayPrompt] = useState<'install' | 'uninstall' | null>(null);
@@ -1195,26 +1195,12 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
                 <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '9999px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
               </div>
             </div>
-          ) : confirmUninstall === 'local-model' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 600 }}>EVICT FROM VRAM & DELETE LOCAL MODEL?</span>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button data-testid="confirm-delete-local-model-yes" onClick={(e) => { e.stopPropagation(); handleDeleteLocalModel?.(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>YES</button>
-                <button data-testid="confirm-delete-local-model-no" onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '9999px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>NO</button>
-              </div>
-            </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <button 
                 onClick={(e) => { e.stopPropagation(); handleOpenOllama(); }}
                 style={{ width: '100%', padding: '10px 16px', backgroundColor: '#10B981', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
                 CHAT WITH OLLAMA
-              </button>
-              <button 
-                data-testid="btn-delete-local-model"
-                onClick={(e) => { e.stopPropagation(); setConfirmUninstall('local-model'); }}
-                style={{ width: '100%', padding: '8px 12px', backgroundColor: 'transparent', color: 'var(--zen-text-secondary)', border: '1px solid var(--zen-border)', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
-                DELETE LOCAL MODEL
               </button>
               {isOllamaManaged && (
                 <button 
