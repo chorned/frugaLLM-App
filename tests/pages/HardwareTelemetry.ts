@@ -27,6 +27,7 @@ export class HardwareTelemetryPage {
     
     this.headerTitle = this.container.getByText('Ollama', { exact: false }).first();
     this.toggleButton = this.container.getByTestId('hardware-telemetry-trigger');
+    this.allocation = this.container.getByTestId('hardware-node-allocation');
     
     // Status light text is inside the header
     this.statusLight = this.container.locator('span').filter({ hasText: /^(Standby|Loading|Thinking|Loaded|llama.*)$/i }).first();

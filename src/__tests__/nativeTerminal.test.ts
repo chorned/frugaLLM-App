@@ -110,4 +110,28 @@ describe('Native Terminal CTAs Integration', () => {
     });
     expect(defaultProps.setTerminalMode).toHaveBeenCalledWith('uninstall-tool-gateway');
   });
+
+  it('routes all uninstallation actions through the interactive in-app terminal view', () => {
+    const { result } = renderHook(() => useNodeActions(defaultProps as any));
+
+    act(() => {
+      result.current.handleUninstallHermes();
+    });
+    expect(defaultProps.setTerminalMode).toHaveBeenCalledWith('uninstall-hermes');
+
+    act(() => {
+      result.current.handleUninstallOpenCode();
+    });
+    expect(defaultProps.setTerminalMode).toHaveBeenCalledWith('uninstall-opencode');
+
+    act(() => {
+      result.current.handleUninstallOllama();
+    });
+    expect(defaultProps.setTerminalMode).toHaveBeenCalledWith('uninstall-ollama');
+
+    act(() => {
+      result.current.handleUninstallToolGateway();
+    });
+    expect(defaultProps.setTerminalMode).toHaveBeenCalledWith('uninstall-tool-gateway');
+  });
 });

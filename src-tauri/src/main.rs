@@ -83,6 +83,8 @@ fn main() {
             let start_minimized = app.store("store.json").ok()
                 .and_then(|s| s.get("start_minimized").and_then(|v| v.as_bool()))
                 .unwrap_or(frugal_config.start_minimized);
+            let init_host = if frugal_config.bind_all_interfaces { "0.0.0.0" } else { "127.0.0.1" };
+            let init_port = frugal_config.port;
             let config_arc = Arc::new(tokio::sync::Mutex::new(frugal_config));
             let server_abort_handle = Arc::new(tokio::sync::Mutex::new(None));
             let is_dirty = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -93,6 +95,13 @@ fn main() {
                 is_dirty: is_dirty.clone(),
                 server_status: server_status.clone(),
             });
+
+            crate::commands::system::log_event(
+                &app_handle,
+                "INFO",
+                "INIT",
+                &format!("FrugaLLM v{} initialized on {} {} (proxy: http://{}:{})", app.package_info().version, std::env::consts::OS, std::env::consts::ARCH, init_host, init_port),
+            );
 
             // Background task: persist config to disk if dirty every 3 seconds (decoupled from proxy stream path)
             let app_handle_flush = app_handle.clone();
@@ -233,5 +242,3 @@ fn main() {
         _ => {}
     });
 }
-
-

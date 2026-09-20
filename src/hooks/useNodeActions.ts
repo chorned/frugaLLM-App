@@ -2,10 +2,7 @@ import React from 'react';
 import {
   killPty,
   stopHermesService,
-  uninstallOllama,
   deleteLocalModel,
-  uninstallOpenCode,
-  uninstallHermes,
   deleteCredential,
   refreshRoutingChain,
   setModelOverride,
@@ -42,12 +39,12 @@ export function useNodeActions({
   terminalMode,
   setTerminalMode,
   setActiveProcesses,
-  setIsHermesInstalled,
-  setIsHermesManaged,
-  setIsOpenCodeInstalled,
-  setIsOpenCodeManaged,
-  setIsOllamaInstalled,
-  setIsOllamaManaged,
+  setIsHermesInstalled: _setIsHermesInstalled,
+  setIsHermesManaged: _setIsHermesManaged,
+  setIsOpenCodeInstalled: _setIsOpenCodeInstalled,
+  setIsOpenCodeManaged: _setIsOpenCodeManaged,
+  setIsOllamaInstalled: _setIsOllamaInstalled,
+  setIsOllamaManaged: _setIsOllamaManaged,
   setIsToolGatewayInstalled: _setIsToolGatewayInstalled,
   setNodes,
   frugalConfig,
@@ -112,24 +109,8 @@ export function useNodeActions({
   const handleInstallToolGateway = () => setTerminalMode('install-tool-gateway');
   const handleUninstallToolGateway = () => setTerminalMode('uninstall-tool-gateway');
 
-  const handleUninstallHermes = async () => {
-    try {
-      await uninstallHermes();
-      setIsHermesInstalled(false);
-      setIsHermesManaged?.(false);
-    } catch (e) {
-      console.error('Failed to uninstall Hermes:', e);
-    }
-  };
-  const handleUninstallOpenCode = async () => {
-    try {
-      await uninstallOpenCode();
-      setIsOpenCodeInstalled(false);
-      setIsOpenCodeManaged?.(false);
-    } catch (e) {
-      console.error('Failed to uninstall OpenCode:', e);
-    }
-  };
+  const handleUninstallHermes = () => setTerminalMode('uninstall-hermes');
+  const handleUninstallOpenCode = () => setTerminalMode('uninstall-opencode');
   const handleDeleteLocalModel = async () => {
     try {
       await deleteLocalModel();
@@ -138,17 +119,7 @@ export function useNodeActions({
       console.error('Failed to delete local model:', e);
     }
   };
-  const handleUninstallOllama = async () => {
-    try {
-      await deleteLocalModel().catch(console.error);
-      await uninstallOllama();
-      setIsOllamaInstalled(false);
-      setIsOllamaManaged?.(false);
-      setNodes(nds => nds.map(n => n.id === 'node-ollama' ? { ...n, data: { ...n.data, status: 'ready' } } : n));
-    } catch (e) {
-      console.error('Failed to uninstall Ollama:', e);
-    }
-  };
+  const handleUninstallOllama = () => setTerminalMode('uninstall-ollama');
   const handleDisconnectOpenRouter = async () => {
     await deleteCredential('openrouter').catch(console.error);
     setNodes(nds => nds.map(n => n.id === 'node-openrouter' ? { ...n, data: { ...n.data, status: 'needs_activation', apiKey: '', keyPrefix: '', lastStatus: '' } } : n));

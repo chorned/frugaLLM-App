@@ -422,6 +422,37 @@ pub fn check_available_disk_space(target_path: &std::path::Path, required_bytes:
     Ok(())
 }
 
+pub fn format_diagnostic_snapshot_header(
+    app_version: &str,
+    os_info: &str,
+    total_mem_gb: f64,
+    avail_mem_gb: f64,
+    cpu_cores: usize,
+    proxy_endpoint: &str,
+    paid_fallback: bool,
+    tool_enforcement: bool,
+) -> String {
+    format!(
+        "=== FRUGALLM SYSTEM DIAGNOSTICS SNAPSHOT ===\n\
+         App Version: {}\n\
+         Platform / Arch: {}\n\
+         System Memory: {:.2} GB total, {:.2} GB available\n\
+         CPU Cores: {}\n\
+         Proxy Endpoint: {}\n\
+         Paid Fallback: {}\n\
+         Tool Enforcement: {}\n\
+         ============================================\n\n",
+        app_version,
+        os_info,
+        total_mem_gb,
+        avail_mem_gb,
+        cpu_cores,
+        proxy_endpoint,
+        paid_fallback,
+        tool_enforcement
+    )
+}
+
 #[tauri::command]
 pub async fn get_diagnostic_data(app: tauri::AppHandle) -> Result<DiagnosticPayload, String> {
     let log_path = match get_app_log_file_path(&app) {
@@ -448,10 +479,48 @@ pub async fn get_diagnostic_data(app: tauri::AppHandle) -> Result<DiagnosticPayl
 
     let sanitized_logs = sanitize_diagnostic_logs(&raw_logs);
 
+    let (proxy_endpoint, paid_fallback, tool_enforcement) = if let Some(state) = app.try_state::<crate::state::FrugalConfigState>() {
+        if let Ok(config) = state.config.try_lock() {
+            let host = if config.bind_all_interfaces { "0.0.0.0" } else { "127.0.0.1" };
+            (
+                format!("http://{}:{}", host, config.port),
+                config.enable_paid_fallback,
+                config.tool_enforcing_gateway,
+            )
+        } else {
+            ("http://127.0.0.1:61721".to_string(), true, false)
+        }
+    } else {
+        ("http://127.0.0.1:61721".to_string(), true, false)
+    };
+
+    use sysinfo::System;
+    let mut sys = System::new_all();
+    sys.refresh_all();
+    let total_mem_gb = sys.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
+    let avail_mem_gb = sys.available_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
+    let cpu_cores = sys.cpus().len();
+
+    let app_version = app.package_info().version.to_string();
+    let os_info = format!("{} {}", std::env::consts::OS, std::env::consts::ARCH);
+
+    let header = format_diagnostic_snapshot_header(
+        &app_version,
+        &os_info,
+        total_mem_gb,
+        avail_mem_gb,
+        cpu_cores,
+        &proxy_endpoint,
+        paid_fallback,
+        tool_enforcement,
+    );
+
+    let full_logs = format!("{}{}", header, sanitized_logs);
+
     Ok(DiagnosticPayload {
-        app_version: app.package_info().version.to_string(),
-        os_info: format!("{} {}", std::env::consts::OS, std::env::consts::ARCH),
-        logs: sanitized_logs,
+        app_version,
+        os_info,
+        logs: full_logs,
     })
 }
 

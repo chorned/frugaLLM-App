@@ -413,6 +413,121 @@ pub fn detect_stream_error_before_token(chunk: &[u8]) -> Option<String> {
     None
 }
 
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum QuotaFailureScope {
+    /// Limit is 0 or model not allowed on current tier; permanently gate this model for the session
+    ModelDisabled(String),
+    /// Transient RPM/TPM exhaustion; back off this model temporarily
+    ModelRateLimited { model_id: String, retry_after_secs: u64 },
+    /// Whole API key/project is out of quota or suspended
+    ProviderExhausted,
+}
+
+pub fn classify_google_429(
+    status_code: u16,
+    headers: &reqwest::header::HeaderMap,
+    body: &str,
+    target_model: &str,
+) -> QuotaFailureScope {
+    if status_code != 429 && !body.contains("RESOURCE_EXHAUSTED") {
+        return QuotaFailureScope::ProviderExhausted;
+    }
+
+    // Try parsing as JSON if possible for structured inspection
+    let json_val = serde_json::from_str::<serde_json::Value>(body).ok();
+
+    // Check for zero quota / model not permitted
+    let is_zero_quota = if let Some(ref root) = json_val {
+        let details = root.get("error").and_then(|e| e.get("details")).and_then(|d| d.as_array());
+        let mut zero = false;
+        if let Some(arr) = details {
+            for item in arr {
+                if let Some(metadata) = item.get("metadata") {
+                    if metadata.get("quota_limit").and_then(|v| v.as_str()) == Some("0")
+                        || metadata.get("quota_limit_value").and_then(|v| v.as_str()) == Some("0")
+                    {
+                        zero = true;
+                        break;
+                    }
+                }
+                if let Some(violations) = item.get("violations").and_then(|v| v.as_array()) {
+                    for v in violations {
+                        if let Some(desc) = v.get("description").and_then(|d| d.as_str()) {
+                            if desc.contains("limit '0'") || desc.contains("limit: 0") || desc.contains("limit 0") {
+                                zero = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        zero
+    } else {
+        false
+    };
+
+    let is_zero_quota = is_zero_quota
+        || body.contains("\"quota_limit\":\"0\"")
+        || body.contains("\"quota_limit\": \"0\"")
+        || body.contains("\"quota_limit_value\":\"0\"")
+        || body.contains("\"quota_limit_value\": \"0\"")
+        || body.contains("limit '0'")
+        || body.contains("limit: 0")
+        || body.contains("limit 0");
+
+    if is_zero_quota {
+        let model_id = if let Some(ref root) = json_val {
+            root.get("error")
+                .and_then(|e| e.get("details"))
+                .and_then(|d| d.as_array())
+                .and_then(|arr| {
+                    for item in arr {
+                        if let Some(violations) = item.get("violations").and_then(|v| v.as_array()) {
+                            for v in violations {
+                                if let Some(subj) = v.get("subject").and_then(|s| s.as_str()) {
+                                    if !subj.is_empty() {
+                                        return Some(subj.strip_prefix("models/").unwrap_or(subj).to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    None
+                })
+                .unwrap_or_else(|| target_model.to_string())
+        } else {
+            target_model.to_string()
+        };
+        return QuotaFailureScope::ModelDisabled(model_id);
+    }
+
+    // Check if the quota failure explicitly references a model-specific metric (RPM / TPM)
+    let clean_target = target_model.strip_prefix("models/").unwrap_or(target_model);
+    let is_per_model = body.contains("per_model")
+        || body.contains("requests_per_model_per_minute")
+        || body.contains("tokens_per_model_per_minute")
+        || body.contains(&format!("models/{}", clean_target))
+        || body.contains(clean_target)
+        || body.contains("free_tier_requests");
+
+    if is_per_model {
+        let retry_after = headers
+            .get("retry-after")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(60);
+
+        return QuotaFailureScope::ModelRateLimited {
+            model_id: target_model.to_string(),
+            retry_after_secs: retry_after,
+        };
+    }
+
+    // Fallback: project-wide quota or billing ceiling
+    QuotaFailureScope::ProviderExhausted
+}
+
 async fn try_cloud_provider(
     app: &tauri::AppHandle,
     client: &reqwest::Client,
@@ -651,6 +766,7 @@ async fn try_cloud_provider(
         }
     } else {
         let status = res.status();
+        let headers = res.headers().clone();
         let error_body = res.text().await.unwrap_or_else(|_| "Could not read error body".to_string());
         
         let status_code_str = if status.as_u16() == 403 {
@@ -711,16 +827,72 @@ async fn try_cloud_provider(
             }
         }
 
+        let mut google_scope_tag = "";
         if status.as_u16() == 429 || error_body.contains("RESOURCE_EXHAUSTED") || error_body.contains("rate limit") {
-            if let Some(health_state) = app.try_state::<ProviderHealthState>() {
-                let mut m_cooldowns = health_state.model_cooldowns.write().await;
-                m_cooldowns.insert(cloud_model.model.clone(), std::time::Instant::now() + std::time::Duration::from_secs(60));
-                log_event(
-                    app,
-                    "WARN",
-                    "ROUTER",
-                    &format!("Model '{}' placed on 60s cooldown due to 429 Rate Limit. Seamlessly falling back to next candidate.", cloud_model.model),
-                );
+            if cloud_model.provider == "google" {
+                let scope = classify_google_429(status.as_u16(), &headers, &error_body, &cloud_model.model);
+                match scope {
+                    QuotaFailureScope::ModelDisabled(model_id) => {
+                        google_scope_tag = " [GOOGLE_MODEL_DISABLED]";
+                        if let Some(health_state) = app.try_state::<ProviderHealthState>() {
+                            let mut gated = health_state.gated_models.write().await;
+                            let clean = model_id.strip_prefix("models/").unwrap_or(&model_id);
+                            gated.insert(clean.to_string());
+                            gated.insert(format!("models/{}", clean));
+                            let target_clean = cloud_model.model.strip_prefix("models/").unwrap_or(&cloud_model.model);
+                            gated.insert(target_clean.to_string());
+                            gated.insert(format!("models/{}", target_clean));
+                        }
+                        log_event(
+                            app,
+                            "WARN",
+                            "ROUTER",
+                            &format!("Google model '{}' has limit: 0 (zero-quota entitlement). Permanently gating model for this session.", cloud_model.model),
+                        );
+                    }
+                    QuotaFailureScope::ModelRateLimited { model_id, retry_after_secs } => {
+                        google_scope_tag = " [GOOGLE_MODEL_RATELIMITED]";
+                        if let Some(health_state) = app.try_state::<ProviderHealthState>() {
+                            let mut m_cooldowns = health_state.model_cooldowns.write().await;
+                            let expiry = std::time::Instant::now() + std::time::Duration::from_secs(retry_after_secs);
+                            m_cooldowns.insert(model_id.clone(), expiry);
+                            let clean = model_id.strip_prefix("models/").unwrap_or(&model_id);
+                            m_cooldowns.insert(clean.to_string(), expiry);
+                            let target_clean = cloud_model.model.strip_prefix("models/").unwrap_or(&cloud_model.model);
+                            m_cooldowns.insert(target_clean.to_string(), expiry);
+                        }
+                        log_event(
+                            app,
+                            "WARN",
+                            "ROUTER",
+                            &format!("Google model '{}' placed on {}s cooldown due to 429 Rate Limit. Seamlessly falling back to next candidate.", cloud_model.model, retry_after_secs),
+                        );
+                    }
+                    QuotaFailureScope::ProviderExhausted => {
+                        google_scope_tag = " [GOOGLE_PROVIDER_EXHAUSTED]";
+                        if let Some(health_state) = app.try_state::<ProviderHealthState>() {
+                            let mut p_cooldowns = health_state.provider_cooldowns.write().await;
+                            p_cooldowns.insert("google".to_string(), std::time::Instant::now() + std::time::Duration::from_secs(60));
+                        }
+                        log_event(
+                            app,
+                            "ERROR",
+                            "ROUTER",
+                            &format!("Google provider quota exhausted project-wide. Provider circuit breaker engaged for 60s."),
+                        );
+                    }
+                }
+            } else {
+                if let Some(health_state) = app.try_state::<ProviderHealthState>() {
+                    let mut m_cooldowns = health_state.model_cooldowns.write().await;
+                    m_cooldowns.insert(cloud_model.model.clone(), std::time::Instant::now() + std::time::Duration::from_secs(60));
+                    log_event(
+                        app,
+                        "WARN",
+                        "ROUTER",
+                        &format!("Model '{}' placed on 60s cooldown due to 429 Rate Limit. Seamlessly falling back to next candidate.", cloud_model.model),
+                    );
+                }
             }
         }
 
@@ -759,8 +931,7 @@ async fn try_cloud_provider(
             &format!("API error (HTTP {}): {} (model: {})", status, error_body, cloud_model.model),
         );
         
-        println!("{} API error ({}): {}", cloud_model.provider, status, error_body);
-        Err(format!("{} API error: HTTP {} - {}", cloud_model.provider, status, error_body))
+        Err(format!("{} API error: HTTP {}{} - {}", cloud_model.provider, status, google_scope_tag, error_body))
     }
 }
 
@@ -1007,7 +1178,7 @@ async fn chat_completions(
                         skip_google = true;
                     }
                     if e.contains("HTTP 429") {
-                        if target_model.provider == "google" && (e.contains("quota metric") || e.contains("free_tier_requests") || e.contains("Quota exceeded")) {
+                        if target_model.provider == "google" && e.contains("[GOOGLE_PROVIDER_EXHAUSTED]") {
                             skip_google = true;
                         }
                         continue;
@@ -1078,6 +1249,12 @@ async fn chat_completions(
                         return response;
                     }
                     Err(e) => {
+                        log_event(
+                            &app,
+                            "WARN",
+                            "ROUTER",
+                            &format!("Last Resort ollama ({}) failed: {}", target_model.model, e),
+                        );
                         errors.push(format!("Last Resort ollama ({}) failed: {}", target_model.model, e));
                     }
                 }
@@ -1097,6 +1274,12 @@ async fn chat_completions(
                         return response;
                     }
                     Err(e) => {
+                        log_event(
+                            &app,
+                            "WARN",
+                            "ROUTER",
+                            &format!("Last Resort {} ({}) failed: {}", target_model.provider, target_model.model, e),
+                        );
                         errors.push(format!("Last Resort {} ({}) failed: {}", target_model.provider, target_model.model, e));
                     }
                 }
@@ -1121,7 +1304,7 @@ async fn chat_completions(
         &app,
         "ERROR",
         "ROUTER",
-        &format!("All upstream providers failed for request from '{}'", source),
+        &format!("All upstream providers failed for request from '{}'. Failures: {}", source, errors.join("; ")),
     );
 
     // If both fail, return an aggregated 500 error
@@ -1424,7 +1607,6 @@ pub fn parse_openrouter_models(json: &serde_json::Value, gated_set: &HashSet<Str
                             } else {
                                 raw_score
                             };
-                            println!("Score for {} (lookup: {}) is {}", inference_id, lookup_id, priority);
                             ranked.push(RankedModel {
                                 model: CloudModel {
                                     model: inference_id,

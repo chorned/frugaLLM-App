@@ -85,14 +85,8 @@ describe('NodeConfigPanel - Managed vs Adopted Status and Protection', () => {
       // Destructive uninstall CTA must be hidden
       expect(screen.queryByText('UNINSTALL OLLAMA')).not.toBeInTheDocument();
 
-      // Safe model deletion CTA must remain available
-      const deleteBtn = screen.getByTestId('btn-delete-local-model');
-      expect(deleteBtn).toBeInTheDocument();
-      fireEvent.click(deleteBtn);
-      const confirmYes = screen.getByTestId('confirm-delete-local-model-yes');
-      expect(confirmYes).toBeInTheDocument();
-      fireEvent.click(confirmYes);
-      expect(handleDeleteLocalModel).toHaveBeenCalled();
+      // Safe model deletion CTA must no longer be rendered (CHO-133)
+      expect(screen.queryByTestId('btn-delete-local-model')).not.toBeInTheDocument();
     });
 
     it('hides badge and displays UNINSTALL OLLAMA when isOllamaManaged is true', () => {
