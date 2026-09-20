@@ -332,20 +332,25 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
   const handlePanelClick = (e: any) => e.stopPropagation();
 
   return (
-    <div onClick={handlePanelClick} style={{ 
-      width: node.id === 'node-frugallm' ? '780px' : '440px', 
-      maxWidth: '92vw',
-      maxHeight: '85vh',
-      border: '1px solid var(--zen-border)', 
-      backgroundColor: 'var(--zen-surface)', 
-      borderRadius: '20px',
-      display: 'flex', 
-      flexDirection: 'column',
-      boxShadow: 'var(--zen-shadow-modal)', 
-      overflow: 'hidden',
-      zIndex: 100,
-      fontFamily: 'inherit'
-    }}>
+    <div 
+      onClick={handlePanelClick} 
+      data-testid="node-config-panel"
+      className="node-config-panel"
+      style={{ 
+        width: node.id === 'node-frugallm' ? '780px' : '440px', 
+        maxWidth: '92vw',
+        maxHeight: '85vh',
+        border: '1px solid var(--zen-border)', 
+        backgroundColor: 'var(--zen-surface)', 
+        borderRadius: '20px',
+        display: 'flex', 
+        flexDirection: 'column',
+        boxShadow: 'var(--zen-shadow-modal)', 
+        overflow: 'hidden',
+        zIndex: 100,
+        fontFamily: 'inherit'
+      }}
+    >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', borderBottom: '1px solid var(--zen-border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {getProviderIcon(node.id, { size: 18 })}

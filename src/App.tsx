@@ -329,6 +329,7 @@ function AppContent() {
         setIsToolGatewayInstalled={setIsToolGatewayInstalled}
         setNodes={setNodes}
         memoryRef={memoryRef}
+        setMinimizedTerminal={setMinimizedTerminal}
       />
 
       <TopologyCanvas

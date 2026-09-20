@@ -39,6 +39,7 @@ export interface TerminalViewProps {
   mode: 'install-hermes' | 'run-hermes' | 'run-hermes-web' | 'run-hermes-gateway' | 'run-hermes-desktop' | 'install-opencode' | 'run-opencode' | 'run-opencode-web' | 'install-ollama' | 'run-ollama' | 'install-tool-gateway' | 'uninstall-tool-gateway' | 'uninstall-hermes' | 'uninstall-opencode' | 'uninstall-ollama';
   sessionId: string;
   onExit: () => void;
+  onMinimize?: () => void;
   onProcessStart?: () => void;
   onProcessExit?: () => void;
   frugalConfig?: any;
@@ -54,7 +55,7 @@ export interface TerminalViewProps {
   memoryRef?: React.MutableRefObject<any>;
 }
 
-export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onExit, onProcessStart, onProcessExit, frugalConfig, setFrugalConfig, setIsHermesInstalled, setIsHermesManaged, setIsOpenCodeInstalled, setIsOpenCodeManaged, setIsOllamaInstalled, setIsOllamaManaged, setIsToolGatewayInstalled, setNodes, memoryRef }) => {
+export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onExit, onMinimize, onProcessStart, onProcessExit, frugalConfig, setFrugalConfig, setIsHermesInstalled, setIsHermesManaged, setIsOpenCodeInstalled, setIsOpenCodeManaged, setIsOllamaInstalled, setIsOllamaManaged, setIsToolGatewayInstalled, setNodes, memoryRef }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const [isProvisioningModel, setIsProvisioningModel] = useState(false);
   const [downloadPercent, setDownloadPercent] = useState<number>(0);
@@ -722,7 +723,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
   if (mode === 'uninstall-ollama') title = en.routingGraph?.terminal?.uninstallOllamaTitle || 'Uninstall Ollama Engine';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', backgroundColor: 'var(--zen-surface)', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--zen-border)', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}>
+    <div 
+      data-testid="terminal-view"
+      className="terminal-view"
+      style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', backgroundColor: 'var(--zen-surface)', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--zen-border)', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}
+    >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', backgroundColor: 'var(--zen-surface-hover)', borderBottom: '1px solid var(--zen-border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {getProviderIcon(mode, { size: 16 })}
@@ -742,7 +747,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <button 
-              onClick={() => onExit()}
+              onClick={() => {
+                if (onMinimize) onMinimize();
+                else onExit();
+              }}
               title="Hide terminal and keep process running in background"
               aria-label="Hide terminal"
               style={{ 
