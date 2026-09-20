@@ -88,11 +88,17 @@ pub fn resolve_binary(binary_name: &str) -> String {
         let prog_files = std::env::var("ProgramFiles").unwrap_or_default();
         vec![
             PathBuf::from(&local_app_data).join(format!("hermes\\bin\\{}.exe", binary_name)),
+            home.join(format!(".hermes\\bin\\{}.exe", binary_name)),
             PathBuf::from(&local_app_data).join(format!("Programs\\opencode\\{}.exe", binary_name)),
+            home.join(format!(".opencode\\bin\\{}.exe", binary_name)),
             PathBuf::from(&local_app_data).join(format!("Programs\\Ollama\\{}.exe", binary_name)),
             PathBuf::from(&prog_files).join(format!("Ollama\\{}.exe", binary_name)),
             PathBuf::from(&app_data).join(format!("npm\\{}.cmd", binary_name)),
+            PathBuf::from(&app_data).join(format!("npm\\{}", binary_name)),
+            PathBuf::from(&app_data).join(format!("Python\\Scripts\\{}.exe", binary_name)),
+            PathBuf::from(&local_app_data).join(format!("Programs\\Python\\Scripts\\{}.exe", binary_name)),
             home.join(format!(".cargo\\bin\\{}.exe", binary_name)),
+            home.join(format!(".local\\bin\\{}.exe", binary_name)),
         ]
     };
 
@@ -148,18 +154,41 @@ pub fn build_macos_applescript(
 
 /// Builds the PowerShell script command line for Windows Terminal or PowerShell.
 pub fn build_windows_powershell_script(
+    title: &str,
     cwd: Option<&Path>,
     env_vars: &HashMap<String, String>,
     command: &str,
 ) -> String {
+    let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default();
+    let app_data = std::env::var("APPDATA").unwrap_or_default();
+    let user_profile = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .to_string_lossy()
+        .to_string();
+    let prog_files = std::env::var("ProgramFiles").unwrap_or_else(|_| "C:\\Program Files".to_string());
+
+    // Construct extended PATH with common CLI install locations
+    let path_additions = format!(
+        "{}\\hermes\\bin;{}\\.hermes\\bin;{}\\Programs\\opencode;{}\\.opencode\\bin;{}\\npm;{}\\.cargo\\bin;{}\\.local\\bin;{}\\Python\\Scripts;{}\\Programs\\Python\\Scripts;{}\\Programs\\Ollama;{}\\Ollama",
+        local_app_data, user_profile, local_app_data, user_profile, app_data, user_profile, user_profile, app_data, local_app_data, local_app_data, prog_files
+    );
+
     let mut parts: Vec<String> = Vec::new();
 
-    // Standard candidate paths on Windows
-    parts.push("$env:PATH=\"$HOME\\.local\\bin;$HOME\\.hermes\\bin;$HOME\\.opencode\\bin;$HOME\\.cargo\\bin;$env:LOCALAPPDATA\\hermes\\bin;$env:LOCALAPPDATA\\Programs\\opencode;$env:APPDATA\\npm;$env:LOCALAPPDATA\\Programs\\Ollama;$env:ProgramFiles\\Ollama;$env:PATH\";".to_string());
+    if !title.is_empty() {
+        let safe_title = title.replace('\'', "''");
+        parts.push(format!("[Console]::Title = '{}';", safe_title));
+    }
 
-    for (k, v) in env_vars {
-        let safe_v = v.replace('"', "`\"").replace('$', "`$");
-        parts.push(format!("$env:{}=\"{}\";", k, safe_v));
+    parts.push(format!("$env:PATH = '{};' + $env:PATH;", path_additions));
+
+    let mut sorted_keys: Vec<_> = env_vars.keys().collect();
+    sorted_keys.sort();
+    for k in sorted_keys {
+        if let Some(v) = env_vars.get(k) {
+            let safe_v = v.replace('\'', "''");
+            parts.push(format!("$env:{} = '{}';", k, safe_v));
+        }
     }
 
     if let Some(c) = cwd {
@@ -167,7 +196,12 @@ pub fn build_windows_powershell_script(
         parts.push(format!("Set-Location -LiteralPath '{}';", path_str));
     }
 
-    parts.push(command.to_string());
+    let trimmed = command.trim();
+    if trimmed.starts_with('&') {
+        parts.push(trimmed.to_string());
+    } else {
+        parts.push(format!("& {}", trimmed));
+    }
     parts.join(" ")
 }
 
@@ -230,43 +264,21 @@ pub fn launch_in_native_terminal(
 
     #[cfg(target_os = "windows")]
     {
-        let ps_script = build_windows_powershell_script(effective_cwd, env_vars, command);
+        use std::os::windows::process::CommandExt;
+        const CREATE_NEW_CONSOLE: u32 = 0x00000010;
 
-        // First attempt Windows Terminal (wt.exe) if available
-        let wt_found = find_executable_in_path("wt.exe").is_some()
-            || find_executable_in_path("wt").is_some()
-            || Path::new("C:\\Users")
-                .join(std::env::var("USERNAME").unwrap_or_default())
-                .join("AppData\\Local\\Microsoft\\WindowsApps\\wt.exe")
-                .is_file();
+        let default_home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+        let target_dir = effective_cwd.map(PathBuf::from).unwrap_or(default_home);
 
-        if wt_found {
-            let mut cmd = std::process::Command::new("wt.exe");
-            cmd.arg("--title").arg(title);
-            if let Some(c) = effective_cwd {
-                cmd.arg("-d").arg(c);
-            }
-            cmd.args([
-                "powershell.exe",
-                "-NoExit",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-Command",
-                &ps_script,
-            ]);
+        let ps_script = build_windows_powershell_script(title, effective_cwd, env_vars, command);
 
-            if let Ok(_) = cmd.spawn() {
-                return Ok(());
-            }
-        }
-
-        // Fallback to standard PowerShell via cmd.exe /c start
-        let mut fallback = std::process::Command::new("cmd.exe");
-        fallback.args([
-            "/C",
-            "start",
-            title,
-            "powershell.exe",
+        // Directly spawn powershell.exe with CREATE_NEW_CONSOLE.
+        // This guarantees a visible, interactive top-level console window without cmd.exe argument mangling.
+        // -NoExit ensures the session remains open at the prompt even if the target CLI exits or fails.
+        let mut cmd = std::process::Command::new("powershell.exe");
+        cmd.creation_flags(CREATE_NEW_CONSOLE);
+        cmd.current_dir(&target_dir);
+        cmd.args([
             "-NoExit",
             "-ExecutionPolicy",
             "Bypass",
@@ -274,9 +286,8 @@ pub fn launch_in_native_terminal(
             &ps_script,
         ]);
 
-        fallback
-            .spawn()
-            .map_err(|e| format!("Failed to launch terminal on Windows: {}", e))?;
+        cmd.spawn()
+            .map_err(|e| format!("Failed to launch terminal on Windows: {e}"))?;
 
         Ok(())
     }
@@ -381,17 +392,13 @@ pub async fn launch_native_app_session(
             let _ = crate::commands::agents::sync_hermes_config(&app, port, &api_key);
             let target_cwd = resolve_and_ensure_dir(workspace_override.as_deref().or(hermes_ws.as_deref()));
             let hermes_bin = resolve_binary("hermes");
-            let cmd = if hermes_bin.contains(' ') {
-                format!("\"{}\"", hermes_bin)
-            } else {
-                hermes_bin.clone()
-            };
+            let cmd = format!("\"{}\"", hermes_bin);
             
             crate::commands::system::log_event(
                 &app,
                 "INFO",
                 "TERMINAL",
-                &format!("Launching Hermes CLI in native terminal ({})", hermes_bin),
+                &format!("Launching Hermes CLI in native terminal ({})", cmd),
             );
             launch_in_native_terminal("Hermes", Some(&target_cwd), &env_vars, &cmd)
         }
@@ -399,17 +406,13 @@ pub async fn launch_native_app_session(
             let _ = crate::commands::agents::sync_opencode_config(&app, port, &api_key);
             let target_cwd = resolve_and_ensure_dir(workspace_override.as_deref().or(opencode_ws.as_deref()));
             let opencode_bin = resolve_binary("opencode");
-            let cmd = if opencode_bin.contains(' ') {
-                format!("\"{}\" -m litellm/frugallm", opencode_bin)
-            } else {
-                format!("{} -m litellm/frugallm", opencode_bin)
-            };
+            let cmd = format!("\"{}\" -m litellm/frugallm", opencode_bin);
 
             crate::commands::system::log_event(
                 &app,
                 "INFO",
                 "TERMINAL",
-                &format!("Launching OpenCode CLI in native terminal ({})", opencode_bin),
+                &format!("Launching OpenCode CLI in native terminal ({})", cmd),
             );
             launch_in_native_terminal(
                 "OpenCode",
@@ -427,17 +430,13 @@ pub async fn launch_native_app_session(
             let title = format!("Ollama Chat - {}", target_model);
             let target_cwd = resolve_and_ensure_dir(home_dir.as_deref().and_then(|p| p.to_str()));
             let ollama_bin = resolve_binary("ollama");
-            let cmd = if ollama_bin.contains(' ') {
-                format!("\"{}\" run {}", ollama_bin, target_model)
-            } else {
-                format!("{} run {}", ollama_bin, target_model)
-            };
+            let cmd = format!("\"{}\" run {}", ollama_bin, target_model);
 
             crate::commands::system::log_event(
                 &app,
                 "INFO",
                 "TERMINAL",
-                &format!("Launching Ollama CLI in native terminal ({}) for model {}", ollama_bin, target_model),
+                &format!("Launching Ollama CLI in native terminal ({}) for model {}", cmd, target_model),
             );
             launch_in_native_terminal(&title, Some(&target_cwd), &env_vars, &cmd)
         }
@@ -512,11 +511,28 @@ mod tests {
         env.insert("OPENAI_BASE_URL".to_string(), "http://127.0.0.1:61721/v1".to_string());
         let cwd = Path::new("C:\\Users\\test\\My Documents");
 
-        let ps = build_windows_powershell_script(Some(cwd), &env, "opencode -m litellm/frugallm");
-        assert!(ps.contains("$env:PATH="));
-        assert!(ps.contains("$env:OPENAI_BASE_URL=\"http://127.0.0.1:61721/v1\""));
+        let ps = build_windows_powershell_script("OpenCode", Some(cwd), &env, "opencode -m litellm/frugallm");
+        assert!(ps.contains("[Console]::Title = 'OpenCode';"));
+        assert!(ps.contains("$env:PATH = '"));
+        assert!(ps.contains("$env:OPENAI_BASE_URL = 'http://127.0.0.1:61721/v1'"));
         assert!(ps.contains("Set-Location -LiteralPath 'C:\\Users\\test\\My Documents'"));
-        assert!(ps.contains("opencode -m litellm/frugallm"));
+        assert!(ps.contains("& opencode -m litellm/frugallm"));
+    }
+
+    #[test]
+    fn test_windows_hermes_native_terminal_script_generation() {
+        let mut env = HashMap::new();
+        env.insert("OPENAI_BASE_URL".to_string(), "http://127.0.0.1:61721/v1".to_string());
+        env.insert("OPENAI_API_KEY".to_string(), "frugallm".to_string());
+        let cwd = Path::new("C:\\Users\\test\\workspace");
+
+        let ps = build_windows_powershell_script("Hermes", Some(cwd), &env, "\"C:\\Users\\test\\.hermes\\bin\\hermes.exe\"");
+        assert!(ps.contains("[Console]::Title = 'Hermes';"));
+        assert!(ps.contains("$env:PATH = '"));
+        assert!(ps.contains("hermes\\bin"));
+        assert!(ps.contains("$env:OPENAI_BASE_URL = 'http://127.0.0.1:61721/v1'"));
+        assert!(ps.contains("$env:OPENAI_API_KEY = 'frugallm'"));
+        assert!(ps.contains("& \"C:\\Users\\test\\.hermes\\bin\\hermes.exe\""));
     }
 
     #[test]
@@ -538,13 +554,42 @@ mod tests {
         env.insert("WEIRD_VAR".to_string(), "foo'bar\"baz$qux\\end".to_string());
         let cwd = Path::new("/tmp/path with 'single' and \"double\" quotes");
 
-        let mac_script = build_macos_applescript("Test", Some(cwd), &env, "echo hostile");
+        let mac_script = build_macos_applescript("Test'Title", Some(cwd), &env, "echo hostile");
         assert!(!mac_script.is_empty());
 
-        let win_script = build_windows_powershell_script(Some(cwd), &env, "echo hostile");
+        let win_script = build_windows_powershell_script("Test'Title", Some(cwd), &env, "echo hostile");
         assert!(!win_script.is_empty());
+        assert!(win_script.contains("[Console]::Title = 'Test''Title';"));
+        assert!(win_script.contains("foo''bar\"baz$qux\\end"));
 
         let linux_script = build_linux_bash_command(Some(cwd), &env, "echo hostile");
         assert!(!linux_script.is_empty());
+    }
+
+    #[test]
+    fn test_windows_quoted_binary_invocation() {
+        let env = HashMap::new();
+        let cwd = Path::new("C:\\Users\\test");
+        let ps = build_windows_powershell_script("Ollama Chat", Some(cwd), &env, "\"C:\\Program Files\\Ollama\\ollama.exe\" run test-model");
+        assert!(ps.contains("[Console]::Title = 'Ollama Chat';"));
+        assert!(ps.contains("& \"C:\\Program Files\\Ollama\\ollama.exe\" run test-model"));
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_windows_powershell_script_execution() {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NEW_CONSOLE: u32 = 0x00000010;
+
+        let mut env = HashMap::new();
+        env.insert("TEST_VAR".to_string(), "FrugalSuccess".to_string());
+        let script = build_windows_powershell_script("TestExecution", None, &env, "Write-Output $env:TEST_VAR");
+        let mut cmd = std::process::Command::new("powershell.exe");
+        cmd.creation_flags(CREATE_NEW_CONSOLE);
+        cmd.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &script]);
+        let output = cmd.output().expect("PowerShell should execute successfully");
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("FrugalSuccess"));
     }
 }

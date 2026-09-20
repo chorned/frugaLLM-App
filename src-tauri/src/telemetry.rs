@@ -214,7 +214,7 @@ pub fn is_time_jump_detected(elapsed: Duration, expected_interval: Duration, mul
 pub fn start_telemetry_loop(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut client = Client::builder()
-            .timeout(Duration::from_millis(1500))
+            .timeout(Duration::from_millis(500))
             .build()
             .unwrap_or_default();
             
@@ -228,30 +228,9 @@ pub fn start_telemetry_loop(app: AppHandle) {
         let mut last_ollama_state = OllamaState::default();
 
         let profile = crate::get_hardware_profile().await.unwrap_or_default();
-        let mut last_tick_instant = tokio::time::Instant::now();
         let expected_interval = Duration::from_secs(1);
 
         loop {
-            let now = tokio::time::Instant::now();
-            let elapsed = now.duration_since(last_tick_instant);
-            last_tick_instant = now;
-
-            if tick_counter > 0 && is_time_jump_detected(elapsed, expected_interval, 2.5) {
-                eprintln!("[POWER] Monotonic time jump detected ({:?} > 2.5x expected). System resumed from sleep/suspend. Re-probing hardware and refreshing connections.", elapsed);
-                #[cfg(not(target_os = "macos"))]
-                {
-                    nvml = nvml_wrapper::Nvml::init().ok();
-                }
-                client = Client::builder()
-                    .timeout(Duration::from_millis(1500))
-                    .build()
-                    .unwrap_or_default();
-
-                let app_reprobe = app.clone();
-                tauri::async_runtime::spawn(async move {
-                    let _ = crate::proxy::server::fetch_live_routing_chain(&app_reprobe).await;
-                });
-            }
 
             // Hardware polling (every 1 second)
             let mut hw_state = HardwareState::default();
@@ -392,7 +371,31 @@ pub fn start_telemetry_loop(app: AppHandle) {
             let _ = app.emit("telemetry_update", payload);
 
             tick_counter += 1;
-            sleep(Duration::from_secs(1)).await;
+            let pre_sleep = tokio::time::Instant::now();
+            sleep(expected_interval).await;
+            let sleep_elapsed = pre_sleep.elapsed();
+
+            if is_time_jump_detected(sleep_elapsed, expected_interval, 2.5) {
+                crate::commands::system::log_event(
+                    &app,
+                    "INFO",
+                    "POWER",
+                    &format!("Monotonic time jump detected ({:?} > 2.5x expected). System resumed from sleep/suspend. Re-probing hardware and refreshing connections.", sleep_elapsed),
+                );
+                #[cfg(not(target_os = "macos"))]
+                {
+                    nvml = nvml_wrapper::Nvml::init().ok();
+                }
+                client = Client::builder()
+                    .timeout(Duration::from_millis(500))
+                    .build()
+                    .unwrap_or_default();
+
+                let app_reprobe = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = crate::proxy::server::fetch_live_routing_chain(&app_reprobe).await;
+                });
+            }
         }
     });
 }

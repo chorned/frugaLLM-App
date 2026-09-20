@@ -1520,6 +1520,10 @@ pub fn extract_paid_fallback_candidates(
 pub fn parse_ollama_models(json: &serde_json::Value) -> Vec<RankedModel> {
     let mut ranked = Vec::new();
     if let Some(models) = json.get("models").and_then(|m| m.as_array()) {
+        if models.is_empty() {
+            return ranked;
+        }
+
         let raw_names: Vec<String> = models
             .iter()
             .filter_map(|m| m.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
