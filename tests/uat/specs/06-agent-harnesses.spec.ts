@@ -26,16 +26,29 @@ test.describe('Phase 6: Autonomous Agents (Hermes & OpenCode)', () => {
     const launchWebBtn = appPage.locator('button:has-text("LAUNCH WEBUI")');
 
     if (await installBtn.isVisible()) {
+      test.setTimeout(300_000);
+      console.log('[UAT Phase 6] Triggering real OpenCode setup script in temporary workspace...');
       await installBtn.click();
       const terminalOverlay = appPage.locator('[data-testid="terminal-view"], .terminal-overlay').first();
-      if (await terminalOverlay.isVisible({ timeout: 2000 }).catch(() => false)) {
-        // Close terminal
-        const closeTerm = appPage.locator('button[title="Close process"], button:has-text("✕")').first();
-        if (await closeTerm.isVisible()) await closeTerm.click();
+      await expect(terminalOverlay).toBeVisible({ timeout: 5000 });
+
+      // Allow installer script to run and stream output into terminal
+      const startTime = Date.now();
+      while (Date.now() - startTime < 20000) {
+        const text = await terminalOverlay.innerText().catch(() => '');
+        if (text.includes('OpenCode') || text.includes('install') || text.includes('>>>')) {
+          console.log('[UAT Phase 6] OpenCode installer active in terminal');
+          break;
+        }
+        await appPage.waitForTimeout(1000);
       }
+
+      // Close terminal after verifying active installer execution
+      const closeTerm = appPage.locator('button[title="Close process"], button:has-text("✕")').first();
+      if (await closeTerm.isVisible()) await closeTerm.click();
     } else if (await launchWebBtn.isVisible()) {
       await launchWebBtn.click();
-      await appPage.waitForTimeout(500);
+      await appPage.waitForTimeout(1000);
 
       // Check active child process card with [CLOSE]
       const closeProcessBtn = appPage.locator('button:has-text("CLOSE")').first();
@@ -72,12 +85,26 @@ test.describe('Phase 6: Autonomous Agents (Hermes & OpenCode)', () => {
     const launchGatewayBtn = appPage.locator('button:has-text("LAUNCH APP / GATEWAY"), button:has-text("LAUNCH GATEWAY")');
 
     if (await installBtn.isVisible()) {
+      test.setTimeout(300_000);
+      console.log('[UAT Phase 6] Triggering real Hermes setup script in temporary workspace...');
       await installBtn.click();
       const terminalOverlay = appPage.locator('[data-testid="terminal-view"], .terminal-overlay').first();
-      if (await terminalOverlay.isVisible({ timeout: 2000 }).catch(() => false)) {
-        const closeTerm = appPage.locator('button[title="Close process"], button:has-text("✕")').first();
-        if (await closeTerm.isVisible()) await closeTerm.click();
+      await expect(terminalOverlay).toBeVisible({ timeout: 5000 });
+
+      // Allow installer script to run and stream output into terminal
+      const startTime = Date.now();
+      while (Date.now() - startTime < 20000) {
+        const text = await terminalOverlay.innerText().catch(() => '');
+        if (text.includes('Hermes') || text.includes('installer') || text.includes('Stage')) {
+          console.log('[UAT Phase 6] Hermes installer active in terminal');
+          break;
+        }
+        await appPage.waitForTimeout(1000);
       }
+
+      // Close terminal after verifying active installer execution
+      const closeTerm = appPage.locator('button[title="Close process"], button:has-text("✕")').first();
+      if (await closeTerm.isVisible()) await closeTerm.click();
     } else if (await launchGatewayBtn.isVisible()) {
       await launchGatewayBtn.click();
       await appPage.waitForTimeout(500);

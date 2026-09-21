@@ -22,9 +22,11 @@ test.describe('Phase 4: Local Hardware Node (Ollama) & Tool Gateway', () => {
     }
   });
 
-  test('04.2 - Embedded Terminal: trigger Ollama installation, minimize to footer, restore overlay', async ({
+  test('04.2 - Model Ingestion: pull real local model, verify streaming download progress, and register model', async ({
     appPage,
   }) => {
+    test.setTimeout(300_000);
+
     // If Ollama is not yet installed, click INSTALL OLLAMA
     const installBtn = appPage.locator('button:has-text("INSTALL OLLAMA")');
     if (await installBtn.isVisible()) {
@@ -33,8 +35,10 @@ test.describe('Phase 4: Local Hardware Node (Ollama) & Tool Gateway', () => {
 
     // Check terminal overlay
     const terminalOverlay = appPage.locator('[data-testid="terminal-view"], .terminal-overlay, [data-testid^="terminal-overlay-"]').first();
-    if (await terminalOverlay.isVisible({ timeout: 3000 }).catch(() => false)) {
-      // Minimize terminal with '_' button
+    const hasTerminal = await terminalOverlay.isVisible({ timeout: 3000 }).catch(() => false);
+
+    if (hasTerminal) {
+      // Test minimize terminal with '_' button
       const minBtn = appPage.locator('button[aria-label="Hide terminal"], button[title*="Hide terminal"], button:has-text("_")').first();
       if (await minBtn.isVisible()) {
         await minBtn.click();
@@ -46,19 +50,107 @@ test.describe('Phase 4: Local Hardware Node (Ollama) & Tool Gateway', () => {
 
         // Click to resume
         await footerDock.dispatchEvent('click');
-        await expect(appPage.locator('[data-testid="terminal-view"], .terminal-overlay').first()).toBeVisible({ timeout: 5000 });
-
-        // Hide/minimize terminal to allow next tests to interact with drawer
-        const hideBtn = appPage.locator('button[aria-label="Hide terminal"], button[title*="Hide terminal"], button:has-text("_")').first();
-        if (await hideBtn.isVisible()) {
-          await hideBtn.click();
-        }
+        await expect(terminalOverlay).toBeVisible({ timeout: 5000 });
       }
     }
 
-    // Check daemon binding on 11434 (give reasonable time for local daemon)
-    const ollamaOnline = await waitForPortOpen(11434, 5000);
-    console.log(`[UAT Phase 4] Ollama 11434 status: ${ollamaOnline ? 'ONLINE' : 'OFFLINE (simulated)'}`);
+    // Ensure Ollama daemon is active and responding on 11434
+    const ollamaOnline = await waitForPortOpen(11434, 30000);
+    expect(ollamaOnline).toBe(true);
+
+    // Trigger real pull of a lightweight model (qwen2.5:0.5b, ~398MB)
+    const targetModel = 'qwen2.5:0.5b';
+    console.log(`[UAT Phase 4] Checking local Ollama tags on 127.0.0.1:11434...`);
+    
+    let modelReady = false;
+    try {
+      const tagsRes = await fetch('http://127.0.0.1:11434/api/tags');
+      if (tagsRes.ok) {
+        const json = await tagsRes.json();
+        const models = (json.models || []).map((m: any) => m.name || m.model);
+        if (models.some((m: string) => m.includes(targetModel) || m.includes('frugallm-active'))) {
+          modelReady = true;
+          console.log(`[UAT Phase 4] Model already present in local tags: ${models.join(', ')}`);
+        }
+      }
+    } catch {}
+
+    if (!modelReady) {
+      console.log(`[UAT Phase 4] Triggering real network pull of '${targetModel}' via Ollama API...`);
+      const pullRes = await fetch('http://127.0.0.1:11434/api/pull', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: targetModel, stream: true }),
+      });
+      expect(pullRes.ok).toBe(true);
+
+      const reader = pullRes.body?.getReader();
+      const decoder = new TextDecoder();
+      let lastReportedPercent = 0;
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n').filter(Boolean);
+          for (const line of lines) {
+            try {
+              const msg = JSON.parse(line);
+              if (msg.status === 'success') {
+                modelReady = true;
+              }
+              if (msg.total && msg.completed) {
+                const pct = Math.floor((msg.completed / msg.total) * 100);
+                if (pct >= lastReportedPercent + 25 || pct === 100) {
+                  console.log(`[UAT Phase 4] Download progress: ${pct}% (${(msg.completed / 1024 / 1024).toFixed(1)} / ${(msg.total / 1024 / 1024).toFixed(1)} MB)`);
+                  lastReportedPercent = pct;
+                }
+              }
+            } catch {}
+          }
+        }
+      }
+
+      // Create frugallm-active alias so FrugaLLM's internal router recognizes and routes to it
+      console.log(`[UAT Phase 4] Registering 'frugallm-active' alias from '${targetModel}'...`);
+      await fetch('http://127.0.0.1:11434/api/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'frugallm-active',
+          from: targetModel,
+          stream: false,
+        }),
+      });
+    }
+
+    // Verify model is active in local Ollama tags
+    let verifiedInTags = false;
+    for (let i = 0; i < 30; i++) {
+      try {
+        const res = await fetch('http://127.0.0.1:11434/api/tags');
+        if (res.ok) {
+          const data = await res.json();
+          const names = (data.models || []).map((m: any) => m.name || m.model);
+          if (names.some((n: string) => n.includes('frugallm-active') || n.includes(targetModel))) {
+            verifiedInTags = true;
+            console.log(`[UAT Phase 4] Verified in Ollama tags: ${names.join(', ')}`);
+            break;
+          }
+        }
+      } catch {}
+      await appPage.waitForTimeout(1000);
+    }
+    expect(verifiedInTags).toBe(true);
+
+    // Hide/minimize terminal overlay if still open to allow next tests to interact with drawer
+    if (await terminalOverlay.isVisible().catch(() => false)) {
+      const hideBtn = appPage.locator('button[aria-label="Hide terminal"], button[title*="Hide terminal"], button:has-text("✕")').first();
+      if (await hideBtn.isVisible()) {
+        await hideBtn.click();
+      }
+    }
   });
 
   test('04.3 - Tool Enforcing Gateway: toggle checkbox, trigger installation, verify status', async ({

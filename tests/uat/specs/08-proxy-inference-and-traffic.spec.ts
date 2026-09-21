@@ -17,34 +17,79 @@ test.describe('Phase 8: Real Proxy Inference & Traffic Pulses', () => {
 
     console.log(`[UAT Phase 8] Dispatching real inference request to proxy at 127.0.0.1:${activePort}...`);
 
+    test.setTimeout(120_000);
+
     // Capture baseline tokens
     const sessionTokensEl = appPage.locator('[data-testid="frugallm-session-tokens"]');
     await expect(sessionTokensEl).toBeVisible({ timeout: 10000 });
     const baselineTokens = await sessionTokensEl.innerText();
 
-    // Dispatch request via standard fetch in Node or evaluate in page
+    // Identify local model in Ollama
+    let localModel = 'frugallm-active';
     try {
-      const res = await fetch(`http://127.0.0.1:${activePort}/v1/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer frugallm',
-        },
-        body: JSON.stringify({
-          model: 'frugallm',
-          messages: [{ role: 'user', content: 'Say "UAT inference success" in two words.' }],
-          max_tokens: 15,
-        }),
-      });
+      const tagsRes = await fetch('http://127.0.0.1:11434/api/tags');
+      if (tagsRes.ok) {
+        const json = await tagsRes.json();
+        const models = (json.models || []).map((m: any) => m.name || m.model);
+        if (models.some((m: string) => m.includes('frugallm-active'))) {
+          localModel = 'frugallm-active';
+        } else if (models.length > 0) {
+          localModel = models[0];
+        }
+      }
+    } catch {}
 
-      console.log(`[UAT Phase 8] Proxy HTTP response status: ${res.status}`);
-      // Even if provider rate limits or returns 429/500/offline, proxy server receives and processes request
-    } catch (e: any) {
-      console.warn(`[UAT Phase 8] Inference fetch notice: ${e.message}`);
+    console.log(`[UAT Phase 8] Dispatching real streaming inference request to proxy at 127.0.0.1:${activePort} (model: ${localModel})...`);
+
+    // Dispatch request via standard fetch to proxy
+    const res = await fetch(`http://127.0.0.1:${activePort}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer frugallm',
+      },
+      body: JSON.stringify({
+        model: localModel,
+        messages: [{ role: 'user', content: 'Say "UAT inference success" in three words.' }],
+        max_tokens: 25,
+        stream: true,
+      }),
+    });
+
+    console.log(`[UAT Phase 8] Proxy HTTP response status: ${res.status}`);
+    expect(res.status).toBe(200);
+
+    // Consume real SSE stream chunks from Ollama through FrugaLLM proxy
+    const reader = res.body?.getReader();
+    const decoder = new TextDecoder();
+    let fullResponseText = '';
+    let streamChunksCount = 0;
+
+    if (reader) {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        streamChunksCount++;
+        const lines = chunk.split('\n').filter(Boolean);
+        for (const line of lines) {
+          if (line.startsWith('data: ') && !line.includes('[DONE]')) {
+            try {
+              const payload = JSON.parse(line.slice(6));
+              const delta = payload.choices?.[0]?.delta?.content || '';
+              fullResponseText += delta;
+            } catch {}
+          }
+        }
+      }
     }
 
+    console.log(`[UAT Phase 8] Received ${streamChunksCount} streaming chunks. Generated text: "${fullResponseText.trim()}"`);
+    expect(streamChunksCount).toBeGreaterThan(1);
+    expect(fullResponseText.trim().length).toBeGreaterThan(0);
+
     // Allow event loop to process telemetry update
-    await appPage.waitForTimeout(1000);
+    await appPage.waitForTimeout(1500);
 
     // Verify SVG wires layer exists on canvas
     const wiresLayer = appPage.locator('.wires-layer, svg.wires-layer, svg');
