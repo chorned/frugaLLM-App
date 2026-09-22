@@ -2262,7 +2262,7 @@ async fn handle_tauri_events() -> axum::response::Response {
         match rx.recv().await {
             Ok((event, payload)) => {
                 let payload_val = serde_json::from_str::<serde_json::Value>(&payload)
-                    .unwrap_or_else(|_| serde_json::Value::String(payload));
+                    .unwrap_or(serde_json::Value::String(payload));
                 let data = serde_json::json!({ "event": event, "payload": payload_val }).to_string();
                 let sse_event = axum::response::sse::Event::default().event("tauri_event").data(data);
                 Some((Ok::<_, std::convert::Infallible>(sse_event), rx))

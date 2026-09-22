@@ -849,9 +849,9 @@ pub async fn uninstall_ollama_internal(app: &tauri::AppHandle, force: bool) -> R
         let _ = store.save();
     }
 
-    let _ = set_installation_managed(&app, "ollama", false).await;
+    let _ = set_installation_managed(app, "ollama", false).await;
     let _ = app.emit("ollama_uninstalled", ());
-    log_event(&app, "INFO", "OLLAMA", "Ollama uninstalled, registry purged, leftover storage removed, and state reset successfully");
+    log_event(app, "INFO", "OLLAMA", "Ollama uninstalled, registry purged, leftover storage removed, and state reset successfully");
 
     Ok(())
 }
