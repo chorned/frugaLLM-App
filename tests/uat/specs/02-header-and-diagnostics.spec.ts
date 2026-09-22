@@ -45,8 +45,8 @@ test.describe('Phase 2: Global Header, Theme & Issue Reporter', () => {
     expect(lightCanvasBg).not.toBe(initialCanvasBg);
 
     // Verify SVG traffic wires exist and have valid coordinates
-    const svgWires = appPage.locator('svg.wires-layer path, svg path.wire-path, svg path');
-    expect(await svgWires.count()).toBeGreaterThan(0);
+    const svgWires = appPage.locator('[data-testid="router-svg-layer"] line');
+    expect(await svgWires.count()).toBeGreaterThanOrEqual(5);
 
     // Toggle back to Dark mode
     await themeBtn.click();

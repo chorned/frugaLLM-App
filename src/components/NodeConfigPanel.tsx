@@ -63,12 +63,14 @@ export interface NodeConfigPanelProps {
   setFrugalConfig: any;
   latestTelemetry: any;
   hardwareProfile: any;
-  portConflict: boolean;
+  portConflict?: { port: number; message?: string; showBanner?: boolean } | boolean | null;
 }
 
-export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose, onSave, onOpenIssueReporter, isHermesInstalled, isHermesManaged = false, isOpenCodeInstalled, isOpenCodeManaged = false, isOllamaInstalled, isOllamaManaged = false, isToolGatewayInstalled, detectedVram, setDetectedVram, hasActiveBackend, handleInitializeHermes, handleOpenHermes, handleUninstallHermes, handleInitializeOpenCode, handleOpenOpenCode, handleUninstallOpenCode, handleInitializeOllama, handleOpenOllama, handleUninstallOllama, handleDeleteLocalModel: _handleDeleteLocalModel, handleInstallToolGateway, handleUninstallToolGateway, handleDisconnectOpenRouter, handleDisconnectGoogle, frugalConfig, handleOpenHermesGateway, handleOpenHermesDesktop, handleOpenHermesWeb, handleOpenOpenCodeWeb, activeProcesses, handleKillProcess, setFrugalConfig, latestTelemetry, hardwareProfile, portConflict }: any) => {
+export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose, onSave, onOpenIssueReporter, isHermesInstalled, isHermesManaged = false, isOpenCodeInstalled, isOpenCodeManaged = false, isOllamaInstalled, isOllamaManaged = false, isToolGatewayInstalled, detectedVram, setDetectedVram, hasActiveBackend, handleInitializeHermes, handleOpenHermes, handleUninstallHermes, handleInitializeOpenCode, handleOpenOpenCode, handleUninstallOpenCode, handleInitializeOllama, handleOpenOllama, handleUninstallOllama, handleDeleteLocalModel, handleInstallToolGateway, handleUninstallToolGateway, handleDisconnectOpenRouter, handleDisconnectGoogle, frugalConfig, handleOpenHermesGateway, handleOpenHermesDesktop, handleOpenHermesWeb, handleOpenOpenCodeWeb, activeProcesses, handleKillProcess, setFrugalConfig, latestTelemetry, hardwareProfile, portConflict }: any) => {
   const memory = useMemory();
   const [confirmUninstall, setConfirmUninstall] = useState<string | null>(null);
+  const [confirmDeleteModel, setConfirmDeleteModel] = useState(false);
+  const [isModelDeleted, setIsModelDeleted] = useState(false);
   const [showToolGatewayPrompt, setShowToolGatewayPrompt] = useState<'install' | 'uninstall' | null>(null);
   const [ipCopied, setIpCopied] = useState(false);
   const [ipCopyError, setIpCopyError] = useState(false);
@@ -79,10 +81,12 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
   const [initialEnablePassword, setInitialEnablePassword] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);
+  const [isInstallingAgent, setIsInstallingAgent] = useState<string | null>(null);
 
   useEffect(() => {
     setKeyError(null);
-  }, [node.id]);
+    setIsInstallingAgent(null);
+  }, [node.id, isHermesInstalled, isOpenCodeInstalled]);
 
   useEffect(() => {
     const vramNum = Number(detectedVram) || 0;
@@ -191,12 +195,15 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
       setFormData(initOther);
       setInitialData(initOther);
     }
-  }, [node.id, frugalConfig]);
+  }, [node.id]);
 
   const hasChanges = (() => {
     if (!initialData) return false;
 
     if (node.id === 'node-frugallm') {
+      if (Boolean(portConflict)) {
+        return true;
+      }
       const portChanged = String(formData.port || '') !== String(initialData.port || '');
       const bindChanged = Boolean(formData.bind_all_interfaces) !== Boolean(initialData.bind_all_interfaces);
       const enablePassChanged = enablePassword !== initialEnablePassword;
@@ -432,9 +439,9 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
                         boxShadow: 'none' 
                       }} 
                     />
-                    {portConflict && (
+                    {Boolean(portConflict) && (
                       <div data-testid="port-conflict-hint" style={{ fontSize: '0.7rem', color: '#ef4444', fontWeight: 500, marginTop: '4px', lineHeight: 1.2 }}>
-                        Port {portConflict.port} in use: Close conflicting service and restart, or enter a new port.
+                        Port {typeof portConflict === 'object' && portConflict?.port ? portConflict.port : (formData.port || frugalConfig?.port || '')} in use: Close conflicting service and restart, or enter a new port.
                       </div>
                     )}
                   </div>
@@ -765,6 +772,7 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
                         rel="noreferrer"
                         data-testid="link-get-openrouter-key"
                         onClick={(e) => {
+                          e.preventDefault();
                           e.stopPropagation();
                           openUrl('https://openrouter.ai').catch(() => {});
                         }}
@@ -833,6 +841,7 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
                         rel="noreferrer"
                         data-testid="link-get-google-key"
                         onClick={(e) => {
+                          e.preventDefault();
                           e.stopPropagation();
                           openUrl('https://aistudio.google.com').catch(() => {});
                         }}
@@ -903,8 +912,26 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
             </div>
           ) : (
             <button 
-              onClick={(e) => { e.stopPropagation(); handleInitializeHermes(); }}
-              style={{ width: '100%', padding: '10px 16px', backgroundColor: '#171717', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+              disabled={isInstallingAgent === 'hermes'}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (isInstallingAgent === 'hermes') return;
+                setIsInstallingAgent('hermes');
+                handleInitializeHermes();
+              }}
+              style={{
+                width: '100%',
+                padding: '10px 16px',
+                backgroundColor: isInstallingAgent === 'hermes' ? '#333333' : '#171717',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '9999px',
+                fontWeight: 600,
+                fontSize: '0.8rem',
+                cursor: isInstallingAgent === 'hermes' ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+                opacity: isInstallingAgent === 'hermes' ? 0.7 : 1,
+              }}>
               INSTALL HERMES
             </button>
           )}
@@ -975,16 +1002,16 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
                 if (activeProcesses['run-hermes-web'] || activeProcesses['hermes-dashboard'] || activeProcesses['hermes-web']) {
                   hermesModes.push({ key: 'hermes-web', label: 'HERMES WEBUI ACTIVE', mode: 'run-hermes-web' });
                 }
-                if (activeProcesses['run-hermes']) {
-                  hermesModes.push({ key: 'hermes-cli', label: 'HERMES CLI ACTIVE', mode: 'run-hermes' });
+                if (activeProcesses['hermes-cli'] || activeProcesses['run-hermes']) {
+                  hermesModes.push({ key: 'hermes-cli', label: 'HERMES CLI ACTIVE', mode: 'hermes-cli' });
                 }
                 return hermesModes.map(item => (
-                  <div key={item.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '12px', marginBottom: '4px' }}>
+                  <div key={item.key} data-testid={`active-process-${item.key}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '12px', marginBottom: '4px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--zen-text)', fontWeight: 600, fontSize: '0.75rem' }}>
                       <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981' }} />
                       {item.label}
                     </div>
-                    <button onClick={(e) => { e.stopPropagation(); handleKillProcess(item.mode); }} style={{ backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '9999px', padding: '3px 8px', fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer' }}>CLOSE</button>
+                    <button data-testid={`close-process-${item.key}`} onClick={(e) => { e.stopPropagation(); handleKillProcess(item.mode); }} style={{ backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '9999px', padding: '3px 8px', fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer' }}>CLOSE</button>
                   </div>
                 ));
               })()}
@@ -1020,8 +1047,26 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
             </div>
           ) : (
             <button 
-              onClick={(e) => { e.stopPropagation(); handleInitializeOpenCode(); }}
-              style={{ width: '100%', padding: '10px 16px', backgroundColor: '#171717', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+              disabled={isInstallingAgent === 'opencode'}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (isInstallingAgent === 'opencode') return;
+                setIsInstallingAgent('opencode');
+                handleInitializeOpenCode();
+              }}
+              style={{
+                width: '100%',
+                padding: '10px 16px',
+                backgroundColor: isInstallingAgent === 'opencode' ? '#333333' : '#171717',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '9999px',
+                fontWeight: 600,
+                fontSize: '0.8rem',
+                cursor: isInstallingAgent === 'opencode' ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+                opacity: isInstallingAgent === 'opencode' ? 0.7 : 1,
+              }}>
               INSTALL OPENCODE
             </button>
           )}
@@ -1075,12 +1120,12 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
                 LAUNCH WEBUI
               </button>
               {['run-opencode', 'run-opencode-web'].map(mode => activeProcesses && activeProcesses[mode] && (
-                <div key={mode} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '12px', marginBottom: '4px', marginTop: '4px' }}>
+                <div key={mode} data-testid={`active-process-${mode}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: 'var(--zen-surface-hover)', border: '1px solid var(--zen-border)', borderRadius: '12px', marginBottom: '4px', marginTop: '4px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--zen-text)', fontWeight: 600, fontSize: '0.75rem' }}>
                     <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981' }} />
                     {mode.replace('run-', '').toUpperCase()} ACTIVE
                   </div>
-                  <button onClick={(e) => { e.stopPropagation(); handleKillProcess(mode); }} style={{ backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '9999px', padding: '3px 8px', fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer' }}>CLOSE</button>
+                  <button data-testid={`close-process-${mode}`} onClick={(e) => { e.stopPropagation(); handleKillProcess(mode); }} style={{ backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '9999px', padding: '3px 8px', fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer' }}>CLOSE</button>
                 </div>
               ))}
               {isOpenCodeManaged && (
@@ -1186,6 +1231,29 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
           </div>
           
           <div style={{ marginBottom: '12px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 600, color: 'var(--zen-text-secondary)', marginBottom: '5px' }}>
+              <Tooltip text={en.routingGraph.nodeConfigPanel.inputs.recommendedModel.tooltip} triggerTestId="btn-recommended-model-help">
+                <span>{en.routingGraph.nodeConfigPanel.inputs.recommendedModel.label}</span>
+              </Tooltip>
+            </label>
+            <select 
+              value={memory.activeModelName} 
+              onChange={(e) => memory.setActiveModelName(e.target.value)}
+              data-testid="recommended-model-input"
+              style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem', cursor: 'pointer', appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23737373' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', paddingRight: '32px' }} 
+            >
+              {AVAILABLE_MODELS.map((model: any) => {
+                const totalGb = (model.weightsGb + model.kvCacheGb + GRAPH_OVERHEAD_GB).toFixed(1);
+                return (
+                  <option key={model.tag} value={model.tag}>
+                    • {model.tag} ({totalGb} GB)
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+          
+          <div style={{ marginBottom: '12px' }}>
             <MemoryPipelineWidget 
               modelTag={latestTelemetry?.ollama?.model_name || memory.activeModelName} 
               segments={memory.effectiveSegments} 
@@ -1213,6 +1281,52 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
                   style={{ width: '100%', padding: '8px 12px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                   UNINSTALL OLLAMA
                 </button>
+              )}
+              {!isModelDeleted && Boolean(latestTelemetry?.ollama?.model_name && latestTelemetry.ollama.model_name !== 'None' && latestTelemetry.ollama.model_name !== 'Unknown') && (
+                <div data-testid="installed-models-list" style={{ marginTop: '10px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: 'var(--zen-surface)', border: '1px solid var(--zen-border)', borderRadius: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981' }} />
+                      <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--zen-text)' }}>
+                        {latestTelemetry.ollama.model_name}
+                      </span>
+                    </div>
+                    {confirmDeleteModel ? (
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button
+                          data-testid="confirm-delete-model-button"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (handleDeleteLocalModel) await handleDeleteLocalModel();
+                            setConfirmDeleteModel(false);
+                            setIsModelDeleted(true);
+                          }}
+                          style={{ padding: '4px 10px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '9999px', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                        >
+                          YES
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setConfirmDeleteModel(false); }}
+                          style={{ padding: '4px 10px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '9999px', fontSize: '0.7rem', cursor: 'pointer', fontFamily: 'inherit' }}
+                        >
+                          NO
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        data-testid="delete-model-button"
+                        onClick={(e) => { e.stopPropagation(); setConfirmDeleteModel(true); }}
+                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center' }}
+                        title="Delete Model"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="3 6 5 6 21 6"></polyline>
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           )}
@@ -1254,7 +1368,7 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
               type="checkbox"
               name="toolGatewayCheckbox"
               data-testid="tool-gateway-checkbox"
-              checked={!!frugalConfig?.tool_enforcing_gateway}
+              checked={Boolean(frugalConfig?.tool_enforcing_gateway && isToolGatewayInstalled)}
               onChange={(e) => {
                 const checked = e.target.checked;
                 if (checked) {
@@ -1355,13 +1469,16 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 600 }}>ARE YOU SURE?</span>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={(e) => { e.stopPropagation(); handleDisconnectOpenRouter(); setKeyError(null); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>YES</button>
+              <button 
+                data-testid="confirm-disconnect-openrouter-btn"
+                onClick={(e) => { e.stopPropagation(); handleDisconnectOpenRouter(); setKeyError(null); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>YES</button>
                 <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>NO</button>
               </div>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <button 
+                data-testid="disconnect-openrouter-btn"
                 onClick={(e) => { e.stopPropagation(); setConfirmUninstall('openrouter'); }}
                 style={{ width: '100%', padding: '8px 12px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                 DISCONNECT
@@ -1378,13 +1495,16 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <span style={{ fontSize: '0.75rem', color: 'var(--zen-text)', fontWeight: 600 }}>ARE YOU SURE?</span>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={(e) => { e.stopPropagation(); handleDisconnectGoogle(); setKeyError(null); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>YES</button>
+                <button 
+                  data-testid="confirm-disconnect-google-btn"
+                  onClick={(e) => { e.stopPropagation(); handleDisconnectGoogle(); setKeyError(null); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>YES</button>
                 <button onClick={(e) => { e.stopPropagation(); setConfirmUninstall(null); }} style={{ flex: 1, padding: '8px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>NO</button>
               </div>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <button 
+                data-testid="disconnect-google-btn"
                 onClick={(e) => { e.stopPropagation(); setConfirmUninstall('google'); }}
                 style={{ width: '100%', padding: '8px 12px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                 DISCONNECT

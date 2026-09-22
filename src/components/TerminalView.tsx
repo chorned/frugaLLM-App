@@ -96,6 +96,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
     return `${hours}h ${remMins}m left`;
   };
 
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   useEffect(() => {
     if (!terminalRef.current) return;
     const term = new Terminal({ 
@@ -136,7 +144,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
     });
     resizeObserver.observe(terminalRef.current);
 
-    let isMounted = true;
+    const cleanups: (() => void)[] = [];
     let unlistenOutput: (() => void) | undefined;
     let unlistenExit: (() => void) | undefined;
     let webUiTimer: any = null;
@@ -210,7 +218,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
             }
             term.writeln(`\r\n\x1b[32mTool Enforcing Gateway (ONNX: Xenova/nli-deberta-v3-small) installed successfully!\x1b[0m\r\n`);
             confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
-            setTimeout(() => { if (isMounted) onExit(); }, 2000);
+            setTimeout(() => { if (isMountedRef.current) onExit(); }, 2000);
           } catch (err) {
             term.writeln(`\r\n\x1b[31mFailed to update configuration: ${err}\x1b[0m\r\n`);
           }
@@ -232,9 +240,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
             });
           }
           term.writeln(`\r\n\x1b[32mTool Enforcing Gateway (ONNX) cache cleared and uninstalled.\x1b[0m\r\n`);
-          setTimeout(() => { if (isMounted) onExit(); }, 1500);
+          setTimeout(() => { if (isMountedRef.current) onExit(); }, 1500);
         } catch (err) {
           term.writeln(`\r\n\x1b[31mFailed to uninstall: ${err}\x1b[0m\r\n`);
+          if (setIsToolGatewayInstalled) setIsToolGatewayInstalled(false);
+          setTimeout(() => { if (isMountedRef.current) onExit(); }, 2000);
         }
       } else if (mode === 'uninstall-hermes') {
         term.writeln(en.routingGraph?.terminal?.uninstallHermesStart || 'Initiating complete uninstallation of Hermes Agent...');
@@ -246,9 +256,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
           if (setIsHermesInstalled) setIsHermesInstalled(false);
           if (setIsHermesManaged) setIsHermesManaged(false);
           term.writeln(`\r\n\x1b[32m✔ ${en.routingGraph?.terminal?.uninstallHermesSuccess || 'Hermes Agent uninstalled and system cleaned successfully.'}\x1b[0m\r\n`);
-          setTimeout(() => { if (isMounted) onExit(); }, 1500);
+          setTimeout(() => { if (isMountedRef.current) onExit(); }, 1500);
         } catch (err) {
           term.writeln(`\r\n\x1b[31mFailed to uninstall Hermes Agent: ${err}\x1b[0m\r\n`);
+          if (setIsHermesInstalled) setIsHermesInstalled(false);
+          if (setIsHermesManaged) setIsHermesManaged(false);
+          setTimeout(() => { if (isMountedRef.current) onExit(); }, 2000);
         }
       } else if (mode === 'uninstall-opencode') {
         term.writeln(en.routingGraph?.terminal?.uninstallOpenCodeStart || 'Initiating complete uninstallation of OpenCode...');
@@ -260,9 +273,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
           if (setIsOpenCodeInstalled) setIsOpenCodeInstalled(false);
           if (setIsOpenCodeManaged) setIsOpenCodeManaged(false);
           term.writeln(`\r\n\x1b[32m✔ ${en.routingGraph?.terminal?.uninstallOpenCodeSuccess || 'OpenCode uninstalled and system cleaned successfully.'}\x1b[0m\r\n`);
-          setTimeout(() => { if (isMounted) onExit(); }, 1500);
+          setTimeout(() => { if (isMountedRef.current) onExit(); }, 1500);
         } catch (err) {
           term.writeln(`\r\n\x1b[31mFailed to uninstall OpenCode: ${err}\x1b[0m\r\n`);
+          if (setIsOpenCodeInstalled) setIsOpenCodeInstalled(false);
+          if (setIsOpenCodeManaged) setIsOpenCodeManaged(false);
+          setTimeout(() => { if (isMountedRef.current) onExit(); }, 2000);
         }
       } else if (mode === 'uninstall-ollama') {
         term.writeln(en.routingGraph?.terminal?.uninstallOllamaStart || 'Initiating complete uninstallation of Ollama Engine...');
@@ -280,9 +296,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
           }
           refreshRoutingChain().catch(() => {});
           term.writeln(`\r\n\x1b[32m✔ ${en.routingGraph?.terminal?.uninstallOllamaSuccess || 'Ollama Engine and local models uninstalled successfully.'}\x1b[0m\r\n`);
-          setTimeout(() => { if (isMounted) onExit(); }, 2000);
+          setTimeout(() => { if (isMountedRef.current) onExit(); }, 2000);
         } catch (err) {
           term.writeln(`\r\n\x1b[31mFailed to uninstall Ollama Engine: ${err}\x1b[0m\r\n`);
+          if (setIsOllamaInstalled) setIsOllamaInstalled(false);
+          if (setIsOllamaManaged) setIsOllamaManaged(false);
+          setTimeout(() => { if (isMountedRef.current) onExit(); }, 2000);
         }
       } else if (mode.startsWith('install')) {
         let installingText = 'Initializing installation...';
@@ -333,18 +352,19 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
             if (mode === 'install-opencode') {
               setIsOpenCodeInstalled(true);
               setTimeout(async () => {
-                if (!isMounted) return;
+                if (!isMountedRef.current) return;
                 try {
                   await configureOpencodeDefaults();
                   term.writeln(`\r\n\x1b[32mConfiguration applied. Closing...\x1b[0m\r\n`);
-                  setTimeout(() => { if (isMounted) onExit(); }, 1000);
+                  setTimeout(() => { if (isMountedRef.current) onExit(); }, 1000);
                 } catch (err) {
                   term.writeln(`\r\n\x1b[31mFailed to configure OpenCode: ${err}\x1b[0m\r\n`);
+                  setTimeout(() => { if (isMountedRef.current) onExit(); }, 1500);
                 }
               }, 1000);
             } else if (mode !== 'install-ollama') {
               setTimeout(async () => {
-                if (!isMounted) return;
+                if (!isMountedRef.current) return;
                 try {
                   await configureHermesDefaults();
                   term.writeln(`\r\n\x1b[32mConfiguration applied.\x1b[0m\r\n`);
@@ -354,9 +374,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
                   }
                   
                   confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
-                  setTimeout(() => { if (isMounted) onExit(); }, 1500);
+                  setTimeout(() => { if (isMountedRef.current) onExit(); }, 1500);
                 } catch (err) {
                   term.writeln(`\r\n\x1b[31mFailed to configure Hermes: ${err}\x1b[0m\r\n`);
+                  setTimeout(() => { if (isMountedRef.current) onExit(); }, 1500);
                 }
               }, 1000);
             }
@@ -364,8 +385,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
             term.writeln(`\r\n\x1b[31mProcess exited with code ${event.payload.exit_code}\x1b[0m\r\n`);
           }
         });
+        if (unlistenOutput) cleanups.push(unlistenOutput);
+        if (unlistenExit) cleanups.push(unlistenExit);
 
-        if (!isMounted) {
+        if (!isMountedRef.current) {
           if (hermesProgressTimer) clearInterval(hermesProgressTimer);
           return;
         }
@@ -423,6 +446,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
               await spawnPty({ sessionId, command: 'bash', args: ['-c', 'export TERM=xterm-256color && curl -fsSL https://opencode.ai/install | bash'] });
             }
           } else if (mode === 'install-ollama') {
+            setIsProvisioningModel(true);
+            setDownloadPercent(0);
+            setDownloadStats({ completed: 0, total: 0, speedBytesPerSec: 0, etaSeconds: 0 });
             const unlisten1 = await listen<{ status: string }>('download_progress', (event) => term.write(event.payload.status));
             const unlisten2 = await listen<string>('installing_ollama', () => term.writeln('Installing Ollama Engine...'));
             const unlisten4 = await listen('model_provisioning_started', () => {
@@ -444,8 +470,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
                }
             });
             const unlisten3 = await listen<{ success: boolean; message: string }>('model_deployment_complete', async (event) => {
-              setIsProvisioningModel(false);
               if (event.payload.success) {
+                setDownloadPercent(100);
                 setIsOllamaInstalled(true);
                 setNodes?.(nds => nds.map(n => n.id === 'node-ollama' ? { ...n, data: { ...n.data, status: 'active' } } : n));
                 getOllamaChatModel().then(m => {
@@ -454,8 +480,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
                 refreshRoutingChain().catch(() => {});
                 term.writeln(`\r\n\x1b[32mModel Provisioned successfully.\x1b[0m\r\n`);
                 confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
-                setTimeout(() => { if (isMounted) onExit(); }, 3000);
+                setTimeout(() => { 
+                  if (isMountedRef.current) {
+                    setIsProvisioningModel(false);
+                    onExit(); 
+                  }
+                }, 3000);
               } else {
+                setIsProvisioningModel(false);
                 console.error(event.payload.message);
                 term.writeln(`\r\n\x1b[31mInstallation failed: ${event.payload.message}\x1b[0m\r\n`);
               }
@@ -465,6 +497,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
               unlisten4();
               unlisten5();
             });
+            cleanups.push(unlisten1, unlisten2, unlisten3, unlisten4, unlisten5);
             
             deployLocalModel().catch((err) => {
               console.error(err);
@@ -570,12 +603,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
                 if (webUiTimer) clearTimeout(webUiTimer);
                 term.writeln('\r\n\x1b[32mWebUI launched successfully. Closing terminal...\x1b[0m\r\n');
                 webUiTimer = setTimeout(() => {
-                  if (isMounted) onExit();
+                  if (isMountedRef.current) onExit();
                 }, 600);
               }
             }
           }
         });
+        if (unlistenOutput) cleanups.push(unlistenOutput);
         unlistenExit = await listen<{ session_id: string, exit_code: number }>('pty_exit', (event) => {
           if (event.payload.session_id !== sessionId) return;
           if (onProcessExit) onProcessExit();
@@ -585,8 +619,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
           if (mode === 'run-ollama') name = 'Ollama';
           term.writeln(`\r\n\x1b[32m${name} exited with code ${event.payload.exit_code}\x1b[0m\r\n`);
         });
+        if (unlistenExit) cleanups.push(unlistenExit);
         
-        if (!isMounted) return;
+        if (!isMountedRef.current) return;
         if (onProcessStart) onProcessStart();
 
         if (mode.startsWith('run-opencode')) {
@@ -675,11 +710,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
 
           if (isWebUiMode && !webUiAutoClosed) {
             webUiTimer = setTimeout(() => {
-              if (isMounted && !webUiAutoClosed) {
+              if (isMountedRef.current && !webUiAutoClosed) {
                 webUiAutoClosed = true;
                 term.writeln('\r\n\x1b[32mWebUI process initialized. Closing terminal view...\x1b[0m\r\n');
                 setTimeout(() => {
-                  if (isMounted) onExit();
+                  if (isMountedRef.current) onExit();
                 }, 400);
               }
             }, 12000);
@@ -695,13 +730,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
     setupPty();
 
     return () => {
-      isMounted = false;
+      cleanups.forEach((c) => {
+        try {
+          c();
+        } catch (e) {
+          // Ignore
+        }
+      });
       if (webUiTimer) clearTimeout(webUiTimer);
       window.clearTimeout(fitTimeout);
       resizeObserver.disconnect();
       dataListener.dispose();
-      if (unlistenOutput) unlistenOutput();
-      if (unlistenExit) unlistenExit();
       term.dispose();
     };
   }, [mode, sessionId]);
@@ -821,13 +860,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
       </div>
 
       {isProvisioningModel && (
-        <div style={{ padding: '14px 24px', backgroundColor: 'var(--zen-surface-hover)', borderBottom: '1px solid var(--zen-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div data-testid="model-download-progress-bar" style={{ padding: '14px 24px', backgroundColor: 'var(--zen-surface-hover)', borderBottom: '1px solid var(--zen-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                <span style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--zen-text)' }}>
-                 Downloading Weights...
+                 {downloadPercent >= 100 
+                   ? (en.routingGraph?.terminal?.prewarmingModel || 'Pre-warming & Allocating VRAM...') 
+                   : (en.routingGraph?.terminal?.downloadingWeights || 'Downloading Weights...')}
                </span>
-               {downloadStats.total > 0 && (
+               {downloadStats.total > 1024 && downloadPercent < 100 && (
                  <span data-testid="download-size" style={{ fontSize: '0.75rem', color: 'var(--zen-text-secondary)', fontWeight: 500, fontFamily: 'monospace' }}>
                    ({formatBytes(downloadStats.completed)} / {formatBytes(downloadStats.total)})
                  </span>

@@ -3,9 +3,11 @@ import { test, expect } from '../harness/tauri-launcher';
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Phase 6: Autonomous Agents (Hermes & OpenCode)', () => {
-  test('06.1 - OpenCode Installation & Process Control: configure workspace and test process controls', async ({
+  test('06.1 - OpenCode Installation & Process Control: install via UI, verify controls and active process card', async ({
     appPage,
   }) => {
+    test.setTimeout(300_000);
+
     const opencodeCard = appPage.locator('[data-testid="node-opencode"]');
     await expect(opencodeCard).toBeVisible({ timeout: 10000 });
     await opencodeCard.click();
@@ -14,57 +16,60 @@ test.describe('Phase 6: Autonomous Agents (Hermes & OpenCode)', () => {
     const drawer = appPage.locator('.node-config-panel, [data-testid="node-config-panel"]').first();
     await expect(drawer).toBeVisible({ timeout: 5000 });
 
-    // Set temporary workspace
-    const workspaceInput = appPage.locator('input[name="opencode_workspace"]');
-    if (await workspaceInput.isVisible()) {
-      await workspaceInput.fill('~/UAT_OpenCode_Workspace');
-      await appPage.waitForTimeout(300);
-    }
-
-    // Install OpenCode or Launch WebUI button check
-    const installBtn = appPage.locator('button:has-text("INSTALL OPENCODE")');
-    const launchWebBtn = appPage.locator('button:has-text("LAUNCH WEBUI")');
-
-    if (await installBtn.isVisible()) {
-      test.setTimeout(300_000);
-      console.log('[UAT Phase 6] Triggering real OpenCode setup script in temporary workspace...');
+    // Install OpenCode if not already installed on host
+    const installBtn = appPage.getByRole('button', { name: 'INSTALL OPENCODE', exact: true });
+    if (await installBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+      console.log('[UAT Phase 6] Clicking INSTALL OPENCODE...');
       await installBtn.click();
-      const terminalOverlay = appPage.locator('[data-testid="terminal-view"], .terminal-overlay').first();
+
+      // Assert terminal overlay appears
+      const terminalOverlay = appPage.locator('[data-testid="terminal-overlay-install-opencode"]');
       await expect(terminalOverlay).toBeVisible({ timeout: 5000 });
 
-      // Allow installer script to run and stream output into terminal
-      const startTime = Date.now();
-      while (Date.now() - startTime < 20000) {
-        const text = await terminalOverlay.innerText().catch(() => '');
-        if (text.includes('OpenCode') || text.includes('install') || text.includes('>>>')) {
-          console.log('[UAT Phase 6] OpenCode installer active in terminal');
-          break;
-        }
-        await appPage.waitForTimeout(1000);
-      }
-
-      // Close terminal after verifying active installer execution
-      const closeTerm = appPage.locator('button[title="Close process"], button:has-text("✕")').first();
-      if (await closeTerm.isVisible()) await closeTerm.click();
-    } else if (await launchWebBtn.isVisible()) {
-      await launchWebBtn.click();
-      await appPage.waitForTimeout(1000);
-
-      // Check active child process card with [CLOSE]
-      const closeProcessBtn = appPage.locator('button:has-text("CLOSE")').first();
-      if (await closeProcessBtn.isVisible()) {
-        await closeProcessBtn.click();
-      }
+      // Wait for complete installation and auto-exit of terminal runner
+      await expect(terminalOverlay).toBeHidden({ timeout: 240000 });
     }
+
+    // Assert drawer transitions to installed state and workspace input unlocks
+    const workspaceInput = appPage.locator('input[name="opencode_workspace"]');
+    await expect(workspaceInput).toBeVisible({ timeout: 5000 });
+    await workspaceInput.fill('~/UAT_OpenCode_Workspace');
+    await appPage.waitForTimeout(300);
+
+    const launchOpenCodeBtn = appPage.locator('button:has-text("LAUNCH OPENCODE")');
+    const launchWebBtn = appPage.locator('button:has-text("LAUNCH WEBUI")');
+
+    await expect(launchOpenCodeBtn).toBeVisible({ timeout: 10000 });
+    await expect(launchOpenCodeBtn).toBeEnabled();
+    await expect(launchWebBtn).toBeVisible({ timeout: 5000 });
+    await expect(launchWebBtn).toBeEnabled();
+
+    // Test clicking launch trigger and verify active process card mounts with working [CLOSE] button
+    console.log('[UAT Phase 6] Launching OpenCode process...');
+    await launchOpenCodeBtn.click();
+
+    const activeCard = appPage.locator('[data-testid="active-process-run-opencode"]');
+    await expect(activeCard).toBeVisible({ timeout: 10000 });
+
+    const closeProcessBtn = activeCard.locator('button:has-text("CLOSE")');
+    await expect(closeProcessBtn).toBeVisible();
+    await closeProcessBtn.click();
+
+    // Verify active process card unmounts
+    await expect(activeCard).toBeHidden({ timeout: 5000 });
 
     // Close drawer
     const closeBtn = appPage.locator('[data-testid="node-config-close-btn"], button:has-text("✕")').first();
-    if (await closeBtn.isVisible()) await closeBtn.click();
+    await expect(closeBtn).toBeVisible();
+    await closeBtn.click();
+    await expect(drawer).toBeHidden({ timeout: 5000 });
   });
 
-  test('06.2 - Hermes Installation & Soul Configuration: workspace, gateway, soul editor', async ({
+  test('06.2 - Hermes Installation & Soul Configuration: install via UI, verify controls, active card, soul editor', async ({
     appPage,
   }) => {
+    test.setTimeout(300_000);
+
     const hermesCard = appPage.locator('[data-testid="node-hermes"]');
     await expect(hermesCard).toBeVisible({ timeout: 10000 });
     await hermesCard.click();
@@ -73,58 +78,60 @@ test.describe('Phase 6: Autonomous Agents (Hermes & OpenCode)', () => {
     const drawer = appPage.locator('.node-config-panel, [data-testid="node-config-panel"]').first();
     await expect(drawer).toBeVisible({ timeout: 5000 });
 
-    // Set hermes workspace path
-    const workspaceInput = appPage.locator('input[name="hermes_workspace"]');
-    if (await workspaceInput.isVisible()) {
-      await workspaceInput.fill('~/UAT_Hermes_Workspace');
-      await appPage.waitForTimeout(300);
-    }
-
-    // Check Install Hermes or Launch Gateway / App
-    const installBtn = appPage.locator('button:has-text("INSTALL HERMES")');
-    const launchGatewayBtn = appPage.locator('button:has-text("LAUNCH APP / GATEWAY"), button:has-text("LAUNCH GATEWAY")');
-
-    if (await installBtn.isVisible()) {
-      test.setTimeout(300_000);
-      console.log('[UAT Phase 6] Triggering real Hermes setup script in temporary workspace...');
+    // Install Hermes if not already installed on host
+    const installBtn = appPage.getByRole('button', { name: 'INSTALL HERMES', exact: true });
+    if (await installBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+      console.log('[UAT Phase 6] Clicking INSTALL HERMES...');
       await installBtn.click();
-      const terminalOverlay = appPage.locator('[data-testid="terminal-view"], .terminal-overlay').first();
+
+      // Assert terminal overlay appears
+      const terminalOverlay = appPage.locator('[data-testid="terminal-overlay-install-hermes"]');
       await expect(terminalOverlay).toBeVisible({ timeout: 5000 });
 
-      // Allow installer script to run and stream output into terminal
-      const startTime = Date.now();
-      while (Date.now() - startTime < 20000) {
-        const text = await terminalOverlay.innerText().catch(() => '');
-        if (text.includes('Hermes') || text.includes('installer') || text.includes('Stage')) {
-          console.log('[UAT Phase 6] Hermes installer active in terminal');
-          break;
-        }
-        await appPage.waitForTimeout(1000);
-      }
-
-      // Close terminal after verifying active installer execution
-      const closeTerm = appPage.locator('button[title="Close process"], button:has-text("✕")').first();
-      if (await closeTerm.isVisible()) await closeTerm.click();
-    } else if (await launchGatewayBtn.isVisible()) {
-      await launchGatewayBtn.click();
-      await appPage.waitForTimeout(500);
-
-      // Verify active background daemon management card
-      const closeProcessBtn = appPage.locator('button:has-text("CLOSE")').first();
-      if (await closeProcessBtn.isVisible()) {
-        await closeProcessBtn.click();
-      }
+      // Wait for complete installation and auto-exit of terminal runner
+      await expect(terminalOverlay).toBeHidden({ timeout: 240000 });
     }
 
-    // Assert EDIT SOUL.MD button is present and clickable
+    // Assert drawer transitions to installed state and workspace input unlocks
+    const workspaceInput = appPage.locator('input[name="hermes_workspace"]');
+    await expect(workspaceInput).toBeVisible({ timeout: 5000 });
+    await workspaceInput.fill('~/UAT_Hermes_Workspace');
+    await appPage.waitForTimeout(300);
+
+    const launchHermesBtn = appPage.locator('button:has-text("LAUNCH HERMES")');
+    const launchAppBtn = appPage.locator('button:has-text("LAUNCH APP")');
+    const launchWebBtn = appPage.locator('button:has-text("LAUNCH WEBUI")');
+
+    await expect(launchHermesBtn).toBeVisible({ timeout: 10000 });
+    await expect(launchHermesBtn).toBeEnabled();
+    await expect(launchAppBtn).toBeVisible({ timeout: 5000 });
+    await expect(launchAppBtn).toBeEnabled();
+    await expect(launchWebBtn).toBeVisible({ timeout: 5000 });
+    await expect(launchWebBtn).toBeEnabled();
+
+    // Test clicking launch trigger and verify active process card mounts with working [CLOSE] button
+    console.log('[UAT Phase 6] Launching Hermes process...');
+    await launchHermesBtn.click();
+
+    const activeCard = appPage.locator('[data-testid="active-process-hermes-cli"]');
+    await expect(activeCard).toBeVisible({ timeout: 10000 });
+
+    const closeProcessBtn = activeCard.locator('button:has-text("CLOSE")');
+    await expect(closeProcessBtn).toBeVisible();
+    await closeProcessBtn.click();
+
+    // Verify active process card unmounts
+    await expect(activeCard).toBeHidden({ timeout: 5000 });
+
+    // Assert EDIT SOUL.MD button is present and enabled
     const soulBtn = appPage.locator('button:has-text("EDIT SOUL.MD")');
-    if (await soulBtn.isVisible()) {
-      await expect(soulBtn).toBeEnabled();
-      await soulBtn.click();
-    }
+    await expect(soulBtn).toBeVisible();
+    await expect(soulBtn).toBeEnabled();
 
     // Close drawer
     const closeBtn = appPage.locator('[data-testid="node-config-close-btn"], button:has-text("✕")').first();
-    if (await closeBtn.isVisible()) await closeBtn.click();
+    await expect(closeBtn).toBeVisible();
+    await closeBtn.click();
+    await expect(drawer).toBeHidden({ timeout: 5000 });
   });
 });

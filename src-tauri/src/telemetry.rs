@@ -232,7 +232,7 @@ pub fn should_trigger_power_resume(
 pub fn start_telemetry_loop(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut client = Client::builder()
-            .timeout(Duration::from_millis(500))
+            .timeout(Duration::from_millis(1500))
             .build()
             .unwrap_or_default();
             
@@ -244,6 +244,7 @@ pub fn start_telemetry_loop(app: AppHandle) {
 
         let mut tick_counter = 0;
         let mut last_ollama_state = OllamaState::default();
+        let mut consecutive_failures: u32 = 0;
         let mut last_power_resume: Option<std::time::Instant> = None;
 
         let profile = crate::get_hardware_profile().await.unwrap_or_default();
@@ -282,9 +283,12 @@ pub fn start_telemetry_loop(app: AppHandle) {
             // Ollama polling (every 2 seconds)
             if tick_counter % 2 == 0 {
                 let mut new_ollama_state = OllamaState::default();
+                let mut probe_succeeded = false;
                 
                 if let Ok(resp) = client.get("http://127.0.0.1:11434/api/ps").send().await {
                     if let Ok(json) = resp.json::<serde_json::Value>().await {
+                        probe_succeeded = true;
+                        consecutive_failures = 0;
                         new_ollama_state.status = "idle".into();
                         if let Some(models) = json.get("models").and_then(|m| m.as_array()) {
                             // Find the first model that isn't the proxy dummy model
@@ -321,11 +325,17 @@ pub fn start_telemetry_loop(app: AppHandle) {
                                 }
                             }
                         }
+                    }
+                }
+
+                if !probe_succeeded {
+                    consecutive_failures += 1;
+                    if consecutive_failures < 2 && last_ollama_state.status != "offline" {
+                        // 2-probe buffer: maintain previous state during transient CPU spikes / heavy load
+                        new_ollama_state = last_ollama_state.clone();
                     } else {
                         new_ollama_state.status = "offline".into();
                     }
-                } else {
-                    new_ollama_state.status = "offline".into();
                 }
 
                 if new_ollama_state.status != "offline" && (new_ollama_state.model_name.is_empty() || new_ollama_state.model_name == "gemma4") {
@@ -408,7 +418,7 @@ pub fn start_telemetry_loop(app: AppHandle) {
                     nvml = nvml_wrapper::Nvml::init().ok();
                 }
                 client = Client::builder()
-                    .timeout(Duration::from_millis(500))
+                    .timeout(Duration::from_millis(1500))
                     .build()
                     .unwrap_or_default();
 

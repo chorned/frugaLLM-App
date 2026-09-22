@@ -1,7 +1,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
-import { killOrphanProcesses, killProcessesByName } from './host-process-mgr';
+import { killOrphanProcesses, killProcessesByName, safeDeleteWithRetry } from './host-process-mgr';
 import { waitForPortClosed } from './port-sentinel';
 
 /**
@@ -23,11 +23,7 @@ export async function executeEmergencyTeardown(): Promise<void> {
 
     // 3. Clean up any temporary test directories
     const tempDir = path.resolve(os.tmpdir(), 'frugallm-uat-test');
-    if (fs.existsSync(tempDir)) {
-      try {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-      } catch {}
-    }
+    await safeDeleteWithRetry(tempDir);
 
     console.log('✅ [EmergencyTeardown] Host sweep complete.');
   } catch (err) {

@@ -36,6 +36,19 @@ export function useAppEvents({
   setDaemonError,
 }: UseAppEventsProps) {
   useEffect(() => {
+    let disposed = false;
+    const cleanups: (() => void)[] = [];
+
+    const registerListener = (promise: Promise<() => void>) => {
+      promise.then(unlisten => {
+        if (disposed) {
+          unlisten();
+        } else {
+          cleanups.push(unlisten);
+        }
+      }).catch(console.error);
+    };
+
     const setupTelemetryListener = async () => {
       let unlisten = await listen<any>('telemetry_update', (event) => {
         setLatestTelemetry(event.payload);
@@ -63,20 +76,13 @@ export function useAppEvents({
       return unlisten;
     };
 
-    let unlistenTelemetry: (() => void) | null = null;
-    setupTelemetryListener().then(unlisten => {
-      unlistenTelemetry = unlisten;
-    }).catch(console.error);
+    registerListener(setupTelemetryListener());
 
-    let unlistenProxy: (() => void) | null = null;
-    listen<ProxyActivityPayload>('proxy_activity', (event) => {
+    registerListener(listen<ProxyActivityPayload>('proxy_activity', (event) => {
       handleProxyActivityEvent(event.payload);
-    }).then(unlisten => {
-      unlistenProxy = unlisten;
-    }).catch(console.error);
+    }));
 
-    let unlistenExit: (() => void) | null = null;
-    listen('request_exit_confirmation', async () => {
+    registerListener(listen('request_exit_confirmation', async () => {
       try {
         const svcs = await getActiveServices();
         setExitServices(svcs && svcs.length > 0 ? svcs : ['Hermes Service']);
@@ -84,12 +90,9 @@ export function useAppEvents({
         setExitServices(['Hermes Service']);
       }
       setShowExitModal(true);
-    }).then(unlisten => {
-      unlistenExit = unlisten;
-    }).catch(console.error);
+    }));
 
-    let unlistenServiceExit: (() => void) | null = null;
-    listen<{ service: string }>('service_exit', (event) => {
+    registerListener(listen<{ service: string }>('service_exit', (event) => {
       const svc = event.payload?.service;
       if (svc) {
         setActiveProcesses(prev => ({
@@ -101,36 +104,29 @@ export function useAppEvents({
           ...(svc === 'hermes-dashboard' || svc === 'dashboard' ? { 'run-hermes-web': false, 'hermes-dashboard': false } : {}),
         }));
       }
-    }).then(unlisten => {
-      unlistenServiceExit = unlisten;
-    }).catch(console.error);
+    }));
 
-    let unlistenConfig: (() => void) | null = null;
-    listen('frugallm_config_updated', () => {
+    registerListener(listen('frugallm_config_updated', () => {
       getFrugallmConfig().then((conf: any) => setFrugalConfig(conf)).catch(console.error);
-    }).then(unlisten => {
-      unlistenConfig = unlisten;
-    }).catch(console.error);
+    }));
 
-    let unlistenError: (() => void) | null = null;
-    listen('frugallm_port_error', (event: any) => {
+    registerListener(listen('frugallm_port_error', (event: any) => {
       const port = event.payload;
       const numericPort = typeof port === 'number' ? port : parseInt(port, 10);
       setPortConflict({
         port: numericPort || 61721,
-        message: `Close the service currently using port [${numericPort || 61721}] and restart the app.`
+        message: `Close the service currently using port [${numericPort || 61721}] and restart the app.`,
+        showBanner: true,
       });
-    }).then(unlisten => {
-      unlistenError = unlisten;
-    }).catch(console.error);
+    }));
 
-    let unlistenStatus: (() => void) | null = null;
-    listen('frugallm_server_status', (event: any) => {
+    registerListener(listen('frugallm_server_status', (event: any) => {
       const statusObj = event.payload;
       if (statusObj?.status === 'PortConflict') {
         setPortConflict({
           port: statusObj.data?.port || 61721,
-          message: statusObj.data?.message || `Close the service currently using port [${statusObj.data?.port || 61721}] and restart the app.`
+          message: statusObj.data?.message || `Close the service currently using port [${statusObj.data?.port || 61721}] and restart the app.`,
+          showBanner: true,
         });
       } else if (statusObj?.status === 'Running') {
         setPortConflict(null);
@@ -138,20 +134,14 @@ export function useAppEvents({
       } else if (statusObj?.status === 'Error') {
         setDaemonError?.(statusObj.data?.message || 'Daemon failure');
       }
-    }).then(unlisten => {
-      unlistenStatus = unlisten;
-    }).catch(console.error);
+    }));
 
-    let unlistenDaemonError: (() => void) | null = null;
-    listen('daemon_error', (event: any) => {
+    registerListener(listen('daemon_error', (event: any) => {
       const msg = typeof event.payload === 'string' ? event.payload : event.payload?.message || 'Daemon failure';
       setDaemonError?.(msg);
-    }).then(unlisten => {
-      unlistenDaemonError = unlisten;
-    }).catch(console.error);
+    }));
 
-    let unlistenProviderStatus: (() => void) | null = null;
-    listen('provider_status', (event: any) => {
+    registerListener(listen('provider_status', (event: any) => {
       const { provider, status } = event.payload || {};
       if (!provider) return;
       const targetId = `node-${provider}`;
@@ -167,49 +157,18 @@ export function useAppEvents({
         }
         return n;
       }));
-    }).then(unlisten => {
-      unlistenProviderStatus = unlisten;
-    }).catch(console.error);
+    }));
 
-    let unlistenOllamaUninstalled: (() => void) | null = null;
-    listen('ollama_uninstalled', () => {
+    registerListener(listen('ollama_uninstalled', () => {
       setIsOllamaInstalled(false);
       setNodes(nds => nds.map(n => n.id === 'node-ollama' ? { ...n, data: { ...n.data, status: 'ready' } } : n));
-    }).then(unlisten => {
-      unlistenOllamaUninstalled = unlisten;
-    }).catch(console.error);
+    }));
 
     return () => {
-      if (unlistenTelemetry) {
-        unlistenTelemetry();
-      }
-      if (unlistenProxy) {
-        unlistenProxy();
-      }
-      if (unlistenExit) {
-        unlistenExit();
-      }
-      if (unlistenServiceExit) {
-        unlistenServiceExit();
-      }
-      if (unlistenConfig) {
-        unlistenConfig();
-      }
-      if (unlistenError) {
-        unlistenError();
-      }
-      if (unlistenStatus) {
-        unlistenStatus();
-      }
-      if (unlistenDaemonError) {
-        unlistenDaemonError();
-      }
-      if (unlistenProviderStatus) {
-        unlistenProviderStatus();
-      }
-      if (unlistenOllamaUninstalled) {
-        unlistenOllamaUninstalled();
-      }
+      disposed = true;
+      cleanups.forEach(unlisten => {
+        try { unlisten(); } catch (e) { console.error(e); }
+      });
       cleanupProxyIndicator();
     };
   }, [memoryRef, setLatestTelemetry, setHardwareProfile, setIsOllamaInstalled, setNodes, handleProxyActivityEvent, setExitServices, setShowExitModal, setActiveProcesses, cleanupProxyIndicator, setFrugalConfig, setPortConflict, setDaemonError]);

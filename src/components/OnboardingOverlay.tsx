@@ -2,7 +2,6 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import confetti from 'canvas-confetti';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import {
   setCredential,
   getCredential,
@@ -12,6 +11,7 @@ import {
   checkHermesStatus,
   checkOpencodeStatus,
   detectHardwareProfile,
+  safeFetch,
 } from '../services/tauri';
 import { useMemory } from '../context/MemoryContext';
 import { useTheme } from '../hooks/useTheme';
@@ -492,8 +492,7 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({
       let probeOk = true;
       let probeStatus = 200;
       try {
-        const fetchFn = typeof tauriFetch === 'function' ? tauriFetch : (typeof fetch !== 'undefined' ? fetch : null);
-        if (fetchFn) {
+        const fetchFn = safeFetch;
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 6000);
           const res = await fetchFn(
@@ -509,10 +508,9 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({
             probeOk = false;
             probeStatus = res.status;
           }
+        } catch (probeErr) {
+          console.warn('Google probe network warning:', probeErr);
         }
-      } catch (probeErr) {
-        console.warn('Google probe network warning:', probeErr);
-      }
 
       if (!probeOk) {
         setKeyError(
@@ -556,8 +554,7 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({
       let probeOk = true;
       let probeStatus = 200;
       try {
-        const fetchFn = typeof tauriFetch === 'function' ? tauriFetch : (typeof fetch !== 'undefined' ? fetch : null);
-        if (fetchFn) {
+        const fetchFn = safeFetch;
           const res = await fetchFn(`https://openrouter.ai/api/v1/auth/key`, {
             method: 'GET',
             headers: {
@@ -570,10 +567,9 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({
             probeOk = false;
             probeStatus = res.status;
           }
+        } catch (probeErr) {
+          console.warn('OpenRouter probe network warning:', probeErr);
         }
-      } catch (probeErr) {
-        console.warn('OpenRouter probe network warning:', probeErr);
-      }
 
       if (!probeOk) {
         setKeyError(

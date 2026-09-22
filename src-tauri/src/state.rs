@@ -60,8 +60,17 @@ pub struct CloudModel {
 }
 
 pub const FAST_TTFT_LIMIT: std::time::Duration = std::time::Duration::from_secs(10);
+pub const FAST_TTFT_LIMIT_CPU: std::time::Duration = std::time::Duration::from_secs(25);
 pub const LAST_RESORT_LIMIT: std::time::Duration = std::time::Duration::from_secs(120);
 pub const COOLDOWN_PENALTY_DURATION: std::time::Duration = std::time::Duration::from_secs(300);
+
+pub fn get_fast_ttft_limit(is_accelerated: bool) -> std::time::Duration {
+    if is_accelerated {
+        FAST_TTFT_LIMIT
+    } else {
+        FAST_TTFT_LIMIT_CPU
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum CandidateTier {

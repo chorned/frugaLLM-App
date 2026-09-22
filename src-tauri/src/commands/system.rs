@@ -2,7 +2,26 @@ use tauri::Manager;
 use crate::telemetry::HardwareProfile;
 use crate::state::*;
 
+static CACHED_PROFILE: tokio::sync::OnceCell<HardwareProfile> = tokio::sync::OnceCell::const_new();
+
 pub async fn get_hardware_profile() -> Result<HardwareProfile, String> {
+    if let Some(profile) = CACHED_PROFILE.get() {
+        return Ok(profile.clone());
+    }
+    let profile = detect_hardware_profile_internal().await?;
+    let _ = CACHED_PROFILE.set(profile.clone());
+    Ok(profile)
+}
+
+pub async fn is_hardware_accelerated() -> bool {
+    if let Ok(profile) = get_hardware_profile().await {
+        profile.is_unified || profile.dedicated_vram >= 4 * 1024 * 1024 * 1024
+    } else {
+        false
+    }
+}
+
+async fn detect_hardware_profile_internal() -> Result<HardwareProfile, String> {
     let is_unified: bool;
     #[allow(unused_assignments)]
     let mut dedicated_vram: u64 = 0;

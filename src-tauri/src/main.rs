@@ -50,11 +50,7 @@ fn main() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(
-            tauri_plugin_window_state::Builder::default()
-                .with_state_flags(tauri_plugin_window_state::StateFlags::all() & !tauri_plugin_window_state::StateFlags::VISIBLE & !tauri_plugin_window_state::StateFlags::SIZE)
-                .build()
-        )
+        .plugin(tauri_plugin_window_state::Builder::default().with_state_flags(tauri_plugin_window_state::StateFlags::all() & !tauri_plugin_window_state::StateFlags::VISIBLE & !tauri_plugin_window_state::StateFlags::SIZE).build())
         .manage(PtyState::default())
         .manage(OllamaDaemonState { child: tokio::sync::Mutex::new(None) })
         .manage(Arc::new(ChildProcessManager::new()))
@@ -62,14 +58,7 @@ fn main() {
         .setup(|app| {
             let app_handle = app.handle().clone();
             let mut frugal_config = FrugalConfig::default();
-            if env::args().any(|arg| arg == "--wipe") {
-                println!("--wipe requested: executing deep uninstall of models, Ollama, OpenCode, Hermes, and application cache...");
-                let app_handle_wipe = app_handle.clone();
-                tauri::async_runtime::block_on(async move {
-                    execute_deep_wipe(&app_handle_wipe).await;
-                });
-                println!("--wipe: all components, credentials, and configurations successfully purged.");
-            } else if let Ok(path) = get_config_path(&app_handle) {
+            if let Ok(path) = get_config_path(&app_handle) {
                 if let Ok(json) = std::fs::read_to_string(path) {
                     if let Ok(mut parsed) = serde_json::from_str::<FrugalConfig>(&json) {
                         parsed.input_tokens_session = 0;
@@ -79,7 +68,9 @@ fn main() {
                     }
                 }
             }
+            let is_wipe = env::args().any(|arg| arg == "--wipe");
             let is_silent = env::args().any(|arg| arg == "--silent" || arg == "--minimized");
+            let is_hidden = env::args().any(|arg| arg == "--hidden" || arg == "--uat-runner");
             let start_minimized = app.store("store.json").ok()
                 .and_then(|s| s.get("start_minimized").and_then(|v| v.as_bool()))
                 .unwrap_or(frugal_config.start_minimized);
@@ -89,12 +80,16 @@ fn main() {
             let server_abort_handle = Arc::new(tokio::sync::Mutex::new(None));
             let is_dirty = Arc::new(std::sync::atomic::AtomicBool::new(false));
             let server_status = Arc::new(tokio::sync::RwLock::new(ServerStatus::Starting));
-            app.manage(FrugalConfigState {
-                config: config_arc.clone(),
-                server_abort_handle: server_abort_handle.clone(),
-                is_dirty: is_dirty.clone(),
-                server_status: server_status.clone(),
-            });
+            app.manage(FrugalConfigState { config: config_arc.clone(), server_abort_handle: server_abort_handle.clone(), is_dirty: is_dirty.clone(), server_status: server_status.clone() });
+
+            if is_wipe {
+                println!("--wipe requested: executing deep uninstall of models, Ollama, OpenCode, Hermes, and application cache...");
+                let app_handle_wipe = app_handle.clone();
+                tauri::async_runtime::block_on(async move {
+                    execute_deep_wipe(&app_handle_wipe).await;
+                });
+                println!("--wipe: all components, credentials, and configurations successfully purged.");
+            }
 
             crate::commands::system::log_event(
                 &app_handle,
@@ -150,21 +145,19 @@ fn main() {
             let server_handle = app_handle.clone();
             let initial_server_handle = tauri::async_runtime::spawn(async move { proxy::server::start_frugallm_server(server_handle).await; });
             let abort_clone = server_abort_handle.clone();
-            tauri::async_runtime::spawn(async move {
-                *abort_clone.lock().await = Some(initial_server_handle);
-            });
+            tauri::async_runtime::spawn(async move { *abort_clone.lock().await = Some(initial_server_handle); });
             proxy::server::start_provider_health_loop(app_handle.clone());
             let ollama_handle = app_handle.clone();
             tauri::async_runtime::spawn(async move { let _ = commands::agents::start_ollama_daemon(&ollama_handle).await; });
             telemetry::start_telemetry_loop(app_handle.clone());
 
-            // Handle Silent / Start Minimized Window Visibility and coordinate clamping
+            // Handle Silent / Start Minimized / Automation Hidden Window Visibility and coordinate clamping
             if let Some(window) = app.get_webview_window("main") {
-                validate_and_clamp_window_coordinates(&window);
-                if should_show_window(is_silent, start_minimized) {
-                    let _ = window.show();
-                } else {
+                if is_hidden || !should_show_window(is_silent, start_minimized) {
                     let _ = window.hide();
+                } else {
+                    validate_and_clamp_window_coordinates(&window);
+                    let _ = window.show();
                 }
             }
 

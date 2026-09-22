@@ -144,8 +144,13 @@ pub fn validate_and_clamp_window_coordinates(window: &tauri::WebviewWindow) {
 }
 
 pub fn handle_single_instance(app: &tauri::AppHandle, argv: Vec<String>) {
+    let is_hidden = argv.iter().any(|arg| arg == "--hidden" || arg == "--uat-runner");
     let is_silent = argv.iter().any(|arg| arg == "--silent" || arg == "--minimized");
     let is_wipe = argv.iter().any(|arg| arg == "--wipe");
+
+    if is_hidden {
+        return;
+    }
 
     if is_wipe {
         eprintln!("[SINGLE_INSTANCE] --wipe requested: executing live deep wipe and resetting workspace...");

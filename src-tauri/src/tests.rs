@@ -729,6 +729,33 @@ use std::collections::{HashMap, HashSet};
     }
 
     #[test]
+    fn test_child_process_manager_session_concurrency_lock() {
+        let pm = ChildProcessManager::new();
+        // 1. Acquire install-hermes successfully
+        assert!(pm.try_acquire_session("install-hermes"));
+        assert!(pm.is_running("install-hermes"));
+
+        // 2. Duplicate acquire of install-hermes must fail
+        assert!(!pm.try_acquire_session("install-hermes"));
+
+        // 3. Concurrent hermes install alias must fail while install-hermes is active
+        assert!(!pm.try_acquire_session("install-hermes-agent"));
+
+        // 4. OpenCode installer can acquire concurrently (independent domain)
+        assert!(pm.try_acquire_session("install-opencode"));
+        assert!(!pm.try_acquire_session("install-opencode"));
+
+        // 5. Release install-hermes
+        pm.release_session("install-hermes");
+        assert!(!pm.is_running("install-hermes"));
+
+        // 6. Now install-hermes can be acquired again
+        assert!(pm.try_acquire_session("install-hermes"));
+        pm.release_session("install-hermes");
+        pm.release_session("install-opencode");
+    }
+
+    #[test]
     fn test_mock_update_arg_detection() {
         let args_camel = vec!["frugallm".to_string(), "--mockUpdate".to_string()];
         assert!(check_mock_update_arg(args_camel.into_iter()));
@@ -1062,6 +1089,9 @@ use std::collections::{HashMap, HashSet};
     #[test]
     fn test_ttft_sla_constants() {
         assert_eq!(FAST_TTFT_LIMIT, std::time::Duration::from_secs(10));
+        assert_eq!(FAST_TTFT_LIMIT_CPU, std::time::Duration::from_secs(25));
+        assert_eq!(get_fast_ttft_limit(true), std::time::Duration::from_secs(10));
+        assert_eq!(get_fast_ttft_limit(false), std::time::Duration::from_secs(25));
         assert_eq!(LAST_RESORT_LIMIT, std::time::Duration::from_secs(120));
         assert_eq!(COOLDOWN_PENALTY_DURATION, std::time::Duration::from_secs(300));
     }

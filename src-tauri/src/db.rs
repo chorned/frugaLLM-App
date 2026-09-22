@@ -20,12 +20,12 @@ pub fn set_credential(app: tauri::AppHandle, service: &str, secret: &str) -> Res
     {
         let key = format!("{}_KEY", service.to_uppercase());
         let current_dir = std::env::current_dir().unwrap_or_default();
-        let env_path = if current_dir.join(".env").exists() {
-            current_dir.join(".env")
-        } else if current_dir.join("src-tauri").join(".env").exists() {
+        let env_path = if current_dir.join("src-tauri").join(".env").exists() {
             current_dir.join("src-tauri").join(".env")
-        } else {
+        } else if current_dir.join(".env").exists() {
             current_dir.join(".env")
+        } else {
+            current_dir.join("src-tauri").join(".env")
         };
         
         let contents = if env_path.exists() {

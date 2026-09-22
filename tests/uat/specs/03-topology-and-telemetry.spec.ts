@@ -29,18 +29,17 @@ test.describe('Phase 3: Topology Canvas & Live Telemetry', () => {
 
     const canvas = appPage.locator('[data-testid="main-canvas"], [data-testid="router-main-container"]').first();
     const canvasBox = await canvas.boundingBox();
-    expect(canvasBox).toBeTruthy();
+    expect(hubBox).not.toBeNull();
+    expect(canvasBox).not.toBeNull();
 
-    if (hubBox && canvasBox) {
-      const hubCenterX = hubBox.x + hubBox.width / 2;
-      const hubCenterY = hubBox.y + hubBox.height / 2;
-      const canvasCenterX = canvasBox.x + canvasBox.width / 2;
-      const canvasCenterY = canvasBox.y + canvasBox.height / 2;
+    const hubCenterX = hubBox!.x + hubBox!.width / 2;
+    const hubCenterY = hubBox!.y + hubBox!.height / 2;
+    const canvasCenterX = canvasBox!.x + canvasBox!.width / 2;
+    const canvasCenterY = canvasBox!.y + canvasBox!.height / 2;
 
-      // Assert center points are mathematically aligned within tolerance (< 40px)
-      expect(Math.abs(hubCenterX - canvasCenterX)).toBeLessThan(40);
-      expect(Math.abs(hubCenterY - canvasCenterY)).toBeLessThan(50);
-    }
+    // Assert center points are mathematically aligned within tolerance (< 40px)
+    expect(Math.abs(hubCenterX - canvasCenterX)).toBeLessThan(40);
+    expect(Math.abs(hubCenterY - canvasCenterY)).toBeLessThan(50);
   });
 
   test('03.2 - Metric Tooltips: trigger info popovers for session tokens, lifetime tokens, and money saved', async ({
@@ -71,14 +70,18 @@ test.describe('Phase 3: Topology Canvas & Live Telemetry', () => {
   test('03.3 - Telemetry Event Stream: verify hardware telemetry values populate non-zero metrics', async ({
     appPage,
   }) => {
-    // Wait for native telemetry poller to broadcast telemetry_update
-    await appPage.waitForTimeout(1500);
-
-    // Hardware node should reflect detected system memory / VRAM / CPU state
     const ollamaCard = appPage.locator('[data-testid="node-ollama"]');
     await expect(ollamaCard).toBeVisible();
 
-    const textContent = await ollamaCard.innerText();
-    expect(textContent).toBeTruthy();
+    // Hardware node must display populated non-zero memory / allocation metrics
+    const allocationEl = appPage.locator('[data-testid="hardware-node-allocation"]');
+    await expect(allocationEl).toBeVisible({ timeout: 10000 });
+    await expect(allocationEl).toContainText(/GB/);
+
+    const allocText = await allocationEl.innerText();
+    const parts = allocText.split('/');
+    expect(parts.length).toBe(2);
+    const totalGb = parseFloat(parts[1].replace(/[^0-9.]/g, ''));
+    expect(totalGb).toBeGreaterThan(0);
   });
 });

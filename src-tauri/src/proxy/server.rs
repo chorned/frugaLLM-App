@@ -16,8 +16,28 @@ pub const TOOL_ENFORCEMENT_DIRECTIVE: &str =
     "\n[TOOL ENFORCEMENT DIRECTIVE]: Strict tool calling is required. If you describe actions, plan tool execution, or state that you will read/edit files or run commands, you MUST execute the matching tool call immediately. Do not state conversational promises without invoking the tool.";
 
 
-async fn models() -> Json<Value> {
-    Json(json!({
+async fn models(
+    axum::extract::State(app): axum::extract::State<std::sync::Arc<tauri::AppHandle>>,
+    headers: axum::http::HeaderMap,
+) -> axum::response::Response {
+    let state = app.state::<FrugalConfigState>();
+    let expected_password = {
+        let config = state.config.lock().await;
+        config.api_password.clone()
+    };
+    if let Some(password) = expected_password {
+        if !password.is_empty() {
+            let auth_header = headers.get("authorization").and_then(|h| h.to_str().ok()).unwrap_or("");
+            if auth_header != format!("Bearer {}", password) {
+                return axum::response::Response::builder()
+                    .status(401)
+                    .body(axum::body::Body::from("Unauthorized"))
+                    .unwrap();
+            }
+        }
+    }
+
+    axum::response::IntoResponse::into_response(Json(json!({
         "object": "list",
         "data": [
             {
@@ -27,7 +47,7 @@ async fn models() -> Json<Value> {
                 "owned_by": "frugallm"
             }
         ]
-    }))
+    })))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -197,7 +217,7 @@ async fn try_ollama(
     // target frugallm-active under the hood to leverage the prewarmed 128k context instance without cold reloads.
     let mut resolved_model = ollama_model.to_string();
     if resolved_model != "frugallm-active" {
-        if let Ok(ps_res) = client.get("http://127.0.0.1:11434/api/ps").timeout(std::time::Duration::from_millis(500)).send().await {
+        if let Ok(ps_res) = client.get("http://127.0.0.1:11434/api/ps").timeout(std::time::Duration::from_millis(1500)).send().await {
             if let Ok(ps_json) = ps_res.json::<Value>().await {
                 if let Some(loaded) = ps_json.get("models").and_then(|m| m.as_array()) {
                     if loaded.iter().any(|m| m.get("name").and_then(|n| n.as_str()).map(|n| n.starts_with("frugallm-active")).unwrap_or(false)) {
@@ -1103,8 +1123,11 @@ async fn chat_completions(
     };
 
     // ─────────────────────────────────────────────────────────────
-    // PHASE 1: Fast-Pass SLA (Strict TTFT Limit: 10s)
+    // PHASE 1: Fast-Pass SLA (Hardware-Aware TTFT Limit: 10s GPU / 25s CPU)
     // ─────────────────────────────────────────────────────────────
+    let is_accelerated = crate::commands::system::is_hardware_accelerated().await;
+    let fast_ttft_limit = get_fast_ttft_limit(is_accelerated);
+
     for target_model in &healthy_candidates {
         if target_model.provider == "google" && skip_google {
             continue;
@@ -1131,14 +1154,14 @@ async fn chat_completions(
             &app,
             "INFO",
             "ROUTER",
-            &format!("Phase 1 (Fast-Pass SLA): Attempting route to [{}] via {} (TTFT limit: {}s)", target_model.model, target_model.provider, FAST_TTFT_LIMIT.as_secs()),
+            &format!("Phase 1 (Fast-Pass SLA): Attempting route to [{}] via {} (TTFT limit: {}s [{}])", target_model.model, target_model.provider, fast_ttft_limit.as_secs(), if is_accelerated { "hardware-accelerated" } else { "cpu fallback" }),
         );
 
         if target_model.provider == "ollama" {
             if !ollama_running {
                 continue;
             }
-            match try_ollama(&app, &client, &body, &source, &target_model.model, FAST_TTFT_LIMIT).await {
+            match try_ollama(&app, &client, &body, &source, &target_model.model, fast_ttft_limit).await {
                 Ok(response) => return response,
                 Err(e) => {
                     let _ = app.emit("proxy_model_error", ProxyModelErrorPayload {
@@ -1159,7 +1182,7 @@ async fn chat_completions(
                 }
             }
         } else {
-            match try_cloud_provider(&app, &client, &body, &source, target_model, FAST_TTFT_LIMIT).await {
+            match try_cloud_provider(&app, &client, &body, &source, target_model, fast_ttft_limit).await {
                 Ok(response) => return response,
                 Err(e) => {
                     let _ = app.emit("proxy_model_error", ProxyModelErrorPayload {
@@ -1289,7 +1312,7 @@ async fn chat_completions(
 
     if chain.is_empty() && ollama_viable {
         // Fallback when dynamic roster chain is empty on cold start
-        match try_ollama(&app, &client, &body, &source, &ollama_model, FAST_TTFT_LIMIT).await {
+        match try_ollama(&app, &client, &body, &source, &ollama_model, fast_ttft_limit).await {
             Ok(response) => return response,
             Err(_) => {
                 match try_ollama(&app, &client, &body, &source, &ollama_model, LAST_RESORT_LIMIT).await {
@@ -2186,12 +2209,374 @@ pub fn start_provider_health_loop(app: tauri::AppHandle) {
     });
 }
 
+lazy_static::lazy_static! {
+    pub static ref TAURI_EVENT_CHANNEL: tokio::sync::broadcast::Sender<(String, String)> = {
+        let (tx, _rx) = tokio::sync::broadcast::channel(2048);
+        tx
+    };
+}
+
+pub fn broadcast_tauri_event(event_name: &str, payload_json: &str) {
+    let _ = TAURI_EVENT_CHANNEL.send((event_name.to_string(), payload_json.to_string()));
+}
+
+#[derive(serde::Deserialize)]
+pub struct IpcBridgeRequest {
+    pub cmd: String,
+    #[serde(default)]
+    pub args: Option<serde_json::Value>,
+}
+
+async fn ipc_options() -> axum::response::Response {
+    axum::response::Response::builder()
+        .status(200)
+        .header("access-control-allow-origin", "*")
+        .header("access-control-allow-methods", "GET, POST, OPTIONS")
+        .header("access-control-allow-headers", "*")
+        .body(axum::body::Body::empty())
+        .unwrap()
+}
+
+async fn handle_ipc_bridge(
+    axum::extract::State(app): axum::extract::State<Arc<tauri::AppHandle>>,
+    axum::Json(req): axum::Json<IpcBridgeRequest>,
+) -> axum::response::Response {
+    let result = dispatch_ipc_command(&app, &req.cmd, req.args).await;
+    let (status, body_val) = match result {
+        Ok(v) => (200, v),
+        Err(e) => (500, serde_json::json!({ "error": e })),
+    };
+    axum::response::Response::builder()
+        .status(status)
+        .header("content-type", "application/json")
+        .header("access-control-allow-origin", "*")
+        .header("access-control-allow-methods", "GET, POST, OPTIONS")
+        .header("access-control-allow-headers", "*")
+        .body(axum::body::Body::from(serde_json::to_string(&body_val).unwrap_or_default()))
+        .unwrap()
+}
+
+async fn handle_tauri_events() -> axum::response::Response {
+    let rx = TAURI_EVENT_CHANNEL.subscribe();
+    let stream = futures_util::stream::unfold(rx, |mut rx| async move {
+        match rx.recv().await {
+            Ok((event, payload)) => {
+                let payload_val = serde_json::from_str::<serde_json::Value>(&payload)
+                    .unwrap_or_else(|_| serde_json::Value::String(payload));
+                let data = serde_json::json!({ "event": event, "payload": payload_val }).to_string();
+                let sse_event = axum::response::sse::Event::default().event("tauri_event").data(data);
+                Some((Ok::<_, std::convert::Infallible>(sse_event), rx))
+            }
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                let sse_event = axum::response::sse::Event::default().event("ping").data("{}");
+                Some((Ok(sse_event), rx))
+            }
+            Err(tokio::sync::broadcast::error::RecvError::Closed) => None,
+        }
+    });
+    let sse = axum::response::sse::Sse::new(stream).keep_alive(axum::response::sse::KeepAlive::default());
+    let mut response = axum::response::IntoResponse::into_response(sse);
+    let headers = response.headers_mut();
+    headers.insert("access-control-allow-origin", axum::http::HeaderValue::from_static("*"));
+    response
+}
+
+fn dispatch_ipc_command(
+    app: &tauri::AppHandle,
+    cmd: &str,
+    args: Option<serde_json::Value>,
+) -> futures_util::future::BoxFuture<'static, Result<serde_json::Value, String>> {
+    let app = app.clone();
+    let cmd = cmd.to_string();
+    Box::pin(async move {
+    match cmd.as_str() {
+        "get_frugallm_config" => {
+            let state = app.state::<FrugalConfigState>();
+            let cfg = get_frugallm_config(state).await?;
+            serde_json::to_value(cfg).map_err(|e| e.to_string())
+        }
+        "set_frugallm_config" => {
+            let state = app.state::<FrugalConfigState>();
+            let new_config: FrugalConfig = if let Some(a) = &args {
+                if let Some(nc) = a.get("newConfig").or_else(|| a.get("new_config")) {
+                    serde_json::from_value(nc.clone()).unwrap_or_default()
+                } else {
+                    serde_json::from_value(a.clone()).unwrap_or_default()
+                }
+            } else {
+                FrugalConfig::default()
+            };
+            Box::pin(set_frugallm_config(app.clone(), state, new_config)).await?;
+            Ok(serde_json::json!(null))
+        }
+        "get_frugallm_server_status" => {
+            let state = app.state::<FrugalConfigState>();
+            let status = get_frugallm_server_status(state).await?;
+            serde_json::to_value(status).map_err(|e| e.to_string())
+        }
+        "retry_frugallm_server" => {
+            let state = app.state::<FrugalConfigState>();
+            let status = retry_frugallm_server(app.clone(), state).await?;
+            serde_json::to_value(status).map_err(|e| e.to_string())
+        }
+        "check_hermes_status" => {
+            let s = check_hermes_status(app.clone()).await;
+            serde_json::to_value(s).map_err(|e| e.to_string())
+        }
+        "check_opencode_status" => {
+            let s = check_opencode_status(app.clone()).await;
+            serde_json::to_value(s).map_err(|e| e.to_string())
+        }
+        "check_ollama_status" => {
+            let s = check_ollama_status(app.clone()).await;
+            serde_json::to_value(s).map_err(|e| e.to_string())
+        }
+        "install_ollama" => {
+            install_ollama(app.clone()).await?;
+            Ok(serde_json::json!(null))
+        }
+        "install_opencode" => {
+            install_opencode(app.clone()).await?;
+            Ok(serde_json::json!(null))
+        }
+        "install_hermes" => {
+            install_hermes(app.clone()).await?;
+            Ok(serde_json::json!(null))
+        }
+        "uninstall_ollama" => {
+            uninstall_ollama(app.clone()).await?;
+            Ok(serde_json::json!(null))
+        }
+        "uninstall_opencode" => {
+            uninstall_opencode(app.clone()).await?;
+            Ok(serde_json::json!(null))
+        }
+        "uninstall_hermes" => {
+            uninstall_hermes(app.clone()).await?;
+            Ok(serde_json::json!(null))
+        }
+        "check_tool_gateway_status" => {
+            let active = check_tool_gateway_status(app.clone()).await;
+            Ok(serde_json::json!(active))
+        }
+        "set_tool_gateway_installed" => {
+            let installed = args.as_ref().and_then(|a| a.get("installed").and_then(|v| v.as_bool())).unwrap_or(false);
+            set_tool_gateway_installed(app.clone(), installed)?;
+            Ok(serde_json::json!(null))
+        }
+        "is_wipe_mode" => {
+            Ok(serde_json::json!(is_wipe_mode()))
+        }
+        "get_ollama_chat_model" => {
+            let m = get_ollama_chat_model().await;
+            Ok(serde_json::json!(m))
+        }
+        "get_hermes_version" => {
+            let v = get_hermes_version(app.clone()).await;
+            Ok(serde_json::json!(v))
+        }
+        "get_opencode_version" => {
+            let v = get_opencode_version(app.clone()).await;
+            Ok(serde_json::json!(v))
+        }
+        "detect_vram" => {
+            let v = system::detect_vram().await?;
+            Ok(serde_json::json!(v))
+        }
+        "detect_hardware_profile" => {
+            let p = system::detect_hardware_profile().await?;
+            serde_json::to_value(p).map_err(|e| e.to_string())
+        }
+        "get_active_services" => {
+            let s = get_active_services(app.state::<Arc<crate::proxy::ChildProcessManager>>());
+            serde_json::to_value(s).map_err(|e| e.to_string())
+        }
+        "has_active_services" => {
+            let has = has_active_services(app.state::<Arc<crate::proxy::ChildProcessManager>>());
+            Ok(serde_json::json!(has))
+        }
+        "confirm_exit_app" => {
+            let _ = confirm_exit_app(
+                app.clone(),
+                app.state::<Arc<crate::proxy::ChildProcessManager>>(),
+                app.state::<FrugalConfigState>(),
+                app.state::<Arc<std::sync::atomic::AtomicBool>>(),
+            );
+            Ok(serde_json::json!(null))
+        }
+        "set_credential" => {
+            let service = args.as_ref().and_then(|a| a.get("service").and_then(|v| v.as_str())).unwrap_or("");
+            let secret = args.as_ref().and_then(|a| a.get("secret").and_then(|v| v.as_str())).unwrap_or("");
+            crate::db::set_credential(app.clone(), service, secret)?;
+            Ok(serde_json::json!(null))
+        }
+        "get_credential" => {
+            let service = args.as_ref().and_then(|a| a.get("service").and_then(|v| v.as_str())).unwrap_or("");
+            match crate::db::get_credential(service) {
+                Ok(secret) => Ok(serde_json::json!(secret)),
+                Err(_) => Ok(serde_json::json!(null)),
+            }
+        }
+        "delete_credential" => {
+            let service = args.as_ref().and_then(|a| a.get("service").and_then(|v| v.as_str())).unwrap_or("");
+            crate::db::delete_credential(service)?;
+            Ok(serde_json::json!(null))
+        }
+        "wipe_credentials" => {
+            crate::db::wipe_credentials()?;
+            Ok(serde_json::json!(null))
+        }
+        "refresh_routing_chain" => {
+            let r = refresh_routing_chain(app.state::<DynamicRosterState>(), app.clone()).await?;
+            serde_json::to_value(r).map_err(|e| e.to_string())
+        }
+        "get_routing_chain" => {
+            let r = get_routing_chain(app.state::<DynamicRosterState>()).await?;
+            serde_json::to_value(r).map_err(|e| e.to_string())
+        }
+        "set_routing_chain" => {
+            let chain = args.and_then(|a| a.get("chain").cloned()).and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default();
+            set_routing_chain(app.state::<DynamicRosterState>(), chain).await?;
+            Ok(serde_json::json!(null))
+        }
+        "set_model_override" => {
+            let overrides = args.and_then(|a| a.get("overrides").cloned()).and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default();
+            set_model_override(app.clone(), app.state::<FrugalConfigState>(), overrides).await?;
+            Ok(serde_json::json!(null))
+        }
+        "spawn_pty" => {
+            let session_id = args.as_ref().and_then(|a| a.get("sessionId").or_else(|| a.get("session_id")).and_then(|v| v.as_str())).unwrap_or("").to_string();
+            let command = args.as_ref().and_then(|a| a.get("command").and_then(|v| v.as_str())).map(String::from);
+            let pty_args = args.as_ref().and_then(|a| a.get("args").and_then(|v| serde_json::from_value(v.clone()).ok()));
+            let cols = args.as_ref().and_then(|a| a.get("cols").and_then(|v| v.as_u64())).map(|v| v as u16);
+            let rows = args.as_ref().and_then(|a| a.get("rows").and_then(|v| v.as_u64())).map(|v| v as u16);
+            spawn_pty(app.clone(), app.state::<PtyState>(), app.state::<Arc<crate::proxy::ChildProcessManager>>(), session_id, command, pty_args, cols, rows)?;
+            Ok(serde_json::json!(null))
+        }
+        "kill_pty" => {
+            let session_id = args.as_ref().and_then(|a| a.get("sessionId").or_else(|| a.get("session_id")).and_then(|v| v.as_str())).unwrap_or("");
+            kill_pty(app.state::<PtyState>(), app.state::<Arc<crate::proxy::ChildProcessManager>>(), session_id.to_string())?;
+            Ok(serde_json::json!(null))
+        }
+        "write_pty" => {
+            let session_id = args.as_ref().and_then(|a| a.get("sessionId").or_else(|| a.get("session_id")).and_then(|v| v.as_str())).unwrap_or("");
+            let data = args.as_ref().and_then(|a| a.get("data").and_then(|v| v.as_str())).unwrap_or("");
+            write_pty(app.state::<PtyState>(), session_id.to_string(), data.to_string())?;
+            Ok(serde_json::json!(null))
+        }
+        "deploy_local_model" => {
+            let app_clone = app.clone();
+            tokio::spawn(async move {
+                if let Err(e) = deploy_local_model(app_clone).await {
+                    eprintln!("deploy_local_model background error: {}", e);
+                }
+            });
+            Ok(serde_json::json!(null))
+        }
+        "delete_local_model" => {
+            delete_local_model(app.clone()).await?;
+            Ok(serde_json::json!(null))
+        }
+        "configure_hermes_defaults" => {
+            configure_hermes_defaults(app.clone(), app.state::<FrugalConfigState>()).await?;
+            Ok(serde_json::json!(null))
+        }
+        "configure_opencode_defaults" => {
+            configure_opencode_defaults(app.clone(), app.state::<FrugalConfigState>()).await?;
+            Ok(serde_json::json!(null))
+        }
+        "get_provider_statuses" => {
+            let st = get_provider_statuses(app.state::<ProviderHealthState>()).await?;
+            serde_json::to_value(st).map_err(|e| e.to_string())
+        }
+        "get_diagnostic_data" => {
+            let diag = system::get_diagnostic_data(app.clone()).await?;
+            serde_json::to_value(diag).map_err(|e| e.to_string())
+        }
+        "get_local_ips" => {
+            let ips = system::get_local_ips();
+            serde_json::to_value(ips).map_err(|e| e.to_string())
+        }
+        "get_model_tag_for_vram" => {
+            let vram = args.as_ref().and_then(|a| a.get("detectedVramGb").or_else(|| a.get("vramGb")).and_then(|v| v.as_f64())).unwrap_or(8.0);
+            Ok(serde_json::json!(get_model_tag_for_vram(vram)))
+        }
+        "launch_native_terminal" => {
+            let command = args.as_ref().and_then(|a| a.get("command").and_then(|v| v.as_str())).unwrap_or("").to_string();
+            let title = args.as_ref().and_then(|a| a.get("title").and_then(|v| v.as_str())).map(String::from);
+            let cwd = args.as_ref().and_then(|a| a.get("cwd").and_then(|v| v.as_str())).map(String::from);
+            let env_vars: Option<std::collections::HashMap<String, String>> = args.as_ref()
+                .and_then(|a| a.get("envVars").or_else(|| a.get("env_vars")))
+                .and_then(|v| serde_json::from_value(v.clone()).ok());
+            launch_native_terminal(title, cwd, env_vars, command).await?;
+            Ok(serde_json::json!(null))
+        }
+        "launch_native_app_session" => {
+            let app_name = args.as_ref().and_then(|a| a.get("appName").or_else(|| a.get("app_name")).and_then(|v| v.as_str())).unwrap_or("").to_string();
+            let model = args.as_ref().and_then(|a| a.get("model").and_then(|v| v.as_str())).map(String::from);
+            let workspace_override = args.as_ref().and_then(|a| a.get("workspaceOverride").or_else(|| a.get("workspace_override")).and_then(|v| v.as_str())).map(String::from);
+            launch_native_app_session(app.clone(), app.state::<FrugalConfigState>(), app_name, model, workspace_override).await?;
+            Ok(serde_json::json!(null))
+        }
+        "edit_hermes_soul" => {
+            edit_hermes_soul(app.clone())?;
+            Ok(serde_json::json!(null))
+        }
+        "open_app_logs" => {
+            open_app_logs(app.clone())?;
+            Ok(serde_json::json!(null))
+        }
+        "greet" => {
+            Ok(serde_json::json!("Hello from Rust!"))
+        }
+        _ => Err(format!("Unknown Tauri IPC command: {}", cmd)),
+    }
+    })
+}
+
 pub async fn start_frugallm_server(app: tauri::AppHandle) {
     let app_state = std::sync::Arc::new(app.clone());
     let router = Router::new()
         .route("/v1/models", get(models))
         .route("/v1/chat/completions", post(chat_completions))
+        .route("/__tauri_ipc__", post(handle_ipc_bridge).options(ipc_options))
+        .route("/__tauri_events__", get(handle_tauri_events))
         .with_state(app_state);
+
+    use tauri::Listener;
+    let event_names = [
+        "telemetry_update",
+        "provider_status",
+        "frugallm_server_status",
+        "frugallm_port_error",
+        "frugallm_config_updated",
+        "pty_output",
+        "pty_exit",
+        "pull_progress",
+        "download_progress",
+        "installing_ollama",
+        "model_download_progress",
+        "model_provisioning_started",
+        "model_deployment_complete",
+        "frugallm_prevent_exit",
+        "service_status_changed",
+        "deep_wipe_complete",
+        "proxy_activity",
+        "models_updated",
+        "request_exit_confirmation",
+        "service_exit",
+        "ollama_uninstalled",
+        "opencode_uninstalled",
+        "hermes_uninstalled",
+        "daemon_error",
+        "proxy_model_error",
+    ];
+    for &evt in &event_names {
+        let name = evt.to_string();
+        let _ = app.listen_any(evt, move |event: tauri::Event| {
+            broadcast_tauri_event(&name, event.payload());
+        });
+    }
 
     let (port, bind_all) = {
         let state = app.state::<FrugalConfigState>();
@@ -2270,6 +2655,24 @@ pub async fn start_frugallm_server(app: tauri::AppHandle) {
             }
             let _ = app.emit("frugallm_port_error", port);
             let _ = app.emit("frugallm_server_status", conflict_status);
+
+            // Resilient Control Plane: Serve IPC bridge and SSE on fallback listener
+            // so control plane commands (e.g. port reconfiguration, retry, wipe) stay operational.
+            let fallback_ports = if port != 61721 {
+                vec![61721, 8081, 8080, 0]
+            } else {
+                vec![8081, 8080, 0]
+            };
+            for fb_port in fallback_ports {
+                let fb_addr = format!("{}:{}", ip, fb_port);
+                if let Ok(fallback_listener) = TcpListener::bind(&fb_addr).await {
+                    if let Ok(local_addr) = fallback_listener.local_addr() {
+                        eprintln!("Control plane active on fallback listener {} while port {} is conflicted", local_addr, port);
+                    }
+                    let _ = axum::serve(fallback_listener, router).await;
+                    break;
+                }
+            }
         }
     }
 }

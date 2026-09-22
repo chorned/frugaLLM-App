@@ -25,7 +25,13 @@ export interface OnnxDownloadProgressInfo {
 export const loadOnnxClassifier = async (
   onProgress?: (progress: OnnxDownloadProgressInfo) => void
 ) => {
-  if (typeof window !== 'undefined' && (window as any).__MOCK_ONNX_DOWNLOAD__) {
+  const isTestOrDev = typeof window !== 'undefined' && (
+    import.meta.env.DEV ||
+    import.meta.env.MODE === 'test' ||
+    Boolean((window as any).__PLAYWRIGHT_TEST__)
+  );
+
+  if (isTestOrDev && (window as any).__MOCK_ONNX_DOWNLOAD__) {
     if (onProgress) {
       onProgress({ status: 'progress', file: 'model.onnx', loaded: 10000000, total: 10000000 });
       onProgress({ status: 'done', file: 'model.onnx' });

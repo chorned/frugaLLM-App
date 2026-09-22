@@ -1,6 +1,35 @@
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 
 export const isWindows = process.platform === 'win32';
+
+/**
+ * Cross-platform resilient file/directory deletion with exponential backoff.
+ * On Windows, handles transient locks (EBUSY / EPERM) caused by background indexing,
+ * asynchronous handle closure, or antivirus scans.
+ */
+export async function safeDeleteWithRetry(targetPath: string, maxAttempts = 5): Promise<void> {
+  if (!fs.existsSync(targetPath)) return;
+
+  let delay = 50;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const stat = fs.statSync(targetPath);
+      if (stat.isDirectory()) {
+        fs.rmSync(targetPath, { recursive: true, force: true });
+      } else {
+        fs.unlinkSync(targetPath);
+      }
+      return;
+    } catch {
+      if (attempt === maxAttempts) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      delay *= 2;
+    }
+  }
+}
 
 /**
  * Gracefully or forcefully kills a process tree across Windows, macOS, and Linux.
