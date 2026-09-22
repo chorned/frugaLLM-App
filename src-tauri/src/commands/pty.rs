@@ -19,13 +19,24 @@ pub fn spawn_pty(
     use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
     use std::io::Read;
 
+    if !process_state.try_acquire_session(&session_id) {
+        eprintln!("[pty] Concurrency lock active for session '{}'. Ignoring duplicate spawn request.", session_id);
+        return Ok(());
+    }
+
     let pty_system = NativePtySystem::default();
-    let pair = pty_system.openpty(PtySize {
+    let pair = match pty_system.openpty(PtySize {
         rows: rows.unwrap_or(24),
         cols: cols.unwrap_or(80),
         pixel_width: 0,
         pixel_height: 0,
-    }).map_err(|e| e.to_string())?;
+    }) {
+        Ok(p) => p,
+        Err(e) => {
+            process_state.release_session(&session_id);
+            return Err(e.to_string());
+        }
+    };
 
     let mut cmd = if let Some(c) = command {
         CommandBuilder::new(c)
@@ -105,16 +116,34 @@ pub fn spawn_pty(
         cmd.args(&a);
     }
     
-    let mut child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
+    let mut child = match pair.slave.spawn_command(cmd) {
+        Ok(c) => c,
+        Err(e) => {
+            process_state.release_session(&session_id);
+            return Err(e.to_string());
+        }
+    };
     drop(pair.slave);
 
     if let Some(pid) = child.process_id() {
         process_state.register(session_id.clone(), pid);
     }
 
-    let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
+    let mut reader = match pair.master.try_clone_reader() {
+        Ok(r) => r,
+        Err(e) => {
+            process_state.release_session(&session_id);
+            return Err(e.to_string());
+        }
+    };
     #[allow(unused_mut)]
-    let mut writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+    let mut writer = match pair.master.take_writer() {
+        Ok(w) => w,
+        Err(e) => {
+            process_state.release_session(&session_id);
+            return Err(e.to_string());
+        }
+    };
 
     #[cfg(windows)]
     {
@@ -142,7 +171,7 @@ pub fn spawn_pty(
                 1
             }
         };
-        process_state_clone.unregister(&session_id_clone);
+        process_state_clone.release_session(&session_id_clone);
         #[derive(serde::Serialize, Clone)]
         struct ExitPayload {
             session_id: String,

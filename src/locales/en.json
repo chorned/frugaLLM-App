@@ -328,6 +328,7 @@
       "yes": "Yes",
       "cancel": "Cancel",
       "downloadingWeights": "Downloading Weights...",
+      "prewarmingModel": "Pre-warming & Allocating VRAM...",
       "starting": "Starting...",
       "startingOpenCode": "Starting OpenCode...",
       "startingHermes": "Starting Hermes Agent...",

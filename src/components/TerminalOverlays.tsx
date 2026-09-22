@@ -20,6 +20,7 @@ export interface TerminalOverlaysProps {
   setIsToolGatewayInstalled?: (installed: boolean) => void;
   setNodes?: React.Dispatch<React.SetStateAction<AppNode[]>>;
   memoryRef?: React.MutableRefObject<any>;
+  setMinimizedTerminal?: (minimized: { mode: string; title: string } | null) => void;
 }
 
 const TERMINAL_MODES = [
@@ -56,6 +57,7 @@ export const TerminalOverlays: React.FC<TerminalOverlaysProps> = ({
   setIsToolGatewayInstalled,
   setNodes,
   memoryRef,
+  setMinimizedTerminal,
 }) => {
   const content = (
     <>
@@ -66,6 +68,7 @@ export const TerminalOverlays: React.FC<TerminalOverlaysProps> = ({
           <div
             key={mode}
             data-testid={`terminal-overlay-${mode}`}
+            className="terminal-overlay"
             style={{
               display: terminalMode === mode ? 'flex' : 'none',
               width: '100%',
@@ -82,6 +85,15 @@ export const TerminalOverlays: React.FC<TerminalOverlaysProps> = ({
             <TerminalView
                mode={mode}
                sessionId={mode}
+               onMinimize={() => {
+                 let title = 'Terminal';
+                 if (mode.includes('hermes')) title = 'Hermes';
+                 else if (mode.includes('opencode')) title = 'OpenCode';
+                 else if (mode.includes('ollama')) title = 'Ollama';
+                 else if (mode.includes('gateway')) title = 'Tool Gateway';
+                 setMinimizedTerminal?.({ mode, title });
+                 setTerminalMode(null);
+               }}
                onExit={() => {
                  setTerminalMode(null);
                  checkHermesStatus().then((status) => {

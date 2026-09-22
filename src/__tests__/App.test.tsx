@@ -1203,6 +1203,34 @@ describe('App Component Integration', () => {
       expect(screen.queryByTestId('issue-reporter-modal')).not.toBeInTheDocument();
     });
   }, 15000);
+
+  it('displays Source Linked as active in footer tracker when API keys report 200 OK and are active', async () => {
+    localStorage.setItem('onboardingState', 'completed');
+    (invoke as any).mockImplementation((cmd: string, args?: any) => {
+      if (cmd === 'is_wipe_mode') return Promise.resolve(false);
+      if (cmd === 'get_frugallm_config') return Promise.resolve({});
+      if (cmd === 'get_frugallm_server_status') return Promise.resolve({ status: 'running' });
+      if (cmd === 'check_hermes_status') return Promise.resolve({ is_installed: true, is_managed: false });
+      if (cmd === 'check_opencode_status') return Promise.resolve({ is_installed: true, is_managed: false });
+      if (cmd === 'check_ollama_status') return Promise.resolve({ is_installed: false, is_managed: false });
+      if (cmd === 'get_credential') {
+        if (args?.service === 'google') return Promise.resolve('AIzaSy_google_key');
+        if (args?.service === 'openrouter') return Promise.resolve('sk-or-openrouter_key');
+      }
+      if (cmd === 'get_provider_statuses') {
+        return Promise.resolve({ google: '200 OK', openrouter: '200 OK' });
+      }
+      return Promise.resolve(null);
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tracker-source-active')).toBeInTheDocument();
+      expect(screen.queryByTestId('tracker-source-inactive')).not.toBeInTheDocument();
+      expect(screen.getByTestId('tracker-harness-active')).toBeInTheDocument();
+    }, { timeout: 10000 });
+  }, 15000);
 });
 
 

@@ -42,6 +42,7 @@ test.describe('Terminal Runner View', () => {
             if (cmd === 'check_ollama_status') return Promise.resolve(false);
             if (cmd === 'check_hermes_status') return Promise.resolve(false);
             if (cmd === 'check_opencode_status') return Promise.resolve(false);
+            if (cmd === 'get_credential' && args?.service === 'openrouter') return Promise.resolve('sk-or-v1-mock-key-12345');
             if (cmd === 'detect_vram') return Promise.resolve(8192);
             if (cmd === 'get_model_tag_for_vram') return Promise.resolve('gemma4:e2b');
             

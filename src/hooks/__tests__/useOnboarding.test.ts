@@ -227,4 +227,68 @@ describe('useOnboarding Hook', () => {
     expect(result.current.hasSourceLinked).toBe(true);
     expect(result.current.hasHarnessInstalled).toBe(true);
   });
+
+  it('detects active sources in wipe mode when credentials exist in backend', async () => {
+    // Arrange
+    (invoke as any).mockImplementation((cmd: string, args: any) => {
+      if (cmd === 'is_wipe_mode') return Promise.resolve(true);
+      if (cmd === 'check_ollama_status') return Promise.resolve({ is_installed: false, is_managed: false });
+      if (cmd === 'check_hermes_status') return Promise.resolve({ is_installed: false, is_managed: false });
+      if (cmd === 'check_opencode_status') return Promise.resolve({ is_installed: false, is_managed: false });
+      if (cmd === 'get_credential' && args?.service === 'google') return Promise.resolve('AIzaSy_test');
+      if (cmd === 'get_credential' && args?.service === 'openrouter') return Promise.resolve('sk-or_test');
+      return Promise.resolve(null);
+    });
+
+    // Act
+    const { result } = renderHook(() => useOnboarding());
+
+    // Assert
+    await waitFor(() => expect(result.current.isLoaded).toBe(true));
+    expect(result.current.onboardingState).toBe('fresh');
+    expect(result.current.hasSourceLinked).toBe(true);
+  });
+
+  it('respects hasSourceLinked and hasHarnessInstalled passed directly in options', async () => {
+    // Arrange
+    (invoke as any).mockResolvedValue(false);
+
+    // Act
+    const { result } = renderHook(() =>
+      useOnboarding({
+        hasSourceLinked: true,
+        hasHarnessInstalled: true,
+      })
+    );
+
+    // Assert
+    await waitFor(() => expect(result.current.isLoaded).toBe(true));
+    expect(result.current.hasSourceLinked).toBe(true);
+    expect(result.current.hasHarnessInstalled).toBe(true);
+  });
+
+  it('dynamically updates hasSourceLinked when checkStatus is invoked', async () => {
+    // Arrange
+    let hasGoogle = false;
+    (invoke as any).mockImplementation((cmd: string, args: any) => {
+      if (cmd === 'is_wipe_mode') return Promise.resolve(false);
+      if (cmd === 'get_credential' && args?.service === 'google') {
+        return Promise.resolve(hasGoogle ? 'AIzaSy_dynamic_key' : null);
+      }
+      return Promise.resolve(false);
+    });
+
+    const { result } = renderHook(() => useOnboarding());
+    await waitFor(() => expect(result.current.isLoaded).toBe(true));
+    expect(result.current.hasSourceLinked).toBe(false);
+
+    // Act: Simulate external key addition and status check
+    hasGoogle = true;
+    await act(async () => {
+      await result.current.checkStatus();
+    });
+
+    // Assert
+    expect(result.current.hasSourceLinked).toBe(true);
+  });
 });

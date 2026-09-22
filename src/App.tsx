@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { TerminalLoader } from './components/TerminalLoader';
 import { useCanvasLogic } from './hooks/useCanvasLogic';
 import { useProxyActivityIndicator } from './hooks/useProxyActivityIndicator';
-import { confirmExitApp } from './services/tauri';
+import { confirmExitApp, retryFrugallmServer } from './services/tauri';
 import { MemoryProvider, useMemory } from './context/MemoryContext';
 import { useOnboarding } from './hooks/useOnboarding';
 import { useTheme } from './hooks/useTheme';
@@ -10,6 +10,7 @@ import { OnboardingDecision } from './components/OnboardingDecision';
 import { OnboardingOverlay } from './components/OnboardingOverlay';
 import { ExitConfirmationModal } from './components/ExitConfirmationModal';
 import { IssueReporterModal } from './components/IssueReporterModal';
+import { PortConflictBanner } from './components/PortConflictBanner';
 import { NodeConfigPanel } from './components/NodeConfigPanel';
 import { TopologyCanvas } from './components/TopologyCanvas';
 import { Header } from './components/Header';
@@ -150,8 +151,26 @@ function AppContent() {
     if (import.meta.env.DEV && isScreenshotMode()) return '16';
     return '8';
   });
-  const [portConflict, setPortConflict] = useState<{ port: number; message: string } | null>(null);
+  const [portConflict, setPortConflict] = useState<{ port: number; message: string; showBanner?: boolean } | null>(null);
   const [daemonError, setDaemonError] = useState<string | null>(null);
+
+  const isGoogleLinked = nodes.some(
+    (n) => n.id === 'node-google' && (n.data.status === 'active' || Boolean(n.data.keyPrefix) || n.data.lastStatus === '200 OK')
+  );
+  const isOpenRouterLinked = nodes.some(
+    (n) => n.id === 'node-openrouter' && (n.data.status === 'active' || Boolean(n.data.keyPrefix) || n.data.lastStatus === '200 OK')
+  );
+  const isOllamaLinked =
+    isOllamaInstalled ||
+    nodes.some(
+      (n) =>
+        n.id === 'node-ollama' &&
+        (n.data.status === 'active' ||
+          (typeof n.data.modelCount === 'number' && n.data.modelCount > 0) ||
+          n.data.lastStatus === '200 OK')
+    );
+  const hasSourceLinkedFromNodes = isGoogleLinked || isOpenRouterLinked || isOllamaLinked;
+  const hasHarnessInstalledFromNodes = isHermesInstalled || isOpenCodeInstalled;
 
   const {
     onboardingState,
@@ -170,9 +189,11 @@ function AppContent() {
   } = useOnboarding({
     isHermesInstalled,
     isOpenCodeInstalled,
-    isOllamaInstalled,
-    hasGoogleKey: Boolean(frugalConfig?.google_api_key),
-    hasOpenRouterKey: Boolean(frugalConfig?.openrouter_api_key),
+    isOllamaInstalled: isOllamaLinked,
+    hasGoogleKey: isGoogleLinked,
+    hasOpenRouterKey: isOpenRouterLinked,
+    hasSourceLinked: hasSourceLinkedFromNodes,
+    hasHarnessInstalled: hasHarnessInstalledFromNodes,
   });
 
   const { activeProxyState, handleProxyActivityEvent, cleanup: cleanupProxyIndicator } = useProxyActivityIndicator();
@@ -233,6 +254,7 @@ function AppContent() {
     setFrugalConfig,
     setPortConflict,
     setSelectedNodeId,
+    onStatusChange: checkStatus,
   });
 
   // Topology Wires Hook
@@ -250,8 +272,11 @@ function AppContent() {
     toggleTheme,
   });
 
+  const isMountedRef = useRef(true);
+  const hasRunInitRef = useRef(false);
+
   useEffect(() => {
-    let isMounted = true;
+    isMountedRef.current = true;
     if (import.meta.env.DEV && isScreenshotMode()) {
       if (getScreenshotScreen() === 'boot') {
         setInitLogs(APPSTORE_BOOT_LOGS);
@@ -261,10 +286,13 @@ function AppContent() {
       setIsAppLoaded(true);
       return;
     }
+    if (hasRunInitRef.current) return;
+    hasRunInitRef.current = true;
+
     runAppInit({
-      isMounted: () => isMounted,
+      isMounted: () => isMountedRef.current,
       addLog: (msg: string) => {
-        if (isMounted) setInitLogs(prev => [...prev, msg]);
+        if (isMountedRef.current) setInitLogs(prev => [...prev, msg]);
       },
       setFrugalConfig,
       setIsHermesInstalled,
@@ -283,8 +311,12 @@ function AppContent() {
       setPortConflict,
       setDaemonError,
       setIsAppLoaded,
-    });
-    return () => { isMounted = false; };
+    }).then(() => {
+      if (isMountedRef.current) {
+        checkStatus();
+      }
+    }).catch(console.error);
+    return () => { isMountedRef.current = false; };
   }, []);
 
   // Viewport Hub Centering Mandate:
@@ -313,6 +345,19 @@ function AppContent() {
         onOpenIssueReporter={() => setIsIssueReporterOpen(true)}
       />
 
+      {portConflict?.showBanner && (
+        <PortConflictBanner
+          port={typeof portConflict === 'object' && portConflict.port ? portConflict.port : (typeof portConflict === 'number' ? portConflict : (frugalConfig?.port || 61721))}
+          onConfigurePort={() => setSelectedNodeId('node-frugallm')}
+          onRetry={() => {
+            retryFrugallmServer().then((res: any) => {
+              if (res?.status === 'Running') setPortConflict(null);
+            }).catch(console.error);
+          }}
+          onDismiss={() => setPortConflict(null)}
+        />
+      )}
+
       <TerminalOverlays
         terminalMode={terminalMode}
         activeProcesses={activeProcesses}
@@ -329,6 +374,7 @@ function AppContent() {
         setIsToolGatewayInstalled={setIsToolGatewayInstalled}
         setNodes={setNodes}
         memoryRef={memoryRef}
+        setMinimizedTerminal={setMinimizedTerminal}
       />
 
       <TopologyCanvas
@@ -408,7 +454,7 @@ function AppContent() {
             isToolGatewayInstalled={isToolGatewayInstalled} 
             detectedVram={detectedVram}
             setDetectedVram={setDetectedVram}
-            hasActiveBackend={isOllamaInstalled || nodes.some(n => (n.id === 'node-ollama' || n.id === 'node-openrouter' || n.id === 'node-google') && n.data.status === 'active')}
+            hasActiveBackend={hasSourceLinked || hasSourceLinkedFromNodes}
             handleInitializeHermes={handleInitializeHermes} 
             handleUninstallHermes={handleUninstallHermes} 
             handleOpenHermes={handleOpenHermes} 
@@ -433,7 +479,7 @@ function AppContent() {
             handleKillProcess={handleKillProcess} 
             latestTelemetry={latestTelemetry} 
             hardwareProfile={hardwareProfile} 
-            portConflict={Boolean(portConflict)} 
+            portConflict={portConflict} 
           />
         </div>
       )}

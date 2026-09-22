@@ -55,6 +55,7 @@ pub async fn set_frugallm_config(app: tauri::AppHandle, state: State<'_, FrugalC
     updated_config.input_tokens_session = config.input_tokens_session;
     updated_config.output_tokens_session = config.output_tokens_session;
     updated_config.cached_tokens_session = config.cached_tokens_session;
+    updated_config.installed_by_app = config.installed_by_app.clone();
     
     let port_changed = config.port != updated_config.port;
     let ip_changed = config.bind_all_interfaces != updated_config.bind_all_interfaces;
@@ -66,6 +67,7 @@ pub async fn set_frugallm_config(app: tauri::AppHandle, state: State<'_, FrugalC
         let _ = std::fs::write(path, json);
     }
     state.is_dirty.store(false, std::sync::atomic::Ordering::Release);
+    let _ = app.emit("frugallm_config_updated", ());
 
     if port_changed || ip_changed {
         {
@@ -74,16 +76,19 @@ pub async fn set_frugallm_config(app: tauri::AppHandle, state: State<'_, FrugalC
         }
         let _ = app.emit("frugallm_server_status", ServerStatus::Starting);
 
-        if let Some(handle) = state.server_abort_handle.lock().await.take() {
-            handle.abort();
-        }
-        
+        let abort_handle = state.server_abort_handle.clone();
         let app_clone = app.clone();
-        let new_abort = tauri::async_runtime::spawn(async move {
-            start_frugallm_server(app_clone).await;
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            if let Some(handle) = abort_handle.lock().await.take() {
+                handle.abort();
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+            let new_abort = tauri::async_runtime::spawn(async move {
+                start_frugallm_server(app_clone).await;
+            });
+            *abort_handle.lock().await = Some(new_abort);
         });
-        
-        *state.server_abort_handle.lock().await = Some(new_abort);
     } else {
         crate::commands::agents::sync_all_agent_configs(
             &app,

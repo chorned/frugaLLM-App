@@ -10,6 +10,8 @@ export interface UseOnboardingOptions {
   isOllamaInstalled?: boolean;
   hasGoogleKey?: boolean;
   hasOpenRouterKey?: boolean;
+  hasSourceLinked?: boolean;
+  hasHarnessInstalled?: boolean;
 }
 
 export function useOnboarding(options?: UseOnboardingOptions) {
@@ -60,38 +62,38 @@ export function useOnboarding(options?: UseOnboardingOptions) {
 
   useEffect(() => {
     async function init() {
+      let isWipe = false;
       try {
-        const isWipe = await invoke<boolean>('is_wipe_mode');
-        if (isWipe) {
-          localStorage.removeItem('onboardingState');
-          localStorage.removeItem('onboardingStep');
-          localStorage.removeItem('onboarding_footer_dismissed');
-          setOnboardingState('fresh');
-          setCurrentStep(1);
-          setIsFooterDismissed(false);
-          setIsLoaded(true);
-          return;
-        }
+        isWipe = await invoke<boolean>('is_wipe_mode');
       } catch (e) {
         console.error('Failed to check wipe mode', e);
       }
 
-      const state = localStorage.getItem('onboardingState');
-      if (state === 'learning' || state === 'completed') {
-        setOnboardingState(state);
-      }
-
-      const savedStep = localStorage.getItem('onboardingStep');
-      if (savedStep) {
-        const parsed = parseInt(savedStep, 10);
-        if (parsed >= 1 && parsed <= 6) {
-          setCurrentStep(parsed as OnboardingStep);
+      if (isWipe) {
+        localStorage.removeItem('onboardingState');
+        localStorage.removeItem('onboardingStep');
+        localStorage.removeItem('onboarding_footer_dismissed');
+        setOnboardingState('fresh');
+        setCurrentStep(1);
+        setIsFooterDismissed(false);
+      } else {
+        const state = localStorage.getItem('onboardingState');
+        if (state === 'learning' || state === 'completed') {
+          setOnboardingState(state);
         }
-      }
 
-      const dismissed = localStorage.getItem('onboarding_footer_dismissed');
-      if (dismissed === 'true') {
-        setIsFooterDismissed(true);
+        const savedStep = localStorage.getItem('onboardingStep');
+        if (savedStep) {
+          const parsed = parseInt(savedStep, 10);
+          if (parsed >= 1 && parsed <= 6) {
+            setCurrentStep(parsed as OnboardingStep);
+          }
+        }
+
+        const dismissed = localStorage.getItem('onboarding_footer_dismissed');
+        if (dismissed === 'true') {
+          setIsFooterDismissed(true);
+        }
       }
 
       await checkStatus();
@@ -147,12 +149,19 @@ export function useOnboarding(options?: UseOnboardingOptions) {
   }, []);
 
   const hasSourceLinked =
-    Boolean(options?.isOllamaInstalled || options?.hasGoogleKey || options?.hasOpenRouterKey) ||
-    hasSourceLinkedInternal;
+    Boolean(
+      options?.hasSourceLinked ||
+      options?.isOllamaInstalled ||
+      options?.hasGoogleKey ||
+      options?.hasOpenRouterKey
+    ) || hasSourceLinkedInternal;
 
   const hasHarnessInstalled =
-    Boolean(options?.isHermesInstalled || options?.isOpenCodeInstalled) ||
-    hasHarnessInstalledInternal;
+    Boolean(
+      options?.hasHarnessInstalled ||
+      options?.isHermesInstalled ||
+      options?.isOpenCodeInstalled
+    ) || hasHarnessInstalledInternal;
 
   return {
     onboardingState,

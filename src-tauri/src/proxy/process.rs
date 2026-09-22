@@ -82,6 +82,7 @@ impl Drop for WindowsJobObject {
 
 pub struct ChildProcessManager {
     processes: Arc<std::sync::Mutex<std::collections::HashMap<String, u32>>>,
+    spawning: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
     #[cfg(windows)]
     job_object: Option<Arc<WindowsJobObject>>,
 }
@@ -99,12 +100,75 @@ impl ChildProcessManager {
 
         Self {
             processes: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+            spawning: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
             #[cfg(windows)]
             job_object,
         }
     }
 
+    pub fn try_acquire_session(&self, session_id: &str) -> bool {
+        let Ok(proc_lock) = self.processes.lock() else {
+            return false;
+        };
+        let Ok(mut spawn_lock) = self.spawning.lock() else {
+            return false;
+        };
+
+        // 1. Direct key match: if this exact session_id is active or spawning, reject
+        if proc_lock.contains_key(session_id) || spawn_lock.contains(session_id) {
+            return false;
+        }
+
+        // 2. Conflict domain check for single-target installers:
+        // Prevent concurrent git clones or downloads targeting ~/.hermes, ~/.opencode, ~/.ollama
+        let is_hermes_install = session_id == "install-hermes"
+            || (session_id.contains("hermes") && (session_id.contains("install") || session_id.contains("uninstall")));
+        let is_opencode_install = session_id == "install-opencode"
+            || (session_id.contains("opencode") && (session_id.contains("install") || session_id.contains("uninstall")));
+        let is_ollama_install = session_id == "install-ollama"
+            || (session_id.contains("ollama") && (session_id.contains("install") || session_id.contains("uninstall")));
+
+        if is_hermes_install {
+            let has_active_hermes = proc_lock.keys().any(|k| k.contains("hermes") && (k.contains("install") || k.contains("uninstall")))
+                || spawn_lock.iter().any(|k| k.contains("hermes") && (k.contains("install") || k.contains("uninstall")));
+            if has_active_hermes {
+                return false;
+            }
+        }
+
+        if is_opencode_install {
+            let has_active_opencode = proc_lock.keys().any(|k| k.contains("opencode") && (k.contains("install") || k.contains("uninstall")))
+                || spawn_lock.iter().any(|k| k.contains("opencode") && (k.contains("install") || k.contains("uninstall")));
+            if has_active_opencode {
+                return false;
+            }
+        }
+
+        if is_ollama_install {
+            let has_active_ollama = proc_lock.keys().any(|k| k.contains("ollama") && (k.contains("install") || k.contains("uninstall")))
+                || spawn_lock.iter().any(|k| k.contains("ollama") && (k.contains("install") || k.contains("uninstall")));
+            if has_active_ollama {
+                return false;
+            }
+        }
+
+        spawn_lock.insert(session_id.to_string());
+        true
+    }
+
+    pub fn release_session(&self, session_id: &str) {
+        if let Ok(mut lock) = self.spawning.lock() {
+            lock.remove(session_id);
+        }
+        if let Ok(mut lock) = self.processes.lock() {
+            lock.remove(session_id);
+        }
+    }
+
     pub fn register(&self, key: String, pid: u32) {
+        if let Ok(mut lock) = self.spawning.lock() {
+            lock.remove(&key);
+        }
         if let Ok(mut lock) = self.processes.lock() {
             lock.insert(key, pid);
         }
@@ -124,20 +188,32 @@ impl ChildProcessManager {
     }
 
     pub fn is_running(&self, key: &str) -> bool {
-        if let Ok(lock) = self.processes.lock() {
+        let in_proc = if let Ok(lock) = self.processes.lock() {
             lock.contains_key(key)
         } else {
             false
-        }
+        };
+        let in_spawn = if let Ok(lock) = self.spawning.lock() {
+            lock.contains(key)
+        } else {
+            false
+        };
+        in_proc || in_spawn
     }
 
     pub fn unregister(&self, key: &str) {
+        if let Ok(mut lock) = self.spawning.lock() {
+            lock.remove(key);
+        }
         if let Ok(mut lock) = self.processes.lock() {
             lock.remove(key);
         }
     }
 
     pub fn kill_process(&self, key: &str) {
+        if let Ok(mut lock) = self.spawning.lock() {
+            lock.remove(key);
+        }
         let pid_opt = if let Ok(mut lock) = self.processes.lock() {
             lock.remove(key)
         } else {
@@ -150,11 +226,17 @@ impl ChildProcessManager {
     }
 
     pub fn has_active_services(&self) -> bool {
-        if let Ok(lock) = self.processes.lock() {
+        let procs_active = if let Ok(lock) = self.processes.lock() {
             !lock.is_empty()
         } else {
             false
-        }
+        };
+        let spawning_active = if let Ok(lock) = self.spawning.lock() {
+            !lock.is_empty()
+        } else {
+            false
+        };
+        procs_active || spawning_active
     }
 
     pub fn active_service_names(&self) -> Vec<String> {
@@ -166,6 +248,9 @@ impl ChildProcessManager {
     }
 
     pub fn kill_all(&self) {
+        if let Ok(mut lock) = self.spawning.lock() {
+            lock.clear();
+        }
         let pids: Vec<u32> = if let Ok(mut lock) = self.processes.lock() {
             let pids = lock.values().copied().collect();
             lock.clear();
@@ -224,9 +309,13 @@ pub fn kill_pid_and_children(pid: u32) {
         // First send SIGTERM to children and parent
         let _ = std::process::Command::new("pkill")
             .args(["-TERM", "-P", &pid.to_string()])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
             .status();
         let _ = std::process::Command::new("kill")
             .args(["-TERM", &pid.to_string()])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
             .status();
 
         std::thread::sleep(std::time::Duration::from_millis(50));
@@ -234,9 +323,13 @@ pub fn kill_pid_and_children(pid: u32) {
         // Follow with SIGKILL
         let _ = std::process::Command::new("pkill")
             .args(["-9", "-P", &pid.to_string()])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
             .status();
         let _ = std::process::Command::new("kill")
             .args(["-9", &pid.to_string()])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
             .status();
     }
 }

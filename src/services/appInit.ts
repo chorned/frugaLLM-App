@@ -152,12 +152,13 @@ export async function runAppInit({
   addLog("Verifying OpenRouter credentials...");
   try {
     const key = await getCredential('openrouter');
-    if (key && typeof key === 'string') {
+    if (key && typeof key === 'string' && key.trim().length > 0) {
       setNodes(nds => nds.map(n => n.id === 'node-openrouter' ? { ...n, data: { ...n.data, status: 'active', keyPrefix: key.slice(0, 5) } } : n));
+      addLog("OK: OpenRouter authenticated.");
     } else {
-      setNodes(nds => nds.map(n => n.id === 'node-openrouter' ? { ...n, data: { ...n.data, status: 'active' } } : n));
+      setNodes(nds => nds.map(n => n.id === 'node-openrouter' ? { ...n, data: { ...n.data, status: 'needs_activation', keyPrefix: '', lastStatus: '' } } : n));
+      addLog("INFO: OpenRouter credentials missing.");
     }
-    addLog("OK: OpenRouter authenticated.");
   } catch(e) {
     addLog("INFO: OpenRouter credentials missing.");
   }
@@ -166,12 +167,13 @@ export async function runAppInit({
   addLog("Verifying Google AI Studio credentials...");
   try {
     const key = await getCredential('google');
-    if (key && typeof key === 'string') {
+    if (key && typeof key === 'string' && key.trim().length > 0) {
       setNodes(nds => nds.map(n => n.id === 'node-google' ? { ...n, data: { ...n.data, status: 'active', keyPrefix: key.slice(0, 5) } } : n));
+      addLog("OK: Google AI Studio authenticated.");
     } else {
-      setNodes(nds => nds.map(n => n.id === 'node-google' ? { ...n, data: { ...n.data, status: 'active' } } : n));
+      setNodes(nds => nds.map(n => n.id === 'node-google' ? { ...n, data: { ...n.data, status: 'needs_activation', keyPrefix: '', lastStatus: '' } } : n));
+      addLog("INFO: Google AI Studio credentials missing.");
     }
-    addLog("OK: Google AI Studio authenticated.");
   } catch(e) {
     addLog("INFO: Google AI Studio credentials missing.");
   }

@@ -717,12 +717,21 @@ pub async fn get_opencode_version(app: tauri::AppHandle) -> String {
 
 #[tauri::command(async)]
 pub async fn uninstall_ollama(app: tauri::AppHandle) -> Result<(), String> {
-    if !is_installation_managed(&app, "ollama").await {
+    uninstall_ollama_internal(&app, false).await
+}
+
+pub async fn uninstall_ollama_internal(app: &tauri::AppHandle, force: bool) -> Result<(), String> {
+    if !force && !is_installation_managed(app, "ollama").await {
+        if !is_ollama_installed().await {
+            log_event(app, "INFO", "OLLAMA", "Ollama is already uninstalled");
+            let _ = app.emit("ollama_uninstalled", ());
+            return Ok(());
+        }
         let msg = "Cannot uninstall Ollama: External installation (system-managed) cannot be uninstalled by FrugaLLM.".to_string();
-        log_event(&app, "WARN", "OLLAMA", &msg);
+        log_event(app, "WARN", "OLLAMA", &msg);
         return Err(msg);
     }
-    log_event(&app, "INFO", "OLLAMA", "Initiating complete uninstallation of Ollama");
+    log_event(app, "INFO", "OLLAMA", "Initiating complete uninstallation of Ollama");
 
     // 1. Kill daemon child process if managed by app
     let daemon_state = app.state::<OllamaDaemonState>();
@@ -769,12 +778,10 @@ pub async fn uninstall_ollama(app: tauri::AppHandle) -> Result<(), String> {
     // 3. Reclaim Disk Space & Delete Leftover Storage
     // 3a. User model store: ~/.ollama (reclaims 10-50+ GB)
     if let Ok(home) = app.path().home_dir() {
-        let ollama_home = home.join(".ollama");
-        let _ = tokio::fs::remove_dir_all(&ollama_home).await;
-        #[cfg(not(target_os = "windows"))]
-        {
-            let _ = tokio::process::Command::new("rm").args(["-rf", &ollama_home.to_string_lossy()]).output().await;
-        }
+        let ollama_manifests = home.join(".ollama").join("models").join("manifests");
+        let _ = tokio::fs::remove_dir_all(&ollama_manifests).await;
+        let ollama_log = home.join(".ollama").join("server.log");
+        let _ = tokio::fs::remove_file(&ollama_log).await;
     }
 
     // 3b. Local AppData cache and residual files on Windows
@@ -842,9 +849,9 @@ pub async fn uninstall_ollama(app: tauri::AppHandle) -> Result<(), String> {
         let _ = store.save();
     }
 
-    let _ = set_installation_managed(&app, "ollama", false).await;
+    let _ = set_installation_managed(app, "ollama", false).await;
     let _ = app.emit("ollama_uninstalled", ());
-    log_event(&app, "INFO", "OLLAMA", "Ollama uninstalled, registry purged, leftover storage removed, and state reset successfully");
+    log_event(app, "INFO", "OLLAMA", "Ollama uninstalled, registry purged, leftover storage removed, and state reset successfully");
 
     Ok(())
 }
@@ -922,16 +929,31 @@ pub fn execute_cli_wipe() {
         let _ = kill.output();
     }
     let _ = crate::db::wipe_credentials();
+    for base in [dirs::data_dir(), dirs::config_dir()].into_iter().flatten() {
+        let _ = std::fs::remove_file(base.join("com.chorned.frugallm-app").join("frugal_config.json"));
+        let _ = std::fs::remove_file(base.join("frugallm-app").join("frugal_config.json"));
+    }
     if let Some(h) = dirs::home_dir() {
         wipe_opencode(&h);
         wipe_hermes(&h);
-        let _ = std::fs::remove_dir_all(h.join(".ollama"));
+        let _ = std::fs::remove_dir_all(h.join(".ollama").join("models").join("manifests"));
+        let _ = std::fs::remove_file(h.join(".ollama").join("server.log"));
     }
 }
 
 #[tauri::command(async)]
 pub async fn uninstall_opencode(app: tauri::AppHandle) -> Result<(), String> {
     if !is_installation_managed(&app, "opencode").await {
+        let is_installed = if let Ok(home) = app.path().home_dir() {
+            is_opencode_installed(&home)
+        } else {
+            false
+        };
+        if !is_installed {
+            log_event(&app, "INFO", "OPENCODE", "OpenCode is already uninstalled");
+            let _ = app.emit("opencode_uninstalled", ());
+            return Ok(());
+        }
         let msg = "Cannot uninstall OpenCode: External installation (system-managed) cannot be uninstalled by FrugaLLM.".to_string();
         log_event(&app, "WARN", "OPENCODE", &msg);
         return Err(msg);
@@ -1033,6 +1055,16 @@ pub async fn uninstall_opencode(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command(async)]
 pub async fn uninstall_hermes(app: tauri::AppHandle) -> Result<(), String> {
     if !is_installation_managed(&app, "hermes").await {
+        let is_installed = if let Ok(home) = app.path().home_dir() {
+            is_hermes_installed(&home)
+        } else {
+            false
+        };
+        if !is_installed {
+            log_event(&app, "INFO", "HERMES", "Hermes is already uninstalled");
+            let _ = app.emit("hermes_uninstalled", ());
+            return Ok(());
+        }
         let msg = "Cannot uninstall Hermes: External installation (system-managed) cannot be uninstalled by FrugaLLM.".to_string();
         log_event(&app, "WARN", "HERMES", &msg);
         return Err(msg);
@@ -1097,7 +1129,7 @@ pub async fn uninstall_hermes(app: tauri::AppHandle) -> Result<(), String> {
 
 pub async fn execute_deep_wipe(app: &tauri::AppHandle) {
     let _ = delete_local_model(app.clone()).await;
-    let _ = uninstall_ollama(app.clone()).await;
+    let _ = uninstall_ollama_internal(app, true).await;
     let _ = uninstall_opencode(app.clone()).await;
     let _ = uninstall_hermes(app.clone()).await;
 
@@ -1473,8 +1505,31 @@ pub async fn configure_opencode_defaults(app: tauri::AppHandle, state: tauri::St
     sync_opencode_config(&app, port, &api_key)
 }
 
+struct SessionLockGuard {
+    pm: Arc<ChildProcessManager>,
+    session_id: String,
+}
+
+impl Drop for SessionLockGuard {
+    fn drop(&mut self) {
+        self.pm.release_session(&self.session_id);
+    }
+}
+
 #[tauri::command(async)]
 pub async fn install_ollama(app: tauri::AppHandle) -> Result<(), String> {
+    let _guard = if let Some(pm) = app.try_state::<Arc<ChildProcessManager>>() {
+        if !pm.try_acquire_session("install-ollama") {
+            eprintln!("[agents] Concurrency lock active for install-ollama. Ignoring duplicate request.");
+            return Ok(());
+        }
+        Some(SessionLockGuard {
+            pm: pm.inner().clone(),
+            session_id: "install-ollama".to_string(),
+        })
+    } else {
+        None
+    };
     ensure_ollama_installed(&app).await?;
     let _ = set_installation_managed(&app, "ollama", true).await;
     Ok(())
@@ -1483,6 +1538,18 @@ pub async fn install_ollama(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command(async)]
 pub async fn install_hermes(app: tauri::AppHandle) -> Result<(), String> {
     log_event(&app, "INFO", "HERMES", "install_hermes requested");
+    let _guard = if let Some(pm) = app.try_state::<Arc<ChildProcessManager>>() {
+        if !pm.try_acquire_session("install-hermes") {
+            eprintln!("[agents] Concurrency lock active for install-hermes. Ignoring duplicate request.");
+            return Ok(());
+        }
+        Some(SessionLockGuard {
+            pm: pm.inner().clone(),
+            session_id: "install-hermes".to_string(),
+        })
+    } else {
+        None
+    };
     #[cfg(target_os = "windows")]
     {
         let script = r#"
@@ -1527,6 +1594,18 @@ pub async fn install_hermes(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command(async)]
 pub async fn install_opencode(app: tauri::AppHandle) -> Result<(), String> {
     log_event(&app, "INFO", "OPENCODE", "install_opencode requested");
+    let _guard = if let Some(pm) = app.try_state::<Arc<ChildProcessManager>>() {
+        if !pm.try_acquire_session("install-opencode") {
+            eprintln!("[agents] Concurrency lock active for install-opencode. Ignoring duplicate request.");
+            return Ok(());
+        }
+        Some(SessionLockGuard {
+            pm: pm.inner().clone(),
+            session_id: "install-opencode".to_string(),
+        })
+    } else {
+        None
+    };
     #[cfg(target_os = "windows")]
     {
         let script = r#"
@@ -1920,46 +1999,81 @@ pub async fn start_ollama_daemon(app: &tauri::AppHandle) -> Result<(), String> {
     Err(err)
 }
 
+static DEPLOYING_LOCAL_MODEL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+struct DeployModelGuard;
+impl Drop for DeployModelGuard {
+    fn drop(&mut self) {
+        DEPLOYING_LOCAL_MODEL.store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
 #[tauri::command(async)]
 pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
+    if DEPLOYING_LOCAL_MODEL.compare_exchange(false, true, std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst).is_err() {
+        log_event(&app, "WARN", "OLLAMA", "deploy_local_model already running in background; skipping concurrent invocation");
+        return Ok(());
+    }
+
     log_event(&app, "INFO", "OLLAMA", "deploy_local_model requested");
-    ensure_ollama_installed(&app).await.map_err(|e| {
+    if let Err(e) = ensure_ollama_installed(&app).await {
+        DEPLOYING_LOCAL_MODEL.store(false, std::sync::atomic::Ordering::SeqCst);
         log_event(&app, "ERROR", "OLLAMA", &format!("ensure_ollama_installed failed: {}", e));
-        e
-    })?;
+        return Err(e);
+    }
 
-    start_ollama_daemon(&app).await.map_err(|e| {
+    if let Err(e) = start_ollama_daemon(&app).await {
+        DEPLOYING_LOCAL_MODEL.store(false, std::sync::atomic::Ordering::SeqCst);
         log_event(&app, "ERROR", "OLLAMA", &format!("start_ollama_daemon failed: {}", e));
-        e
-    })?;
+        return Err(e);
+    }
 
-    let vram_mb = detect_vram().await.map_err(|e| {
-        log_event(&app, "ERROR", "OLLAMA", &format!("detect_vram failed: {}", e));
-        e
-    })?;
+    let vram_mb = match detect_vram().await {
+        Ok(v) => v,
+        Err(e) => {
+            DEPLOYING_LOCAL_MODEL.store(false, std::sync::atomic::Ordering::SeqCst);
+            log_event(&app, "ERROR", "OLLAMA", &format!("detect_vram failed: {}", e));
+            return Err(e);
+        }
+    };
     let detected_vram_gb = vram_mb as f64 / 1024.0;
     let tag = get_model_tag_for_vram(detected_vram_gb);
     log_event(&app, "INFO", "OLLAMA", &format!("Detected VRAM: {:.2} GB, selected model tag: {}", detected_vram_gb, tag));
 
-    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let app_data_dir = match app.path().app_data_dir().map_err(|e| e.to_string()) {
+        Ok(d) => d,
+        Err(e) => {
+            DEPLOYING_LOCAL_MODEL.store(false, std::sync::atomic::Ordering::SeqCst);
+            return Err(e);
+        }
+    };
     let models_dir = app_data_dir.join("models");
-    std::fs::create_dir_all(&models_dir).map_err(|e| e.to_string())?;
+    if let Err(e) = std::fs::create_dir_all(&models_dir).map_err(|e| e.to_string()) {
+        DEPLOYING_LOCAL_MODEL.store(false, std::sync::atomic::Ordering::SeqCst);
+        return Err(e);
+    }
 
     // Pre-flight disk space check: require at least 5 GB available for model weights and cache
     let required_bytes = 5 * 1024 * 1024 * 1024;
-    crate::commands::system::check_available_disk_space(&models_dir, required_bytes).inspect_err(|e| {
-        log_event(&app, "ERROR", "OLLAMA", e);
-    })?;
+    if let Err(e) = crate::commands::system::check_available_disk_space(&models_dir, required_bytes) {
+        DEPLOYING_LOCAL_MODEL.store(false, std::sync::atomic::Ordering::SeqCst);
+        log_event(&app, "ERROR", "OLLAMA", &e);
+        return Err(e);
+    }
 
     // Generate Modelfile
     let modelfile_path = models_dir.join("Modelfile");
     let modelfile_content = format!("FROM {}\nPARAMETER num_ctx 131072\n", tag);
     log_event(&app, "INFO", "OLLAMA", &format!("Writing Modelfile to {:?}", modelfile_path));
-    std::fs::write(&modelfile_path, modelfile_content).map_err(|e| e.to_string())?;
+    if let Err(e) = std::fs::write(&modelfile_path, modelfile_content).map_err(|e| e.to_string()) {
+        DEPLOYING_LOCAL_MODEL.store(false, std::sync::atomic::Ordering::SeqCst);
+        return Err(e);
+    }
 
     let app_clone = app.clone();
     let tag_clone = tag.clone();
     tauri::async_runtime::spawn(async move {
+        let _guard = DeployModelGuard;
         let _ = app_clone.emit("model_provisioning_started", ());
         log_event(&app_clone, "INFO", "OLLAMA", &format!("Stage 1: Pulling base model {} from Ollama registry", tag_clone));
 
@@ -1979,92 +2093,93 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
                 while let Ok(Some(chunk)) = res.chunk().await {
                     buffer.extend_from_slice(&chunk);
                     while let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
-                        let line = buffer.drain(..pos).collect::<Vec<_>>();
-                        buffer.remove(0); // remove the '\n'
-                        if let Ok(text) = String::from_utf8(line) {
-                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
-                                if let Some(err_val) = json.get("error") {
-                                    if let Some(err_msg) = err_val.as_str() {
-                                        log_event(&app_clone, "ERROR", "OLLAMA", &format!("Ollama pull error: {}", err_msg));
-                                        let _ = app_clone.emit("model_deployment_complete", DeploymentResult { success: false, message: err_msg.to_string() });
-                                        return;
-                                    }
+                        let line = buffer.drain(..=pos).collect::<Vec<u8>>();
+                        if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&line) {
+                            if let Some(err_val) = json.get("error") {
+                                if let Some(err_msg) = err_val.as_str() {
+                                    log_event(&app_clone, "ERROR", "OLLAMA", &format!("Ollama pull error: {}", err_msg));
+                                    let _ = app_clone.emit("model_deployment_complete", DeploymentResult { success: false, message: err_msg.to_string() });
+                                    return;
                                 }
-                                if let (Some(completed), Some(total)) = (json.get("completed"), json.get("total")) {
-                                    if let (Some(c), Some(t)) = (completed.as_u64(), total.as_u64()) {
-                                        if t > 0 {
-                                            let percent = ((c as f64 / t as f64) * 100.0) as u32;
-                                            let now = tokio::time::Instant::now();
-                                            let elapsed_speed = now.duration_since(last_speed_calc).as_secs_f64();
+                            }
+                            if let Some(status) = json.get("status").and_then(|s| s.as_str()) {
+                                let _ = app_clone.emit("download_progress", DownloadProgress {
+                                    status: format!("{}\r\n", status),
+                                });
+                            }
+                            let completed = json.get("completed").and_then(|c| c.as_u64()).unwrap_or(0);
+                            let total = json.get("total").and_then(|t| t.as_u64()).unwrap_or(0);
+                            if total > 0 {
+                                let percent = ((completed as f64 / total as f64) * 100.0) as u32;
+                                
+                                let now = tokio::time::Instant::now();
+                                let time_diff = now.duration_since(last_speed_calc).as_secs_f64();
+                                if time_diff >= 0.5 {
+                                    let bytes_diff = completed.saturating_sub(last_completed) as f64;
+                                    let instant_speed = bytes_diff / time_diff;
+                                    smoothed_speed = if smoothed_speed == 0.0 { instant_speed } else { (smoothed_speed * 0.7) + (instant_speed * 0.3) };
+                                    last_completed = completed;
+                                    last_speed_calc = now;
+                                }
 
-                                            if elapsed_speed >= 0.4 {
-                                                let delta_bytes = if c >= last_completed { c - last_completed } else { c };
-                                                let current_instant_speed = delta_bytes as f64 / elapsed_speed;
-                                                if smoothed_speed == 0.0 {
-                                                    smoothed_speed = current_instant_speed;
-                                                } else {
-                                                    smoothed_speed = 0.65 * smoothed_speed + 0.35 * current_instant_speed;
-                                                }
-                                                last_completed = c;
-                                                last_speed_calc = now;
-                                            }
+                                let eta_seconds = if smoothed_speed > 0.0 {
+                                    (total.saturating_sub(completed) as f64 / smoothed_speed) as u64
+                                } else {
+                                    0
+                                };
 
-                                            let remaining_bytes = t.saturating_sub(c);
-                                            let eta_seconds = if smoothed_speed > 1024.0 {
-                                                (remaining_bytes as f64 / smoothed_speed) as u64
-                                            } else {
-                                                0
-                                            };
-
-                                            if now.duration_since(last_emit) > tokio::time::Duration::from_millis(100) || percent == 100 {
-                                                let _ = app_clone.emit("model_download_progress", ModelProgressPayload {
-                                                    percent,
-                                                    completed: c,
-                                                    total: t,
-                                                    speed_bytes_per_sec: smoothed_speed,
-                                                    eta_seconds,
-                                                });
-                                                last_emit = now;
-                                            }
-                                        }
-                                    }
-                                } else if let Some(status) = json.get("status") {
-                                    if let Some(s) = status.as_str() {
-                                        let _ = app_clone.emit("download_progress", DownloadProgress { status: format!("{}\r\n", s) });
-                                    }
+                                if now.duration_since(last_emit).as_millis() >= 100 || percent == 100 {
+                                    let _ = app_clone.emit("model_download_progress", ModelProgressPayload {
+                                        percent,
+                                        completed,
+                                        total,
+                                        speed_bytes_per_sec: smoothed_speed,
+                                        eta_seconds,
+                                    });
+                                    last_emit = now;
                                 }
                             }
                         }
                     }
                 }
-            }
+            },
             Err(e) => {
-                log_event(&app_clone, "ERROR", "OLLAMA", &format!("API pull failed: {}", e));
-                let _ = app_clone.emit("model_deployment_complete", DeploymentResult { success: false, message: format!("API pull failed: {}", e) });
+                log_event(&app_clone, "ERROR", "OLLAMA", &format!("Failed to connect to Ollama /api/pull: {}", e));
+                let _ = app_clone.emit("model_deployment_complete", DeploymentResult { success: false, message: e.to_string() });
                 return;
             }
         }
 
+        let _ = app_clone.emit("model_download_progress", ModelProgressPayload {
+            percent: 100,
+            completed: 0,
+            total: 0,
+            speed_bytes_per_sec: 0.0,
+            eta_seconds: 0,
+        });
+
         // Stage 2: Verification Gate - poll /api/tags to ensure base model is present locally
         log_event(&app_clone, "INFO", "OLLAMA", &format!("Stage 2: Verifying downloaded base model {} is registered in Ollama", tag_clone));
         let mut model_verified = false;
-        for attempt in 1..=30 {
-            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        for _ in 0..10 {
             if let Ok(tags_res) = client.get("http://127.0.0.1:11434/api/tags").send().await {
                 if let Ok(tags_json) = tags_res.json::<serde_json::Value>().await {
-                    if is_base_model_in_tags(&tags_json, &tag_clone) {
-                        model_verified = true;
-                        break;
+                    if let Some(models) = tags_json.get("models").and_then(|m| m.as_array()) {
+                        if models.iter().any(|m| m.get("name").and_then(|n| n.as_str()).map(|n| n.starts_with(&tag_clone)).unwrap_or(false)) {
+                            model_verified = true;
+                            break;
+                        }
                     }
                 }
             }
-            if model_verified {
-                log_event(&app_clone, "INFO", "OLLAMA", &format!("Stage 2: Base model {} verified in local tags on attempt {}", tag_clone, attempt));
-                break;
-            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
         }
+
         if !model_verified {
-            log_event(&app_clone, "WARN", "OLLAMA", &format!("Stage 2: Base model {} not yet detected in tags after 15s; proceeding with creation attempt", tag_clone));
+            let msg = format!("Base model {} was not registered in Ollama tags after pull completed", tag_clone);
+            log_event(&app_clone, "ERROR", "OLLAMA", &msg);
+            let _ = app_clone.emit("model_deployment_complete", DeploymentResult { success: false, message: msg });
+            return;
         }
 
         // Stage 3: Modelfile Build
@@ -2104,7 +2219,7 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
             let app_inner = app_clone.clone();
             tokio::spawn(async move {
                 while let Ok(Some(line)) = reader.next_line().await {
-                    let _ = app_inner.emit("download_progress", DownloadProgress { status: line });
+                    let _ = app_inner.emit("download_progress", DownloadProgress { status: format!("{}\r\n", line) });
                 }
             });
         }
@@ -2115,7 +2230,7 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
             let app_inner = app_clone.clone();
             tokio::spawn(async move {
                 while let Ok(Some(line)) = reader.next_line().await {
-                    let _ = app_inner.emit("download_progress", DownloadProgress { status: line });
+                    let _ = app_inner.emit("download_progress", DownloadProgress { status: format!("{}\r\n", line) });
                 }
             });
         }
@@ -2124,10 +2239,11 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
             Ok(status) if status.success() => {
                 log_event(&app_clone, "INFO", "OLLAMA", "frugallm-active model created successfully. Stage 4: Pre-warming and locking in VRAM for 60m...");
                 let _ = app_clone.emit("download_progress", DownloadProgress {
-                    status: "Pre-warming model and confirming CUDA/GPU execution...\r\n".to_string(),
+                    status: "\r\nPre-warming model and confirming CUDA/GPU execution...\r\n".to_string(),
                 });
 
                 // Stage 4: Test inference request to /api/generate to pre-warm the model and lock in VRAM for 60m
+                // Set num_predict: 1 to ensure instant single-token ping response without multi-token generative latency
                 let client = reqwest::Client::builder()
                     .timeout(std::time::Duration::from_secs(60))
                     .build()
@@ -2136,7 +2252,10 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
                     "model": "frugallm-active",
                     "prompt": "ping",
                     "stream": false,
-                    "keep_alive": "60m"
+                    "keep_alive": "60m",
+                    "options": {
+                        "num_predict": 1
+                    }
                 });
 
                 match client.post("http://127.0.0.1:11434/api/generate")
@@ -2145,6 +2264,12 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
                     .await {
                     Ok(resp) if resp.status().is_success() => {
                         log_event(&app_clone, "INFO", "OLLAMA", "Local model pre-warmed and locked in VRAM for 60m successfully");
+                        if let Ok(store) = app_clone.store("store.json") {
+                            store.set("local_model", serde_json::json!(tag_clone));
+                            store.set("ollama_installed", serde_json::json!(true));
+                            store.set("ollama_model", serde_json::json!(tag_clone));
+                            let _ = store.save();
+                        }
                         let _ = app_clone.emit("model_deployment_complete", DeploymentResult { success: true, message: "Success".to_string() });
                     },
                     Ok(resp) => {
@@ -2183,12 +2308,12 @@ pub async fn delete_local_model(app: tauri::AppHandle) -> Result<(), String> {
         .build()
         .unwrap_or_else(|_| reqwest::Client::new());
 
-    let mut tags_to_delete: Vec<String> = vec![
+    let mut tags_to_evict: Vec<String> = vec![
         "frugallm-active".to_string(),
         "frugallm-active:latest".to_string(),
     ];
 
-    // Read base tag from Modelfile before removing
+    // Read base tag from Modelfile before removing for VRAM eviction
     if let Ok(app_data_dir) = app.path().app_data_dir() {
         let modelfile_path = app_data_dir.join("models").join("Modelfile");
         if let Ok(content) = tokio::fs::read_to_string(&modelfile_path).await {
@@ -2196,15 +2321,15 @@ pub async fn delete_local_model(app: tauri::AppHandle) -> Result<(), String> {
                 let trimmed = line.trim();
                 if trimmed.starts_with("FROM ") {
                     let base_tag = trimmed.trim_start_matches("FROM ").trim();
-                    if !base_tag.is_empty() && !tags_to_delete.contains(&base_tag.to_string()) {
-                        tags_to_delete.push(base_tag.to_string());
+                    if !base_tag.is_empty() && !tags_to_evict.contains(&base_tag.to_string()) {
+                        tags_to_evict.push(base_tag.to_string());
                     }
                 }
             }
         }
     }
 
-    // Inspect live /api/tags to identify any installed gemma4 or active models
+    // Inspect live /api/tags to identify any installed gemma4 or active models for VRAM eviction
     if let Ok(tags_res) = client.get("http://127.0.0.1:11434/api/tags").send().await {
         if let Ok(json) = tags_res.json::<serde_json::Value>().await {
             if let Some(models) = json.get("models").and_then(|m| m.as_array()) {
@@ -2213,8 +2338,8 @@ pub async fn delete_local_model(app: tauri::AppHandle) -> Result<(), String> {
                     let model_name = m.get("model").and_then(|n| n.as_str()).unwrap_or("");
                     for candidate in [name, model_name] {
                         if (candidate.contains("frugallm-active") || candidate.contains("gemma4")) && !candidate.is_empty()
-                            && !tags_to_delete.contains(&candidate.to_string()) {
-                                tags_to_delete.push(candidate.to_string());
+                            && !tags_to_evict.contains(&candidate.to_string()) {
+                                tags_to_evict.push(candidate.to_string());
                             }
                     }
                 }
@@ -2223,7 +2348,7 @@ pub async fn delete_local_model(app: tauri::AppHandle) -> Result<(), String> {
     }
 
     // 1. Immediate VRAM Eviction
-    for tag in &tags_to_delete {
+    for tag in &tags_to_evict {
         log_event(&app, "INFO", "OLLAMA", &format!("Evicting {} from VRAM (keep_alive: 0)", tag));
         let unload_payload = serde_json::json!({
             "model": tag,
@@ -2235,7 +2360,11 @@ pub async fn delete_local_model(app: tauri::AppHandle) -> Result<(), String> {
             .await;
     }
 
-    // 2. Complete Tag Removal
+    // 2. Complete Tag Removal (only FrugaLLM's custom active tags; preserve cached base layer blobs)
+    let tags_to_delete = vec![
+        "frugallm-active".to_string(),
+        "frugallm-active:latest".to_string(),
+    ];
     for tag in &tags_to_delete {
         log_event(&app, "INFO", "OLLAMA", &format!("Deleting tag {} from Ollama", tag));
         let delete_payload = serde_json::json!({
@@ -2254,6 +2383,12 @@ pub async fn delete_local_model(app: tauri::AppHandle) -> Result<(), String> {
         let _ = tokio::fs::remove_file(&modelfile_path).await;
         let models_dir = app_data_dir.join("models");
         let _ = tokio::fs::remove_dir(&models_dir).await;
+    }
+
+    if let Ok(store) = app.store("store.json") {
+        store.delete("local_model");
+        store.delete("ollama_model");
+        let _ = store.save();
     }
 
     log_event(&app, "INFO", "OLLAMA", "Local model tags deleted and VRAM evicted successfully");

@@ -7,12 +7,11 @@ import {
   refreshRoutingChain,
   setModelOverride,
   setFrugallmConfig,
-  getFrugallmConfig,
   getFrugallmServerStatus,
   setCredential,
   launchNativeAppSession,
+  safeFetch,
 } from '../services/tauri';
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import confetti from 'canvas-confetti';
 import { AppNode } from '../constants/canvas';
 import en from '../locales/en.json';
@@ -33,6 +32,7 @@ interface UseNodeActionsProps {
   setFrugalConfig: (conf: any) => void;
   setPortConflict: (conflict: any) => void;
   setSelectedNodeId: (id: string | null) => void;
+  onStatusChange?: () => void;
 }
 
 export function useNodeActions({
@@ -51,9 +51,11 @@ export function useNodeActions({
   setFrugalConfig,
   setPortConflict,
   setSelectedNodeId,
+  onStatusChange,
 }: UseNodeActionsProps) {
   const handleInitializeHermes = () => setTerminalMode('install-hermes');
   const handleOpenHermes = () => {
+    setActiveProcesses(prev => ({ ...prev, 'hermes-cli': true }));
     launchNativeAppSession('hermes', undefined, frugalConfig?.hermes_workspace || undefined).catch(console.error);
   };
   const handleOpenHermesGateway = () => setTerminalMode('run-hermes-gateway');
@@ -99,6 +101,7 @@ export function useNodeActions({
   };
   const handleInitializeOpenCode = () => setTerminalMode('install-opencode');
   const handleOpenOpenCode = () => {
+    setActiveProcesses(prev => ({ ...prev, 'run-opencode': true }));
     launchNativeAppSession('opencode', undefined, frugalConfig?.opencode_workspace || undefined).catch(console.error);
   };
   const handleOpenOpenCodeWeb = () => setTerminalMode('run-opencode-web');
@@ -124,11 +127,13 @@ export function useNodeActions({
     await deleteCredential('openrouter').catch(console.error);
     setNodes(nds => nds.map(n => n.id === 'node-openrouter' ? { ...n, data: { ...n.data, status: 'needs_activation', apiKey: '', keyPrefix: '', lastStatus: '' } } : n));
     await refreshRoutingChain().catch(console.error);
+    onStatusChange?.();
   };
   const handleDisconnectGoogle = async () => {
     await deleteCredential('google').catch(console.error);
     setNodes(nds => nds.map(n => n.id === 'node-google' ? { ...n, data: { ...n.data, status: 'needs_activation', googleApiKey: '', keyPrefix: '', lastStatus: '' } } : n));
     await refreshRoutingChain().catch(console.error);
+    onStatusChange?.();
   };
 
   const handleNodeClick = (e: any, nodeId: string) => {
@@ -141,10 +146,6 @@ export function useNodeActions({
     
     if (nodeId === 'node-frugallm') {
       try {
-        if (finalConfig.manual_model_overrides !== undefined) {
-          await setModelOverride(finalConfig.manual_model_overrides);
-          await refreshRoutingChain().catch(console.error);
-        }
         const newConf = {
           port: parseInt(finalConfig.port, 10),
           bind_all_interfaces: finalConfig.bind_all_interfaces,
@@ -157,14 +158,19 @@ export function useNodeActions({
           hermes_workspace: frugalConfig?.hermes_workspace || null,
           opencode_workspace: frugalConfig?.opencode_workspace || null,
           start_minimized: Boolean(finalConfig.start_minimized),
+          installed_by_app: frugalConfig?.installed_by_app,
         };
         await setFrugallmConfig(newConf);
-        getFrugallmConfig().then((conf: any) => setFrugalConfig(conf)).catch(console.error);
+        setFrugalConfig((prev: any) => ({ ...(prev || {}), ...newConf }));
         getFrugallmServerStatus().then((st: any) => {
           if (st?.status === 'Running') {
             setPortConflict(null);
           }
         }).catch(() => {});
+        if (finalConfig.manual_model_overrides !== undefined) {
+          await setModelOverride(finalConfig.manual_model_overrides);
+          await refreshRoutingChain().catch(console.error);
+        }
         confetti({
           particleCount: 150,
           spread: 70,
@@ -172,7 +178,7 @@ export function useNodeActions({
           colors: ['#ea580c', '#ffffff', '#111827']
         });
       } catch (e: any) {
-        alert("Failed to update FrugalLM config: " + e);
+        console.error("Failed to update FrugalLM config: ", e);
       }
       return;
     }
@@ -191,7 +197,7 @@ export function useNodeActions({
           opencode_workspace: nodeId === 'node-opencode' ? (finalConfig.opencode_workspace || null) : (frugalConfig?.opencode_workspace || null),
         };
         await setFrugallmConfig(newConf);
-        getFrugallmConfig().then((conf: any) => setFrugalConfig(conf)).catch(console.error);
+        setFrugalConfig((prev: any) => ({ ...(prev || {}), ...newConf }));
         confetti({
           particleCount: 150,
           spread: 70,
@@ -216,7 +222,7 @@ export function useNodeActions({
         try {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 6000);
-          const res = await tauriFetch(
+          const res = await safeFetch(
             `https://generativelanguage.googleapis.com/v1beta/models?key=${finalConfig.googleApiKey}`,
             {
               method: 'GET',
@@ -241,10 +247,12 @@ export function useNodeActions({
 
         if (probeOk) {
           await setCredential('google', finalConfig.googleApiKey);
-          await refreshRoutingChain().catch(console.error);
           finalConfig.keyPrefix = finalConfig.googleApiKey.slice(0, 5);
           finalConfig.status = 'active';
           finalConfig.lastStatus = '200 OK';
+          setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, ...finalConfig } } : n));
+          await refreshRoutingChain().catch(console.error);
+          onStatusChange?.();
           confetti({
             particleCount: 150,
             spread: 70,
@@ -273,7 +281,7 @@ export function useNodeActions({
         let probeError = '';
 
         try {
-          const res = await tauriFetch(`https://openrouter.ai/api/v1/auth/key`, { 
+          const res = await safeFetch(`https://openrouter.ai/api/v1/auth/key`, { 
             method: 'GET',
             headers: { 
               'Authorization': `Bearer ${finalConfig.apiKey}`,
@@ -296,10 +304,12 @@ export function useNodeActions({
 
         if (probeOk) {
           await setCredential('openrouter', finalConfig.apiKey);
-          await refreshRoutingChain().catch(console.error);
           finalConfig.keyPrefix = finalConfig.apiKey.slice(0, 5);
           finalConfig.status = 'active';
           finalConfig.lastStatus = '200 OK';
+          setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, ...finalConfig } } : n));
+          await refreshRoutingChain().catch(console.error);
+          onStatusChange?.();
           confetti({
             particleCount: 150,
             spread: 70,
@@ -323,7 +333,7 @@ export function useNodeActions({
     
     if (nodeId === 'node-ollama') {
       try {
-        const res = await tauriFetch(`http://${finalConfig.ip}:${finalConfig.port}/api/version`, { method: 'GET' });
+        const res = await safeFetch(`http://${finalConfig.ip}:${finalConfig.port}/api/version`, { method: 'GET' });
         if (res.ok) {
           await refreshRoutingChain().catch(console.error);
           finalConfig.status = 'active';

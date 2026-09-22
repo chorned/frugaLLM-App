@@ -1,5 +1,21 @@
 import { invoke } from '@tauri-apps/api/core';
+import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import { HardwareProfile } from './memoryCalculator';
+
+export async function safeFetch(url: string, init?: any): Promise<Response> {
+  // If running under Playwright automation, use standard window.fetch so Playwright can intercept/monitor traffic
+  if (typeof window !== 'undefined' && Boolean((window as any).__PLAYWRIGHT_TEST__)) {
+    return window.fetch(url, init);
+  }
+  try {
+    return await tauriFetch(url, init);
+  } catch (err) {
+    if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
+      return window.fetch(url, init);
+    }
+    throw err;
+  }
+}
 
 export interface FrugalConfig {
   port?: number;
