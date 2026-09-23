@@ -27,6 +27,7 @@ type NodeData = {
   isCloud?: boolean;
   keyPrefix?: string;
   lastStatus?: string;
+  modelCount?: number;
 };
 
 export type AppNode = {

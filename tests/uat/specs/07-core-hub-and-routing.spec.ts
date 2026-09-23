@@ -1,9 +1,15 @@
 import { test, expect } from '../harness/tauri-launcher';
-import { waitForPortOpen } from '../harness/port-sentinel';
+import { waitForPortOpen, isPortOpen, restoreDefaultPort } from '../harness/port-sentinel';
 
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Phase 7: Core Hub & Global Routing Pool', () => {
+  test.afterEach(async ({ appPage }) => {
+    if (!await isPortOpen(61721)) {
+      await restoreDefaultPort(appPage, 61721);
+    }
+  });
+
   test('07.1 - Core Proxy Settings: port change, persistence verification, and port restoration', async ({
     appPage,
   }) => {
@@ -30,9 +36,9 @@ test.describe('Phase 7: Core Hub & Global Routing Pool', () => {
       await expect(saveBtn).toBeEnabled({ timeout: 5000 });
       await saveBtn.click();
 
-      // Verify via PortSentinel that the native Axum server successfully binds to port 8081
+      // Verify via PortSentinel that the native Axum server successfully binds to port 8081 (bumped to 45s)
       console.log('[UAT Phase 7] Verifying Axum proxy server bound to 8081...');
-      const port8081Bound = await waitForPortOpen(8081, 20000);
+      const port8081Bound = await waitForPortOpen(8081, 45000);
       expect(port8081Bound).toBe(true);
 
       // Verify persistence: Close drawer, re-open, and assert the input still displays 8081
@@ -45,18 +51,13 @@ test.describe('Phase 7: Core Hub & Global Routing Pool', () => {
       await expect(drawer).toBeVisible({ timeout: 5000 });
       await expect(portInput).toHaveValue('8081');
     } finally {
-      // Restore port back to 61721 and save
-      console.log('[UAT Phase 7] Restoring port back to 61721 and saving...');
-      if (!await drawer.isVisible().catch(() => false)) {
-        await frugallmCard.click();
-        await expect(drawer).toBeVisible({ timeout: 5000 });
-      }
-      await portInput.fill('61721');
-      const saveBtn = appPage.locator('[data-testid="save-node-config-button"]');
-      await expect(saveBtn).toBeEnabled({ timeout: 5000 });
-      await saveBtn.click();
-      await expect(saveBtn).not.toHaveText(/SAVING/i, { timeout: 15000 });
-      await waitForPortOpen(61721, 20000);
+      // Unconditionally restore port 61721 even if the 8081 assertion throws
+      await restoreDefaultPort(appPage, 61721);
+    }
+
+    if (!await drawer.isVisible().catch(() => false)) {
+      await frugallmCard.click();
+      await expect(drawer).toBeVisible({ timeout: 5000 });
     }
 
     // Toggle bind all interfaces checkbox

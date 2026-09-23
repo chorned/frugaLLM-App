@@ -12,8 +12,6 @@ pub mod tray;
 pub mod lifecycle;
 #[cfg(test)]
 mod tests;
-#[cfg(test)]
-mod test_restart;
 
 pub use telemetry::{HardwareProfile, MemorySegments, TelemetryPayload};
 pub use state::*;
@@ -30,6 +28,12 @@ fn main() {
     #[cfg(debug_assertions)]
     dotenvy::dotenv().ok();
     let args: Vec<String> = env::args().collect();
+    
+    if args.iter().any(|a| a == "--in-memory-credentials" || a == "--uat-runner")
+        || env::var("FRUGALLM_IN_MEMORY_CREDENTIALS").map(|v| v == "1" || v == "true").unwrap_or(false)
+    {
+        crate::db::use_in_memory_credential_store();
+    }
     
     if args.contains(&"--wipe".to_string()) {
         println!("Wiping credentials, store, and agent configurations...");
@@ -181,7 +185,7 @@ fn main() {
             deploy_local_model, delete_local_model, get_frugallm_config, set_frugallm_config,
             get_provider_statuses, get_frugallm_server_status, retry_frugallm_server,
             edit_hermes_soul, open_app_logs,
-            is_wipe_mode, is_mock_update_mode, get_local_ips, restart_app,
+            is_wipe_mode, get_local_ips, restart_app,
             get_routing_chain, set_routing_chain, refresh_routing_chain,
             check_tool_gateway_status, set_tool_gateway_installed,
             get_model_tag_for_vram,

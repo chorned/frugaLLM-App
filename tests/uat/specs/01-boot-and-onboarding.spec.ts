@@ -1,14 +1,20 @@
 import { test, expect } from '../harness/tauri-launcher';
-import { assertPortsClosed } from '../harness/port-sentinel';
-import { safeDeleteWithRetry } from '../harness/host-process-mgr';
+import { assertPortsClosed, waitForPortClosed } from '../harness/port-sentinel';
+import { safeDeleteWithRetry, killProcessesByName } from '../harness/host-process-mgr';
 
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Phase 1: Boot Sequence & Onboarding', () => {
-  test('01.1 - Pre-flight Clean Check: verify FrugaLLM proxy ports 61721 and 8080 are closed', async () => {
+  test('01.1 - Pre-flight Clean Check: verify FrugaLLM proxy ports 61721, 8080, and 8081 are closed', async () => {
+    // Sweep any stray processes from prior runs to guarantee a clean slate
+    await killProcessesByName('frugallm-app');
+    await waitForPortClosed(61721, 3000);
+    await waitForPortClosed(8080, 3000);
+    await waitForPortClosed(8081, 3000);
+
     // Assert ports are closed prior to app spawn
     // (If Ollama daemon is already running locally as a system service, 11434 might be open, but FrugaLLM proxy ports must be free)
-    await assertPortsClosed([61721, 8080]);
+    await assertPortsClosed([61721, 8080, 8081]);
 
     // Clean up any stale tool gateway marker to guarantee Day-0 installation testing
     const os = await import('node:os');

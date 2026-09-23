@@ -151,6 +151,10 @@ describe('NodeWidgets Components', () => {
 
     it('processes PTY byte stream events for throughput metering', async () => {
       // Arrange
+      let currentTime = 1000;
+      const perfSpy = vi.spyOn(performance, 'now').mockImplementation(() => currentTime);
+      localStorage.clear();
+
       render(
         <MemoryProvider>
           <HardwareNode isGenerating={true} />
@@ -167,13 +171,22 @@ describe('NodeWidgets Components', () => {
         });
       });
 
-      // Act: Dispatch pty_bytes custom event
+      // Act: First chunk at t=1000 (120 bytes = 30 tokens)
       act(() => {
         window.dispatchEvent(new CustomEvent('pty_bytes', { detail: 120 }));
       });
 
-      // Assert: Component maintains active state
-      expect(screen.getByTestId('active-model-name')).toBeInTheDocument();
+      // Second chunk at t=1400 (400ms later, 120 bytes = 30 tokens, total 60 tokens over 0.4s = 150 t/s)
+      currentTime = 1400;
+      act(() => {
+        window.dispatchEvent(new CustomEvent('pty_bytes', { detail: 120 }));
+      });
+
+      // Assert: Component transitions to Thinking status and persists computed throughput
+      expect(screen.getByTestId('node-ollama-status')).toHaveTextContent('Thinking');
+      expect(localStorage.getItem('frugallm_avg_throughput')).toBe('150');
+
+      perfSpy.mockRestore();
     });
 
     it('renders error status light when lastStatus indicates an upstream error', () => {

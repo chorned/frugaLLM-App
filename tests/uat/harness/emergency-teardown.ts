@@ -16,7 +16,7 @@ export async function executeEmergencyTeardown(): Promise<void> {
     await killOrphanProcesses();
 
     // 2. Ensure ports are free
-    const trackedPorts = [8080, 61721, 11434];
+    const trackedPorts = [8080, 8081, 54321, 61721, 11434];
     for (const port of trackedPorts) {
       await waitForPortClosed(port, 3000);
     }

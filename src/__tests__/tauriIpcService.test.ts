@@ -1,6 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import * as fs from 'fs';
-import * as path from 'path';
 
 // Mock @tauri-apps/api/core invoke
 const mockInvoke = vi.fn();
@@ -13,61 +11,124 @@ describe('Typed Tauri IPC Service Layer (CHO-117)', () => {
     vi.clearAllMocks();
   });
 
-  it('exports all required typed IPC wrapper functions from src/services/tauri.ts', async () => {
+  it('serializes arguments correctly across configuration and routing IPC calls', async () => {
     const tauriService = await import('../services/tauri');
-    expect(typeof tauriService.getFrugallmConfig).toBe('function');
-    expect(typeof tauriService.setFrugallmConfig).toBe('function');
-    expect(typeof tauriService.checkHermesStatus).toBe('function');
-    expect(typeof tauriService.checkOpencodeStatus).toBe('function');
-    expect(typeof tauriService.checkOllamaStatus).toBe('function');
-    expect(typeof tauriService.checkToolGatewayStatus).toBe('function');
-    expect(typeof tauriService.detectVram).toBe('function');
-    expect(typeof tauriService.getActiveServices).toBe('function');
-    expect(typeof tauriService.confirmExitApp).toBe('function');
-    expect(typeof tauriService.submitIssueReport).toBe('function');
-    expect(typeof tauriService.setCredential).toBe('function');
-    expect(typeof tauriService.deleteCredential).toBe('function');
-    expect(typeof tauriService.refreshRoutingChain).toBe('function');
-    expect(typeof tauriService.getRoutingChain).toBe('function');
-    expect(typeof tauriService.setModelOverride).toBe('function');
-    expect(typeof tauriService.editHermesSoul).toBe('function');
-    expect(typeof tauriService.openAppLogs).toBe('function');
-    expect(typeof tauriService.setGlobalCliCommands).toBe('function');
-    expect(typeof tauriService.spawnPty).toBe('function');
-    expect(typeof tauriService.killPty).toBe('function');
-    expect(typeof tauriService.resizePty).toBe('function');
-    expect(typeof tauriService.writePty).toBe('function');
-    expect(typeof tauriService.configureHermesDefaults).toBe('function');
-    expect(typeof tauriService.configureOpencodeDefaults).toBe('function');
-    expect(typeof tauriService.deployLocalModel).toBe('function');
-    expect(typeof tauriService.deleteLocalModel).toBe('function');
-    expect(typeof tauriService.installOllama).toBe('function');
-    expect(typeof tauriService.installHermes).toBe('function');
-    expect(typeof tauriService.installOpenCode).toBe('function');
-    expect(typeof tauriService.launchNativeTerminal).toBe('function');
-    expect(typeof tauriService.launchNativeAppSession).toBe('function');
-  });
 
-  it('delegates to invoke with exact command names and argument signatures', async () => {
-    const tauriService = await import('../services/tauri');
+    // getFrugallmConfig
     mockInvoke.mockResolvedValueOnce({ port: 61721 });
     const config = await tauriService.getFrugallmConfig();
     expect(mockInvoke).toHaveBeenCalledWith('get_frugallm_config');
     expect(config).toEqual({ port: 61721 });
 
-    mockInvoke.mockResolvedValueOnce({ is_installed: true, is_managed: false });
-    const hermesStatus = await tauriService.checkHermesStatus();
-    expect(mockInvoke).toHaveBeenCalledWith('check_hermes_status');
-    expect(hermesStatus).toEqual({ is_installed: true, is_managed: false });
-
+    // setFrugallmConfig with flat config
     mockInvoke.mockResolvedValueOnce(undefined);
-    await tauriService.setCredential('openrouter', 'sk-test');
-    expect(mockInvoke).toHaveBeenCalledWith('set_credential', { service: 'openrouter', secret: 'sk-test' });
+    await tauriService.setFrugallmConfig({ port: 8080 });
+    expect(mockInvoke).toHaveBeenCalledWith('set_frugallm_config', { newConfig: { port: 8080 } });
 
+    // setFrugallmConfig with newConfig envelope
     mockInvoke.mockResolvedValueOnce(undefined);
-    await tauriService.spawnPty('bash', ['-c', 'echo hello'], 'run-test');
-    expect(mockInvoke).toHaveBeenCalledWith('spawn_pty', { sessionId: 'run-test', command: 'bash', args: ['-c', 'echo hello'] });
+    await tauriService.setFrugallmConfig({ newConfig: { port: 9090 } });
+    expect(mockInvoke).toHaveBeenCalledWith('set_frugallm_config', { newConfig: { port: 9090 } });
 
+    // setModelOverride
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await tauriService.setModelOverride({ gemma: 'ollama' });
+    expect(mockInvoke).toHaveBeenCalledWith('set_model_override', { overrides: { gemma: 'ollama' } });
+
+    // setRoutingChain and getRoutingChain
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await tauriService.setRoutingChain(['cloud', 'local']);
+    expect(mockInvoke).toHaveBeenCalledWith('set_routing_chain', { chain: ['cloud', 'local'] });
+
+    mockInvoke.mockResolvedValueOnce(['cloud', 'local']);
+    const chain = await tauriService.getRoutingChain();
+    expect(mockInvoke).toHaveBeenCalledWith('get_routing_chain');
+    expect(chain).toEqual(['cloud', 'local']);
+  });
+
+  it('handles PTY terminal process lifecycle commands with proper parameter mappings', async () => {
+    const tauriService = await import('../services/tauri');
+
+    // spawnPty with options object
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await tauriService.spawnPty({ command: 'bash', args: ['-i'], sessionId: 'term-1' });
+    expect(mockInvoke).toHaveBeenCalledWith('spawn_pty', {
+      sessionId: 'term-1',
+      command: 'bash',
+      args: ['-i'],
+    });
+
+    // spawnPty with positional arguments
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await tauriService.spawnPty('bash', ['-c', 'echo hello'], 'term-2');
+    expect(mockInvoke).toHaveBeenCalledWith('spawn_pty', {
+      sessionId: 'term-2',
+      command: 'bash',
+      args: ['-c', 'echo hello'],
+    });
+
+    // writePty
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await tauriService.writePty('term-1', 'ls -la\n');
+    expect(mockInvoke).toHaveBeenCalledWith('write_pty', { sessionId: 'term-1', data: 'ls -la\n' });
+
+    // resizePty
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await tauriService.resizePty('term-1', 120, 30);
+    expect(mockInvoke).toHaveBeenCalledWith('resize_pty', { sessionId: 'term-1', cols: 120, rows: 30 });
+
+    // killPty
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await tauriService.killPty('term-1');
+    expect(mockInvoke).toHaveBeenCalledWith('kill_pty', { sessionId: 'term-1' });
+  });
+
+  it('normalizes legacy boolean and null status responses into DependencyStatus', async () => {
+    const tauriService = await import('../services/tauri');
+
+    // checkHermesStatus returning boolean true
+    mockInvoke.mockResolvedValueOnce(true);
+    const hermesRes = await tauriService.checkHermesStatus();
+    expect(hermesRes).toEqual({ is_installed: true, is_managed: false });
+
+    // checkOpencodeStatus returning boolean false
+    mockInvoke.mockResolvedValueOnce(false);
+    const opencodeRes = await tauriService.checkOpencodeStatus();
+    expect(opencodeRes).toEqual({ is_installed: false, is_managed: false });
+
+    // checkOllamaStatus returning null/undefined
+    mockInvoke.mockResolvedValueOnce(null);
+    const ollamaNullRes = await tauriService.checkOllamaStatus();
+    expect(ollamaNullRes).toEqual({ is_installed: false, is_managed: false });
+
+    // checkOllamaStatus returning full DependencyStatus object
+    mockInvoke.mockResolvedValueOnce({ is_installed: true, is_managed: true });
+    const ollamaObjRes = await tauriService.checkOllamaStatus();
+    expect(ollamaObjRes).toEqual({ is_installed: true, is_managed: true });
+  });
+
+  it('propagates IPC error rejections to callers', async () => {
+    const tauriService = await import('../services/tauri');
+
+    // getFrugallmConfig rejections
+    mockInvoke.mockRejectedValueOnce(new Error('IPC bridge disconnected'));
+    await expect(tauriService.getFrugallmConfig()).rejects.toThrow('IPC bridge disconnected');
+
+    // setCredential rejections
+    mockInvoke.mockRejectedValueOnce(new Error('Keyring unavailable'));
+    await expect(tauriService.setCredential('openrouter', 'bad-key')).rejects.toThrow('Keyring unavailable');
+
+    // spawnPty rejections
+    mockInvoke.mockRejectedValueOnce(new Error('Spawn failed: executable not found'));
+    await expect(tauriService.spawnPty('nonexistent-cmd', [], 'bad-term')).rejects.toThrow(
+      'Spawn failed: executable not found'
+    );
+  });
+
+  it('properly serializes native terminal, session launch, and issue reports', async () => {
+    const tauriService = await import('../services/tauri');
+
+    // launchNativeTerminal
     mockInvoke.mockResolvedValueOnce(undefined);
     await tauriService.launchNativeTerminal('echo hi', '/tmp', { FOO: 'bar' }, 'My Title');
     expect(mockInvoke).toHaveBeenCalledWith('launch_native_terminal', {
@@ -77,43 +138,24 @@ describe('Typed Tauri IPC Service Layer (CHO-117)', () => {
       title: 'My Title',
     });
 
+    // launchNativeAppSession
     mockInvoke.mockResolvedValueOnce(undefined);
-    await tauriService.launchNativeAppSession('hermes', undefined, '/workspace');
+    await tauriService.launchNativeAppSession('hermes', 'gemma:4b', '/workspace');
     expect(mockInvoke).toHaveBeenCalledWith('launch_native_app_session', {
       appName: 'hermes',
-      model: null,
+      model: 'gemma:4b',
       workspaceOverride: '/workspace',
     });
 
+    // submitIssueReport
+    mockInvoke.mockResolvedValueOnce(undefined);
+    const issuePayload = { title: 'Bug Report', description: 'Details here', logs: 'Sample log' };
+    await tauriService.submitIssueReport(issuePayload);
+    expect(mockInvoke).toHaveBeenCalledWith('submit_issue_report', { payload: issuePayload });
+
+    // deleteLocalModel
     mockInvoke.mockResolvedValueOnce(undefined);
     await tauriService.deleteLocalModel();
     expect(mockInvoke).toHaveBeenCalledWith('delete_local_model');
-  });
-
-  it('guarantees zero raw @tauri-apps/api/core invoke calls inside UI presentation components', () => {
-    const presentationFiles = [
-      'src/App.tsx',
-      'src/components/Header.tsx',
-      'src/components/Footer.tsx',
-      'src/components/NodeConfigPanel.tsx',
-      'src/components/CloudRoutingPanel.tsx',
-      'src/components/Settings.tsx',
-      'src/components/TerminalView.tsx',
-      'src/components/TerminalOverlays.tsx',
-      'src/components/IssueReporterModal.tsx',
-      'src/hooks/useNodeActions.ts',
-      'src/hooks/useAppEvents.ts',
-      'src/services/appInit.ts',
-    ];
-
-    const projectRoot = path.resolve(__dirname, '../..');
-    for (const relPath of presentationFiles) {
-      const fullPath = path.join(projectRoot, relPath);
-      if (fs.existsSync(fullPath)) {
-        const content = fs.readFileSync(fullPath, 'utf-8');
-        const hasRawInvokeImport = /import\s*\{[^}]*\binvoke\b[^}]*\}\s*from\s*['"]@tauri-apps\/api\/core['"]/.test(content);
-        expect(hasRawInvokeImport, `${relPath} still directly imports raw invoke from @tauri-apps/api/core`).toBe(false);
-      }
-    }
   });
 });

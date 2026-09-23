@@ -353,19 +353,5 @@ pub fn is_wipe_mode() -> bool {
     std::env::args().any(|arg| arg == "--wipe")
 }
 
-pub fn check_mock_update_arg(mut args: impl Iterator<Item = String>) -> bool {
-    if std::env::var("MOCK_UPDATE").map(|v| v == "1" || v == "true").unwrap_or(false)
-        || std::env::var("FRUGALLM_MOCK_UPDATE").map(|v| v == "1" || v == "true").unwrap_or(false)
-    {
-        return true;
-    }
-    args.any(|arg| arg == "--mockUpdate" || arg == "--mock-update")
-}
-
-#[tauri::command]
-pub fn is_mock_update_mode() -> bool {
-    check_mock_update_arg(std::env::args())
-}
-
 
 

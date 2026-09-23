@@ -2299,9 +2299,9 @@ fn dispatch_ipc_command(
             let state = app.state::<FrugalConfigState>();
             let new_config: FrugalConfig = if let Some(a) = &args {
                 if let Some(nc) = a.get("newConfig").or_else(|| a.get("new_config")) {
-                    serde_json::from_value(nc.clone()).unwrap_or_default()
+                    serde_json::from_value(nc.clone()).map_err(|e| format!("Invalid newConfig payload: {}", e))?
                 } else {
-                    serde_json::from_value(a.clone()).unwrap_or_default()
+                    serde_json::from_value(a.clone()).map_err(|e| format!("Invalid config payload: {}", e))?
                 }
             } else {
                 FrugalConfig::default()

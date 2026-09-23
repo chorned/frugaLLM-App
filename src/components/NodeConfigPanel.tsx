@@ -15,14 +15,6 @@ import en from '../locales/en.json';
 import { Eye, EyeOff, Copy, Check } from 'lucide-react';
 import { AVAILABLE_MODELS, GRAPH_OVERHEAD_GB } from '../services/memoryCalculator';
 
-let isScreenshotMode = () => false;
-let APPSTORE_FORM_DATA: any = null;
-
-if (import.meta.env.DEV) {
-  const mod = await import('../dev/screenshotMode');
-  isScreenshotMode = mod.isScreenshotMode;
-  APPSTORE_FORM_DATA = mod.APPSTORE_FORM_DATA;
-}
 
 export interface NodeConfigPanelProps {
   node: any;
@@ -101,28 +93,6 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
   }, [detectedVram]);
   
   const [formData, setFormData] = useState(() => {
-    if (import.meta.env.DEV && isScreenshotMode() && APPSTORE_FORM_DATA) {
-      return {
-        ip: node.data.ip || APPSTORE_FORM_DATA.ip,
-        port: node.data.port || APPSTORE_FORM_DATA.port,
-        status: node.data.status || 'active',
-        schemaPath: node.data.schemaPath || APPSTORE_FORM_DATA.schemaPath,
-        cwd: node.data.cwd || APPSTORE_FORM_DATA.cwd,
-        bin: node.data.bin || APPSTORE_FORM_DATA.bin,
-        extraArgs: node.data.extraArgs || APPSTORE_FORM_DATA.extraArgs,
-        prompt: node.data.prompt || APPSTORE_FORM_DATA.prompt,
-        apiKey: node.id === 'node-openrouter' ? APPSTORE_FORM_DATA.apiKey : '',
-        googleApiKey: node.id === 'node-google' ? APPSTORE_FORM_DATA.googleApiKey : '',
-        bind_all_interfaces: true,
-        api_password: APPSTORE_FORM_DATA.api_password,
-        hermes_workspace: APPSTORE_FORM_DATA.hermes_workspace,
-        opencode_workspace: APPSTORE_FORM_DATA.opencode_workspace,
-        start_on_login: true,
-        start_minimized: false,
-        global_cli_enabled: true,
-        manual_model_overrides: APPSTORE_FORM_DATA.manual_model_overrides
-      };
-    }
     return {
       ip: node.data.ip || '',
       port: node.data.port || '',

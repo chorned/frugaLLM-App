@@ -23,7 +23,8 @@ export interface OnnxDownloadProgressInfo {
 }
 
 export const loadOnnxClassifier = async (
-  onProgress?: (progress: OnnxDownloadProgressInfo) => void
+  onProgress?: (progress: OnnxDownloadProgressInfo) => void,
+  pipelineFn: any = pipeline
 ) => {
   const isTestOrDev = typeof window !== 'undefined' && (
     import.meta.env.DEV ||
@@ -42,7 +43,7 @@ export const loadOnnxClassifier = async (
 
   if (!classifierPipeline) {
     try {
-      classifierPipeline = await pipeline('zero-shot-classification', ONNX_MODEL_ID, {
+      classifierPipeline = await pipelineFn('zero-shot-classification', ONNX_MODEL_ID, {
         progress_callback: onProgress,
       });
     } catch (e) {
