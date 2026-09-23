@@ -1,9 +1,15 @@
 import { test, expect } from '../harness/tauri-launcher';
-import { bindConflictPort, waitForPortOpen } from '../harness/port-sentinel';
+import { bindConflictPort, waitForPortOpen, isPortOpen, restoreDefaultPort } from '../harness/port-sentinel';
 
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Phase 9: Banners & Modal Safety', () => {
+  test.afterEach(async ({ appPage }) => {
+    if (!await isPortOpen(61721)) {
+      await restoreDefaultPort(appPage, 61721);
+    }
+  });
+
   test('09.1 - Port Conflict Banner: simulate conflict, configure port, release and retry', async ({
     appPage,
   }) => {
@@ -11,9 +17,11 @@ test.describe('Phase 9: Banners & Modal Safety', () => {
 
     // 1. Force a genuine port conflict by binding a raw TCP listener
     const conflictPort = 54321;
-    const conflictSocket = await bindConflictPort(conflictPort);
+    let conflictSocket: { close: () => Promise<void> } | null = null;
 
     try {
+      conflictSocket = await bindConflictPort(conflictPort);
+
       // Open FrugaLLM configuration drawer
       const frugallmCard = appPage.locator('[data-testid="node-frugallm"]');
       await expect(frugallmCard).toBeVisible({ timeout: 10000 });
@@ -52,6 +60,7 @@ test.describe('Phase 9: Banners & Modal Safety', () => {
       // 4. Release conflicting socket
       console.log('[UAT Phase 9] Releasing conflicting socket...');
       await conflictSocket.close();
+      conflictSocket = null;
 
       // Restore port back to 61721 if changed and save
       const currentPort = await portInput.inputValue();
@@ -66,9 +75,11 @@ test.describe('Phase 9: Banners & Modal Safety', () => {
       // Close drawer
       await expect(closeBtn).toBeVisible({ timeout: 5000 });
       await closeBtn.click();
-    } catch (e) {
-      await conflictSocket.close().catch(() => {});
-      throw e;
+    } finally {
+      if (conflictSocket) {
+        await conflictSocket.close().catch(() => {});
+      }
+      await restoreDefaultPort(appPage, 61721);
     }
   });
 

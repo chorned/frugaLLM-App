@@ -88,18 +88,29 @@ test.describe('Terminal Runner View', () => {
     const cmds = await page.evaluate(() => (window as Record<string, any>)['invokedCommands']);
     console.log('Invoked Commands:', cmds);
 
-    // Verify spawn_pty and resize_pty were invoked
+    // Verify spawn_pty and resize_pty were invoked with valid arguments
     await expect(async () => {
       const currentCmds = await page.evaluate(() => (window as Record<string, any>)['invokedCommands']);
       const spawnCall = currentCmds.find((c: any) => c.cmd === 'spawn_pty');
       expect(spawnCall).toBeDefined();
+      expect(spawnCall.args).toBeDefined();
+      expect(typeof spawnCall.args.command).toBe('string');
+      expect(spawnCall.args.command.length).toBeGreaterThan(0);
+      expect(typeof spawnCall.args.sessionId).toBe('string');
+      expect(Array.isArray(spawnCall.args.args)).toBe(true);
     }).toPass({ timeout: 2000 });
     
-    // Wait for resize_pty
+    // Wait for resize_pty with valid columns and rows
     await expect(async () => {
       const allCmds = await page.evaluate(() => (window as Record<string, any>)['invokedCommands']);
       const resizeCall = allCmds.find((c: any) => c.cmd === 'resize_pty');
       expect(resizeCall).toBeDefined();
+      expect(resizeCall.args).toBeDefined();
+      expect(typeof resizeCall.args.cols).toBe('number');
+      expect(resizeCall.args.cols).toBeGreaterThan(0);
+      expect(typeof resizeCall.args.rows).toBe('number');
+      expect(resizeCall.args.rows).toBeGreaterThan(0);
+      expect(typeof resizeCall.args.sessionId).toBe('string');
     }).toPass({ timeout: 2000 });
 
     await page.waitForTimeout(500);
@@ -126,10 +137,13 @@ test.describe('Terminal Runner View', () => {
     // Terminal should be closed
     await expect(terminal.xterm).not.toBeVisible();
 
-    // Verify kill_pty was called
+    // Verify kill_pty was called with the correct session identifier
     const finalCmds = await page.evaluate(() => (window as Record<string, any>)['invokedCommands']);
     const killCall = finalCmds.find((c: any) => c.cmd === 'kill_pty');
     expect(killCall).toBeDefined();
+    expect(killCall.args).toBeDefined();
+    expect(typeof killCall.args.sessionId).toBe('string');
+    expect(killCall.args.sessionId.length).toBeGreaterThan(0);
   });
 
   test('should display download speed, ETA, and progress stats during model provisioning', async ({ page }) => {

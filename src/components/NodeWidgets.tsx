@@ -6,14 +6,6 @@ import { useMemory } from '../context/MemoryContext';
 import { OllamaIcon } from './icons/ProviderIcons';
 import { Icons } from '../constants/canvas';
 
-let isScreenshotMode = () => false;
-let APPSTORE_TELEMETRY: any = null;
-
-if (import.meta.env.DEV) {
-  const mod = await import('../dev/screenshotMode');
-  isScreenshotMode = mod.isScreenshotMode;
-  APPSTORE_TELEMETRY = mod.APPSTORE_TELEMETRY;
-}
 
 const InfoIconSVG = (props: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="-50 -50 590 590" fill="currentColor" {...props}>
@@ -346,10 +338,7 @@ export const HardwareNode = ({
     memoryRef.current = memory;
   }, [memory]);
 
-  const [telemetry, setTelemetry] = useState<any>(() => {
-    if (import.meta.env.DEV && isScreenshotMode()) return APPSTORE_TELEMETRY;
-    return null;
-  });
+  const [telemetry, setTelemetry] = useState<any>(null);
   const [_avgThroughput, setAvgThroughput] = useState<number>(() => {
     try {
       const saved = localStorage.getItem('frugallm_avg_throughput');

@@ -22,7 +22,7 @@ test.describe('Phase 4: Local Hardware Node (Ollama) & Tool Gateway', () => {
   test('04.2 - Model Ingestion: select gemma4:e2b in UI, trigger install, verify progress bar and installed roster', async ({
     appPage,
   }) => {
-    test.setTimeout(300_000);
+    test.setTimeout(600_000);
 
     const drawer = appPage.locator('.node-config-panel, [data-testid="node-config-panel"]').first();
     await expect(drawer).toBeVisible({ timeout: 5000 });
@@ -41,15 +41,15 @@ test.describe('Phase 4: Local Hardware Node (Ollama) & Tool Gateway', () => {
       const terminalOverlay = appPage.locator('[data-testid="terminal-overlay-install-ollama"]');
       await expect(terminalOverlay).toBeVisible({ timeout: 10000 });
 
-      // Assert the in-app progress bar widget appears
+      // Assert the in-app progress bar widget appears (cold download timeout: up to 300s)
       const progressBar = appPage.locator('[data-testid="model-download-progress-bar"]');
-      await expect(progressBar).toBeVisible({ timeout: 180_000 });
+      await expect(progressBar).toBeVisible({ timeout: 300_000 });
 
-      // Wait for the real in-app progress bar to hit 100%
-      await expect(progressBar.locator('text=100%')).toBeVisible({ timeout: 280_000 });
+      // Wait for the real in-app progress bar to hit 100% (cold download timeout: up to 540s)
+      await expect(progressBar.locator('text=100%')).toBeVisible({ timeout: 540_000 });
 
       // Wait for terminal overlay to finish and close
-      await expect(terminalOverlay).toBeHidden({ timeout: 60_000 });
+      await expect(terminalOverlay).toBeHidden({ timeout: 120_000 });
     }
 
     // Verify genuine live Ollama daemon responds with 200 OK
@@ -77,6 +77,8 @@ test.describe('Phase 4: Local Hardware Node (Ollama) & Tool Gateway', () => {
   test('04.3 - Tool Enforcing Gateway: toggle checkbox, trigger installation, verify status', async ({
     appPage,
   }) => {
+    test.setTimeout(240_000);
+
     // Ensure Ollama config drawer is open
     const gatewayToggle = appPage.locator('[data-testid="tool-gateway-checkbox"]');
     if (!await gatewayToggle.isVisible().catch(() => false)) {
@@ -103,10 +105,10 @@ test.describe('Phase 4: Local Hardware Node (Ollama) & Tool Gateway', () => {
     if (await confirmInstall.isVisible({ timeout: 2000 }).catch(() => false)) {
       await confirmInstall.click();
 
-      // Wait for tool gateway terminal overlay to complete and auto-close
+      // Wait for tool gateway terminal overlay to complete and auto-close (cold download timeout: up to 180s)
       const terminalOverlay = appPage.locator('[data-testid="terminal-overlay-install-tool-gateway"]');
       if (await terminalOverlay.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await expect(terminalOverlay).toBeHidden({ timeout: 15000 });
+        await expect(terminalOverlay).toBeHidden({ timeout: 180_000 });
       }
     }
 

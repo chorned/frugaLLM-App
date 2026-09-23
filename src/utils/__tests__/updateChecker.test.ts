@@ -1,23 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { checkForAppUpdates, isMockUpdateMode } from '../updateChecker';
+import { checkForAppUpdates } from '../updateChecker';
 
 vi.mock('@tauri-apps/api/app', () => ({
   getVersion: vi.fn(),
 }));
 
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(),
-}));
-
 import { getVersion } from '@tauri-apps/api/app';
-import { invoke } from '@tauri-apps/api/core';
 
 describe('updateChecker utility', () => {
   const originalFetch = global.fetch;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(invoke).mockResolvedValue(false);
   });
 
   afterEach(() => {
@@ -159,42 +153,5 @@ describe('updateChecker utility', () => {
 
     expect(result).toBeDefined();
     expect(result.hasUpdate).toBe(false);
-  });
-
-  it('returns mock update when --mockUpdate CLI startup argument is active via is_mock_update_mode', async () => {
-    vi.mocked(getVersion).mockResolvedValue('0.0.9');
-    vi.mocked(invoke).mockImplementation((cmd) => {
-      if (cmd === 'is_mock_update_mode') return Promise.resolve(true);
-      return Promise.resolve(false);
-    });
-
-    const mockFetch = vi.fn();
-    global.fetch = mockFetch;
-
-    const result = await checkForAppUpdates('chorned', 'frugaLLM-App');
-
-    expect(result.hasUpdate).toBe(true);
-    expect(result.latestVersion).toBe('0.1.0');
-    expect(result.currentVersion).toBe('0.0.9');
-    expect(result.htmlUrl).toBe('https://github.com/chorned/frugaLLM-App/releases/latest');
-    // In mock mode, external GitHub API is bypassed
-    expect(mockFetch).not.toHaveBeenCalled();
-  });
-
-  it('detects mock update mode via URL search parameters in web environments', async () => {
-    const originalLocation = window.location;
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      configurable: true,
-      value: { ...originalLocation, search: '?mockUpdate=true' },
-    });
-
-    expect(await isMockUpdateMode()).toBe(true);
-
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      configurable: true,
-      value: originalLocation,
-    });
   });
 });

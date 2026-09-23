@@ -6,7 +6,7 @@ test.describe('Phase 6: Autonomous Agents (Hermes & OpenCode)', () => {
   test('06.1 - OpenCode Installation & Process Control: install via UI, verify controls and active process card', async ({
     appPage,
   }) => {
-    test.setTimeout(300_000);
+    test.setTimeout(480_000);
 
     const opencodeCard = appPage.locator('[data-testid="node-opencode"]');
     await expect(opencodeCard).toBeVisible({ timeout: 10000 });
@@ -26,8 +26,8 @@ test.describe('Phase 6: Autonomous Agents (Hermes & OpenCode)', () => {
       const terminalOverlay = appPage.locator('[data-testid="terminal-overlay-install-opencode"]');
       await expect(terminalOverlay).toBeVisible({ timeout: 5000 });
 
-      // Wait for complete installation and auto-exit of terminal runner
-      await expect(terminalOverlay).toBeHidden({ timeout: 240000 });
+      // Wait for complete installation and auto-exit of terminal runner (cold download timeout: up to 420s)
+      await expect(terminalOverlay).toBeHidden({ timeout: 420_000 });
     }
 
     // Assert drawer transitions to installed state and workspace input unlocks
@@ -68,7 +68,7 @@ test.describe('Phase 6: Autonomous Agents (Hermes & OpenCode)', () => {
   test('06.2 - Hermes Installation & Soul Configuration: install via UI, verify controls, active card, soul editor', async ({
     appPage,
   }) => {
-    test.setTimeout(300_000);
+    test.setTimeout(480_000);
 
     const hermesCard = appPage.locator('[data-testid="node-hermes"]');
     await expect(hermesCard).toBeVisible({ timeout: 10000 });
@@ -88,8 +88,8 @@ test.describe('Phase 6: Autonomous Agents (Hermes & OpenCode)', () => {
       const terminalOverlay = appPage.locator('[data-testid="terminal-overlay-install-hermes"]');
       await expect(terminalOverlay).toBeVisible({ timeout: 5000 });
 
-      // Wait for complete installation and auto-exit of terminal runner
-      await expect(terminalOverlay).toBeHidden({ timeout: 240000 });
+      // Wait for complete installation and auto-exit of terminal runner (cold download timeout: up to 420s)
+      await expect(terminalOverlay).toBeHidden({ timeout: 420_000 });
     }
 
     // Assert drawer transitions to installed state and workspace input unlocks

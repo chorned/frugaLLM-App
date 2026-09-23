@@ -544,9 +544,17 @@ pub fn clean_windows_user_path_hermes() -> Result<(), String> {
     Ok(())
 }
 
+pub async fn check_ollama_api_endpoint(endpoint: &str) -> bool {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_millis(500))
+        .build()
+        .unwrap_or_default();
+    client.get(endpoint).send().await.map(|r| r.status().is_success()).unwrap_or(false)
+}
+
 pub async fn is_ollama_installed() -> bool {
     // 1. Check if it's currently running via its local API
-    if reqwest::get("http://127.0.0.1:11434/api/version").await.is_ok() {
+    if check_ollama_api_endpoint("http://127.0.0.1:11434/api/version").await {
         return true;
     }
 

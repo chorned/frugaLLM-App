@@ -22,7 +22,6 @@ import {
 describe('onnxGateway Service', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    delete (window as any).__MOCK_ONNX_DOWNLOAD__;
     await clearOnnxCache();
   });
 
@@ -39,27 +38,32 @@ describe('onnxGateway Service', () => {
   });
 
   describe('loadOnnxClassifier', () => {
-    it('uses mock download bypass and invokes progress callbacks when __MOCK_ONNX_DOWNLOAD__ is set', async () => {
+    it('accepts custom pipelineFn factory parameter via dependency injection', async () => {
       // Arrange
-      (window as any).__MOCK_ONNX_DOWNLOAD__ = true;
+      const mockCustomPipeline = vi.fn().mockImplementation(async (_type, _id, options) => {
+        if (options?.progress_callback) {
+          options.progress_callback({
+            status: 'progress',
+            file: 'model.onnx',
+            loaded: 10000000,
+            total: 10000000,
+          });
+          options.progress_callback({
+            status: 'done',
+            file: 'model.onnx',
+          });
+        }
+        return { custom: true };
+      });
       const progressSpy = vi.fn();
 
       // Act
-      const result = await loadOnnxClassifier(progressSpy);
+      const result = await loadOnnxClassifier(progressSpy, mockCustomPipeline);
 
       // Assert
-      expect(result).toEqual({ mock: true });
+      expect(result).toEqual({ custom: true });
+      expect(mockCustomPipeline).toHaveBeenCalledWith('zero-shot-classification', ONNX_MODEL_ID, expect.any(Object));
       expect(progressSpy).toHaveBeenCalledTimes(2);
-      expect(progressSpy).toHaveBeenNthCalledWith(1, {
-        status: 'progress',
-        file: 'model.onnx',
-        loaded: 10000000,
-        total: 10000000,
-      });
-      expect(progressSpy).toHaveBeenNthCalledWith(2, {
-        status: 'done',
-        file: 'model.onnx',
-      });
       expect(isClassifierLoaded()).toBe(true);
     });
 
@@ -109,7 +113,8 @@ describe('onnxGateway Service', () => {
   describe('clearOnnxCache & checkOnnxModelDownloaded', () => {
     it('clears classifier pipeline and purges browser cache keys', async () => {
       // Arrange
-      (window as any).__MOCK_ONNX_DOWNLOAD__ = true;
+      const mockInstance = { classify: vi.fn() };
+      (pipeline as any).mockResolvedValueOnce(mockInstance);
       await loadOnnxClassifier();
       expect(isClassifierLoaded()).toBe(true);
 

@@ -3,8 +3,8 @@ import { spawn, ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { isWindows, killProcessTree } from './host-process-mgr';
-import { waitForPortOpen, isPortOpen } from './port-sentinel';
+import { isWindows, killProcessTree, killProcessesByName } from './host-process-mgr';
+import { waitForPortOpen, isPortOpen, waitForPortClosed } from './port-sentinel';
 import { installEmergencyHooks } from './emergency-teardown';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -90,18 +90,26 @@ export class TauriAppSession {
       );
     }
 
-    const args: string[] = ['--hidden'];
+    const args: string[] = ['--hidden', '--in-memory-credentials'];
     if (options.wipe) {
       args.push('--wipe');
     }
 
     const env: NodeJS.ProcessEnv = {
       ...process.env,
+      FRUGALLM_IN_MEMORY_CREDENTIALS: '1',
       WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${this.cdpPort}`,
     };
 
     const isAlreadyRunning = await isPortOpen(this.proxyPort);
     if (!isAlreadyRunning) {
+      console.log('🧹 [TauriLauncher] Checking for and terminating any zombie frugallm-app processes before spawn...');
+      await killProcessesByName('frugallm-app');
+      await waitForPortClosed(8081, 3000);
+      await waitForPortClosed(8080, 3000);
+      await waitForPortClosed(54321, 3000);
+      await waitForPortClosed(this.proxyPort, 3000);
+
       console.log(`🚀 [TauriLauncher] Spawning native desktop binary: ${binaryPath} ${args.join(' ')}`);
       this.child = spawn(binaryPath, args, {
         cwd: projectRoot,
@@ -146,14 +154,9 @@ export class TauriAppSession {
       const pages = this.context.pages();
       this.page = pages[0] || await this.context.newPage();
     } else {
-      // On macOS, launch automated desktop app context attached to the running desktop application
       const devServerPort = 1420;
-      const isDevServerRunning = await isPortOpen(devServerPort);
-      let targetUrl = `http://localhost:${devServerPort}`;
-
-      if (!isDevServerRunning) {
-        targetUrl = `http://localhost:${this.proxyPort}`;
-      }
+      await waitForPortOpen(devServerPort, 30000);
+      const targetUrl = `http://localhost:${devServerPort}`;
 
       console.log(`[TauriLauncher] Attaching automation to native desktop app context at ${targetUrl}...`);
       const browser = await chromium.launch({
@@ -224,7 +227,6 @@ export class TauriAppSession {
         };
 
         (window as any).__PLAYWRIGHT_TEST__ = true;
-        (window as any).__MOCK_ONNX_DOWNLOAD__ = true;
 
         (window as any).__TAURI_INTERNALS__ = {
           transformCallback: (callback: any, once?: boolean) => {
@@ -248,6 +250,9 @@ export class TauriAppSession {
             if (cmd === 'plugin:event|unlisten') {
               return;
             }
+            if (cmd.startsWith('plugin:http|')) {
+              throw new Error('plugin:http not available in mock IPC bridge');
+            }
 
             const candidatePorts = [currentPort, 61721, 8081, 8080].filter((v, i, a) => a.indexOf(v) === i);
             let res: Response | null = null;
@@ -256,7 +261,8 @@ export class TauriAppSession {
             for (const p of candidatePorts) {
               try {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 1500);
+                const timeoutMs = (cmd === 'deploy_local_model' || cmd === 'delete_local_model') ? 30000 : 2000;
+                const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
                 const r = await fetch(`http://127.0.0.1:${p}/__tauri_ipc__`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -322,6 +328,12 @@ export class TauriAppSession {
       await killProcessTree(this.child.pid);
       this.child = null;
     }
+
+    await killProcessesByName('frugallm-app');
+    await waitForPortClosed(this.proxyPort, 3000);
+    await waitForPortClosed(8081, 3000);
+    await waitForPortClosed(8080, 3000);
+    await waitForPortClosed(54321, 3000);
   }
 }
 

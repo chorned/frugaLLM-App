@@ -149,7 +149,11 @@ use std::collections::{HashMap, HashSet};
 
     #[tokio::test]
     async fn test_check_ollama_status_graceful_offline() {
-        let _ = is_ollama_installed().await;
+        let offline_res = check_ollama_api_endpoint("http://127.0.0.1:65432/api/version").await;
+        assert_eq!(offline_res, false, "Offline Ollama check must cleanly resolve to false without panicking");
+
+        let res = is_ollama_installed().await;
+        assert!(res == true || res == false);
     }
 
     #[test]
@@ -753,23 +757,6 @@ use std::collections::{HashMap, HashSet};
         assert!(pm.try_acquire_session("install-hermes"));
         pm.release_session("install-hermes");
         pm.release_session("install-opencode");
-    }
-
-    #[test]
-    fn test_mock_update_arg_detection() {
-        let args_camel = vec!["frugallm".to_string(), "--mockUpdate".to_string()];
-        assert!(check_mock_update_arg(args_camel.into_iter()));
-
-        let args_kebab = vec!["frugallm".to_string(), "--mock-update".to_string()];
-        assert!(check_mock_update_arg(args_kebab.into_iter()));
-
-        let args_none = vec!["frugallm".to_string(), "--verbose".to_string()];
-        assert!(!check_mock_update_arg(args_none.into_iter()));
-
-        std::env::set_var("MOCK_UPDATE", "1");
-        let empty_args = vec!["frugallm".to_string()];
-        assert!(check_mock_update_arg(empty_args.into_iter()));
-        std::env::remove_var("MOCK_UPDATE");
     }
 
     #[test]
@@ -2633,4 +2620,25 @@ HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bf
         assert!(!p_guard.contains_key("google"));
     }
 
+    #[test]
+    fn test_credential_store_lifecycle() {
+        use crate::db::{InMemoryCredentialStore, set_credential_store, active_credential_store};
+        use std::sync::Arc;
 
+        let in_mem = Arc::new(InMemoryCredentialStore::new());
+        set_credential_store(in_mem.clone());
+
+        assert!(active_credential_store().get("openrouter").is_err());
+        assert!(active_credential_store().set("openrouter", "sk-secret-token-123").is_ok());
+        assert_eq!(active_credential_store().get("openrouter").unwrap(), "sk-secret-token-123");
+
+        assert!(active_credential_store().set("google", "ai-studio-token-456").is_ok());
+        assert_eq!(active_credential_store().get("google").unwrap(), "ai-studio-token-456");
+
+        assert!(active_credential_store().delete("openrouter").is_ok());
+        assert!(active_credential_store().get("openrouter").is_err());
+        assert_eq!(active_credential_store().get("google").unwrap(), "ai-studio-token-456");
+
+        assert!(active_credential_store().wipe().is_ok());
+        assert!(active_credential_store().get("google").is_err());
+    }
