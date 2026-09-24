@@ -344,13 +344,15 @@ export class TauriAppSession {
   }
 }
 
+export interface TauriFixtures {
+  appPage: Page;
+  session: TauriAppSession;
+}
+
 /**
  * Custom Playwright fixture extending base test with `appPage` and `session`.
  */
-export const test = baseTest.extend<{
-  appPage: Page;
-  session: TauriAppSession;
-}>({
+export const test = baseTest.extend<TauriFixtures>({
   session: async ({}, use) => {
     const session = TauriAppSession.getInstance();
     await use(session);
@@ -371,7 +373,6 @@ export const test = baseTest.extend<{
     }
 
     // If not in Phase 1 boot/onboarding spec and onboarding modal is present, advance to workspace
-    const isPhase1 = testInfo.titlePath.some((p) => /\bPhase 1\b/.test(p) || p.includes('01-boot-and-onboarding'));
     if (!isPhase1) {
       const skipBtn = page.locator('[data-testid="onboarding-skip-btn"], button:has-text("Skip to Workspace")').first();
       try {
