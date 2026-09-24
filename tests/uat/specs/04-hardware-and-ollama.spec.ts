@@ -1,4 +1,5 @@
 import { test, expect } from '../harness/tauri-launcher';
+import { isWindows } from '../harness/host-process-mgr';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -22,7 +23,7 @@ test.describe('Phase 4: Local Hardware Node (Ollama) & Tool Gateway', () => {
   test('04.2 - Model Ingestion: select gemma4:e2b in UI, trigger install, verify progress bar and installed roster', async ({
     appPage,
   }) => {
-    test.setTimeout(600_000);
+    test.setTimeout(isWindows ? 900_000 : 600_000);
 
     const drawer = appPage.locator('.node-config-panel, [data-testid="node-config-panel"]').first();
     await expect(drawer).toBeVisible({ timeout: 5000 });
@@ -45,8 +46,9 @@ test.describe('Phase 4: Local Hardware Node (Ollama) & Tool Gateway', () => {
       const progressBar = appPage.locator('[data-testid="model-download-progress-bar"]');
       await expect(progressBar).toBeVisible({ timeout: 300_000 });
 
-      // Wait for the real in-app progress bar to hit 100% (cold download timeout: up to 540s)
-      await expect(progressBar.locator('text=100%')).toBeVisible({ timeout: 540_000 });
+      // Wait for the real in-app progress bar to hit 100% (cold download timeout: up to 540s on macOS, 800s on Windows for larger weights)
+      const downloadTimeout = isWindows ? 800_000 : 540_000;
+      await expect(progressBar.locator('text=100%')).toBeVisible({ timeout: downloadTimeout });
 
       // Wait for terminal overlay to finish and close
       await expect(terminalOverlay).toBeHidden({ timeout: 120_000 });

@@ -82,7 +82,7 @@ export function useAppEvents({
       handleProxyActivityEvent(event.payload);
     }));
 
-    registerListener(listen('request_exit_confirmation', async () => {
+    const handleExitRequest = async () => {
       try {
         const svcs = await getActiveServices();
         setExitServices(svcs && svcs.length > 0 ? svcs : ['Hermes Service']);
@@ -90,7 +90,11 @@ export function useAppEvents({
         setExitServices(['Hermes Service']);
       }
       setShowExitModal(true);
-    }));
+    };
+
+    registerListener(listen('request_exit_confirmation', handleExitRequest));
+    window.addEventListener('request_exit_confirmation', handleExitRequest);
+    cleanups.push(() => window.removeEventListener('request_exit_confirmation', handleExitRequest));
 
     registerListener(listen<{ service: string }>('service_exit', (event) => {
       const svc = event.payload?.service;

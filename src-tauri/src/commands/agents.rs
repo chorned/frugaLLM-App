@@ -874,6 +874,14 @@ pub fn wipe_opencode(home: &std::path::Path) {
     {
         let _ = std::fs::remove_file(home.join(".local").join("bin").join("opencode.cmd"));
         let _ = std::fs::remove_file(home.join(".opencode").join("bin").join("opencode.cmd"));
+        let _ = std::fs::remove_file(home.join(".opencode").join("bin").join("opencode.exe"));
+        let mut cmd = std::process::Command::new("cmd.exe");
+        cmd.args(["/C", "rmdir", "/S", "/Q", &home.join(".opencode").to_string_lossy()])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+        let _ = cmd.output();
         let _ = std::fs::remove_file(home.join(".cargo").join("bin").join("opencode.cmd"));
         let _ = std::fs::remove_dir_all(home.join("AppData").join("Local").join("Programs").join("opencode"));
         let _ = std::fs::remove_dir_all(home.join("AppData").join("Roaming").join("opencode"));
@@ -981,6 +989,8 @@ pub async fn uninstall_opencode(app: tauri::AppHandle) -> Result<(), String> {
             .stderr(std::process::Stdio::null())
             .creation_flags(0x08000000);
         let _ = kill.output().await;
+
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
     }
 
     // 2. Remove directories and binary symlinks
@@ -1001,6 +1011,14 @@ pub async fn uninstall_opencode(app: tauri::AppHandle) -> Result<(), String> {
             let _ = tokio::fs::remove_file(&local_cmd).await;
             let opencode_cmd = home.join(".opencode").join("bin").join("opencode.cmd");
             let _ = tokio::fs::remove_file(&opencode_cmd).await;
+            let opencode_exe = home.join(".opencode").join("bin").join("opencode.exe");
+            let _ = tokio::fs::remove_file(&opencode_exe).await;
+            let mut rmdir_cmd = tokio::process::Command::new("cmd.exe");
+            rmdir_cmd.args(["/C", "rmdir", "/S", "/Q", &opencode_dir.to_string_lossy()])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .creation_flags(0x08000000);
+            let _ = rmdir_cmd.output().await;
             let cargo_cmd = home.join(".cargo").join("bin").join("opencode.cmd");
             let _ = tokio::fs::remove_file(&cargo_cmd).await;
             let home_opencode = home.join("AppData").join("Local").join("Programs").join("opencode");
@@ -1108,10 +1126,6 @@ pub async fn uninstall_hermes(app: tauri::AppHandle) -> Result<(), String> {
         {
             let local_cmd = home.join(".local").join("bin").join("hermes.cmd");
             let _ = tokio::fs::remove_file(&local_cmd).await;
-            let home_local_hermes = home.join("AppData").join("Local").join("hermes");
-            let _ = tokio::fs::remove_dir_all(&home_local_hermes).await;
-            let home_roaming_hermes = home.join("AppData").join("Roaming").join("hermes");
-            let _ = tokio::fs::remove_dir_all(&home_roaming_hermes).await;
         }
     }
 
@@ -1119,11 +1133,15 @@ pub async fn uninstall_hermes(app: tauri::AppHandle) -> Result<(), String> {
     {
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
             let win_hermes = std::path::PathBuf::from(local_app_data).join("hermes");
-            let _ = tokio::fs::remove_dir_all(&win_hermes).await;
+            if win_hermes.exists() {
+                let _ = tokio::fs::remove_dir_all(&win_hermes).await;
+            }
         }
         if let Ok(app_data) = std::env::var("APPDATA") {
             let win_roaming_hermes = std::path::PathBuf::from(app_data).join("hermes");
-            let _ = tokio::fs::remove_dir_all(&win_roaming_hermes).await;
+            if win_roaming_hermes.exists() {
+                let _ = tokio::fs::remove_dir_all(&win_roaming_hermes).await;
+            }
         }
         let _ = clean_windows_user_path_hermes();
     }
