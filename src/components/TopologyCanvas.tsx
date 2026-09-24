@@ -26,7 +26,7 @@ export interface TopologyCanvasProps {
   autoScale: number;
   pan: { x: number; y: number };
   zoom: number;
-  lines: Array<{ id: string; x1: number; y1: number; x2: number; y2: number; isActive?: boolean }>;
+  lines: Array<{ id: string; x1: number; y1: number; x2: number; y2: number; isActive?: boolean; direction?: 'forward' | 'reverse' }>;
   activeProxyState: any;
   isHermesInstalled: boolean;
   isOpenCodeInstalled: boolean;
@@ -495,23 +495,32 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 overflow: 'visible'
               }}
             >
-              {lines.map((line) => (
-                <line
-                  key={line.id}
-                  id={line.id}
-                  data-testid={`svg-line-${line.id}`}
-                  x1={line.x1}
-                  y1={line.y1}
-                  x2={line.x2}
-                  y2={line.y2}
-                  stroke={line.isActive ? "var(--zen-accent)" : "var(--zen-edge)"}
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  strokeDasharray={line.isActive ? 8 : undefined}
-                  className={line.isActive ? "edge-flow-active" : ""}
-                  style={line.isActive ? { strokeDasharray: '8', animation: 'flowAnimation 0.8s linear infinite', transition: 'stroke 0.2s ease, opacity 0.2s ease' } : { transition: 'stroke 0.2s ease, opacity 0.2s ease' }}
-                />
-              ))}
+              {lines.map((line) => {
+                const isReverse = line.direction === 'reverse';
+                const animName = isReverse ? 'flowAnimationReverse' : 'flowAnimation';
+                const animClass = isReverse ? 'edge-flow-active-reverse' : 'edge-flow-active';
+                return (
+                  <line
+                    key={line.id}
+                    id={line.id}
+                    data-testid={`svg-line-${line.id}`}
+                    x1={line.x1}
+                    y1={line.y1}
+                    x2={line.x2}
+                    y2={line.y2}
+                    stroke={line.isActive ? "var(--zen-accent)" : "var(--zen-edge)"}
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeDasharray={line.isActive ? 8 : undefined}
+                    className={line.isActive ? animClass : ""}
+                    style={line.isActive ? {
+                      strokeDasharray: '8',
+                      animation: `${animName} 0.8s linear infinite`,
+                      transition: 'stroke 0.2s ease, opacity 0.2s ease'
+                    } : { transition: 'stroke 0.2s ease, opacity 0.2s ease' }}
+                  />
+                );
+              })}
             </svg>
 
             {/* Top Row (3 nodes) */}

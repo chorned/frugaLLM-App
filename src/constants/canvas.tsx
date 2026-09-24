@@ -46,6 +46,7 @@ export interface SvgLineCoord {
   x2: number;
   y2: number;
   isActive?: boolean;
+  direction?: 'forward' | 'reverse';
 }
 
 export const initialNodes: AppNode[] = [

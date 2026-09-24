@@ -250,6 +250,7 @@ async fn try_ollama(
         source: source.to_string(),
         target: "ollama".to_string(),
         is_active: true,
+        phase: Some("request".to_string()),
     });
 
     let request_body_size = serde_json::to_string(&body).map(|s| s.len()).unwrap_or(0);
@@ -345,6 +346,7 @@ async fn try_ollama(
                             source: source_clone.clone(),
                             target: "ollama".to_string(),
                             is_active: true,
+                            phase: Some("response".to_string()),
                         });
                         let sanitized = sanitize_reprimand_chunk(&bytes, &app_clone);
                         Ok::<axum::body::Bytes, reqwest::Error>(sanitized)
@@ -361,6 +363,12 @@ async fn try_ollama(
             Ok(builder.body(axum::body::Body::from_stream(chained_stream)).unwrap())
         } else {
             let bytes = res.bytes().await.map_err(|e| format!("Ollama network read error: {}", e))?;
+            let _ = app.emit("proxy_activity", ProxyActivityPayload {
+                source: source.to_string(),
+                target: "ollama".to_string(),
+                is_active: true,
+                phase: Some("response".to_string()),
+            });
             process_stream_chunk_for_tokens(&bytes, &drop_guard);
             log_event(
                 app,
@@ -595,6 +603,7 @@ async fn try_cloud_provider(
         source: source.to_string(),
         target: cloud_model.provider.clone(),
         is_active: true,
+        phase: Some("request".to_string()),
     });
 
     let request_body_size = serde_json::to_string(&body).map(|s| s.len()).unwrap_or(0);
@@ -753,6 +762,7 @@ async fn try_cloud_provider(
                             source: source_clone.clone(),
                             target: provider_clone.clone(),
                             is_active: true,
+                            phase: Some("response".to_string()),
                         });
                         let sanitized = sanitize_reprimand_chunk(&bytes, &app_clone);
                         Ok::<axum::body::Bytes, reqwest::Error>(sanitized)
@@ -770,6 +780,12 @@ async fn try_cloud_provider(
             Ok(builder.body(axum::body::Body::from_stream(chained_stream)).unwrap())
         } else {
             let bytes = res.bytes().await.map_err(|e| format!("Network read error: {}", e))?;
+            let _ = app.emit("proxy_activity", ProxyActivityPayload {
+                source: source.to_string(),
+                target: cloud_model.provider.clone(),
+                is_active: true,
+                phase: Some("response".to_string()),
+            });
             process_stream_chunk_for_tokens(&bytes, &drop_guard);
             update_provider_status(app, &cloud_model.provider, "200 OK").await;
             if let Some(health_state) = app.try_state::<ProviderHealthState>() {

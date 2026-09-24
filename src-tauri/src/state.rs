@@ -365,11 +365,13 @@ pub struct LaunchOptions {
     pub local_llm_ip: Option<String>,
 }
 
-#[derive(serde::Serialize, Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct ProxyActivityPayload {
     pub source: String,
     pub target: String,
     pub is_active: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub phase: Option<String>,
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -396,6 +398,7 @@ impl Drop for NotifyOnDrop {
             source: self.source.clone(),
             target: self.target.clone(),
             is_active: false,
+            phase: None,
         });
 
         let exact_out = self.exact_output_tokens.load(std::sync::atomic::Ordering::Acquire);
