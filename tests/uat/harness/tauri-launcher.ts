@@ -153,6 +153,13 @@ export class TauriAppSession {
       this.context = browser.contexts()[0];
       const pages = this.context.pages();
       this.page = pages[0] || await this.context.newPage();
+      if (options.cleanProfile) {
+        await this.page.evaluate(() => {
+          localStorage.removeItem('onboardingState');
+          localStorage.removeItem('onboardingStep');
+          localStorage.removeItem('onboarding_footer_dismissed');
+        }).catch(() => {});
+      }
     } else {
       const devServerPort = 1420;
       await waitForPortOpen(devServerPort, 30000);
@@ -349,7 +356,8 @@ export const test = baseTest.extend<{
     await use(session);
   },
   appPage: async ({ session }, use, testInfo) => {
-    const page = await session.start();
+    const isPhase1 = testInfo.titlePath.some((p) => /\bPhase 1\b/.test(p) || p.includes('01-boot-and-onboarding'));
+    const page = await session.start({ cleanProfile: isPhase1 });
 
     // Wait for TerminalLoader to complete initial boot sequence
     const terminalLoader = page.locator('[data-testid="terminal-loader"]');
