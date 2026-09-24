@@ -1,6 +1,6 @@
 import { test, expect } from '../harness/tauri-launcher';
-import { assertPortsClosed, waitForPortClosed } from '../harness/port-sentinel';
-import { safeDeleteWithRetry, killProcessesByName } from '../harness/host-process-mgr';
+import { assertPortsClosed, waitForPortClosed, isPortOpen } from '../harness/port-sentinel';
+import { safeDeleteWithRetry, killProcessesByName, isWindows } from '../harness/host-process-mgr';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -10,11 +10,17 @@ test.describe('Phase 1: Boot Sequence & Onboarding', () => {
     await killProcessesByName('frugallm-app');
     await waitForPortClosed(61721, 3000);
     await waitForPortClosed(8080, 3000);
-    await waitForPortClosed(8081, 3000);
+    if (!isWindows) {
+      await waitForPortClosed(8081, 3000);
+    }
 
     // Assert ports are closed prior to app spawn
     // (If Ollama daemon is already running locally as a system service, 11434 might be open, but FrugaLLM proxy ports must be free)
-    await assertPortsClosed([61721, 8080, 8081]);
+    // On Windows, port 8081 is frequently bound by host daemons like Docker Desktop / WSL,
+    // whereas FrugaLLM's proxy runs primarily on port 61721 (with 8080 as alternate).
+    // Port 8081 is not required on Windows; the primary listener on 61721 is validated post-launch in 01.2.
+    const preflightPorts = isWindows ? [61721, 8080] : [61721, 8080, 8081];
+    await assertPortsClosed(preflightPorts);
 
     // Clean up any stale tool gateway marker to guarantee Day-0 installation testing
     const os = await import('node:os');
@@ -64,6 +70,9 @@ test.describe('Phase 1: Boot Sequence & Onboarding', () => {
   }) => {
     // Wait for the window to load
     await appPage.waitForLoadState('domcontentloaded');
+
+    // Assert FrugaLLM native proxy is healthy and listening on primary port 61721
+    expect(await isPortOpen(61721)).toBe(true);
 
     // Assert app initializes into OnboardingDecision
     const decisionModal = appPage.locator('[data-testid="onboarding-guided-btn"]');

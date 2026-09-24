@@ -111,6 +111,8 @@ pub fn spawn_pty(
     cmd.env("OPENAI_BASE_URL", &endpoint);
     cmd.env("OPENAI_API_BASE", &endpoint);
     cmd.env("OPENAI_API_KEY", &api_key);
+    #[cfg(target_os = "windows")]
+    cmd.env("TERM", "xterm-256color");
 
     if let Some(a) = args {
         cmd.args(&a);

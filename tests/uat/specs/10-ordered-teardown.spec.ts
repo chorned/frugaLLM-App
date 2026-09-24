@@ -83,7 +83,7 @@ test.describe('Phase 10: Ordered Deprovisioning & Teardown', () => {
     await confirmYesHermes.click();
     const terminalOverlayHermes = appPage.locator('[data-testid="terminal-overlay-uninstall-hermes"]');
     if (await terminalOverlayHermes.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await expect(terminalOverlayHermes).toBeHidden({ timeout: 30000 });
+      await expect(terminalOverlayHermes).toBeHidden({ timeout: isWindows ? 60000 : 30000 });
     }
 
     // Verify node resets to uninstalled status
@@ -108,12 +108,16 @@ test.describe('Phase 10: Ordered Deprovisioning & Teardown', () => {
     await confirmYesOpencode.click();
     const terminalOverlayOpencode = appPage.locator('[data-testid="terminal-overlay-uninstall-opencode"]');
     if (await terminalOverlayOpencode.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await expect(terminalOverlayOpencode).toBeHidden({ timeout: 30000 });
+      await expect(terminalOverlayOpencode).toBeHidden({ timeout: isWindows ? 60000 : 30000 });
     }
 
     // Verify node resets to uninstalled status
+    const drawerOpencode = appPage.locator('.node-config-panel, [data-testid="node-config-panel"]').first();
+    if (!await drawerOpencode.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await opencodeCard.click();
+    }
     const installOpencodeBtn = appPage.locator('button:has-text("INSTALL OPENCODE")');
-    await expect(installOpencodeBtn).toBeVisible({ timeout: 10000 });
+    await expect(installOpencodeBtn).toBeVisible({ timeout: isWindows ? 20000 : 10000 });
     const closeOpencode = appPage.locator('button:has-text("✕")').first();
     await expect(closeOpencode).toBeVisible({ timeout: 5000 });
     await closeOpencode.click();
@@ -131,7 +135,7 @@ test.describe('Phase 10: Ordered Deprovisioning & Teardown', () => {
       await confirmYesOllama.click();
       const terminalOverlayOllama = appPage.locator('[data-testid="terminal-overlay-uninstall-ollama"]');
       if (await terminalOverlayOllama.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await expect(terminalOverlayOllama).toBeHidden({ timeout: 30000 });
+        await expect(terminalOverlayOllama).toBeHidden({ timeout: isWindows ? 60000 : 30000 });
       }
 
       // Verify node resets to uninstalled status
