@@ -70,10 +70,10 @@ graph TD
 * **reqwest (0.13) & futures-util:** High-throughput streaming HTTP client managing upstream connections and backpressure.
 
 ### 2. Client-Side Runtime (`package.json` / TypeScript)
-* **React 19 & Vite 7:** Concurrent UI rendering engine with rapid hot-module replacement and strict TypeScript 5.8 static typing.
+* **React 19 & Vite 8:** Concurrent UI rendering engine with rapid hot-module replacement and strict TypeScript 5.8 static typing.
 * **@huggingface/transformers (Transformers.js / ONNX Runtime):** In-browser neural execution for zero-latency prompt intent classification and tokenization before requests hit external networks.
 * **@xterm/xterm (6.0) & @xterm/addon-fit:** Full ANSI terminal emulation driving the embedded execution consoles for autonomous agents.
-* **Framer Motion (13.2) & Tailwind CSS (3.4):** Spring-physics animations for routing nodes, interactive drawers, and the design token system (`--zen-surface`, `--zen-border`, `--zen-accent`).
+* **Framer Motion (13.4) & Tailwind CSS (3.4):** Spring-physics animations for routing nodes, interactive drawers, and the design token system (`--zen-surface`, `--zen-border`, `--zen-accent`).
 * **React Markdown (10.1) & Lucide React:** Live markdown stream rendering and unified iconography across provider nodes and hardware monitors.
 
 ### 3. Onboarding & Guided User Journey

@@ -5,6 +5,22 @@ All notable changes to the **FrugaLLM** project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-09-25
+
+### Added
+- **Modularized Onboarding Launchpad UI**: Refactored Onboarding Step 6 into a dedicated, test-isolated component featuring dynamic agent status badges, companion action CTAs, and streamlined clipboard-based terminal handoff.
+
+### Fixed
+- **Cross-Platform Hermes & OpenCode Companion Setup**: Resolved Windows PATH resolution, ConPTY stream non-blocking read handling, and companion CLI detection across Windows, macOS, and Linux (#66).
+- **Drawer Lifecycle & Port Routing**: Eliminated UI lockout states during port contention and resolved drawer unmount lifecycle race conditions.
+
+### Changed
+- **Vite 8 & Modern Frontend Tooling**: Upgraded to Vite 8.3.0 and `@vitejs/plugin-react` 6.1.1, alongside Vitest 5 test runner synchronization (#54, #68).
+- **Comprehensive Dependency Modernization**: Updated core dependencies across backend and frontend stacks (`tauri` 2.11.6, `dirs` 7.0, `windows-sys` 0.61.2, `@huggingface/transformers` 4.3.0, `framer-motion` 13.4.1, `lucide-react` 1.47.0).
+- **Hardened GitHub Actions CI**: Upgraded GitHub action runner steps to pinned immutable SHAs and enhanced cross-platform test matrix resilience.
+
+---
+
 ## [0.1.0] - 2026-09-24
 
 ### Added
