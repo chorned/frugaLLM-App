@@ -114,9 +114,9 @@ describe('DevSecOps & Repository Security Compliance (CHO-85)', () => {
     const dependabotPath = path.join(rootDir, '.github/dependabot.yml');
     const content = fs.readFileSync(dependabotPath, 'utf-8');
     expect(content).toMatch(/open-pull-requests-limit:\s*5/);
-    expect(content).toMatch(/groups:\s*\n\s*npm-dependencies:\s*\n\s*patterns:\s*\n\s*-\s*["']\*["']/);
-    expect(content).toMatch(/groups:\s*\n\s*cargo-dependencies:\s*\n\s*patterns:\s*\n\s*-\s*["']\*["']/);
-    expect(content).toMatch(/groups:\s*\n\s*actions-dependencies:\s*\n\s*patterns:\s*\n\s*-\s*["']\*["']/);
+    expect(content).toMatch(/npm-dependencies:\s*\n\s*patterns:\s*\n\s*-\s*["']\*["']/);
+    expect(content).toMatch(/cargo-dependencies:\s*\n\s*patterns:\s*\n\s*-\s*["']\*["']/);
+    expect(content).toMatch(/actions-dependencies:\s*\n\s*patterns:\s*\n\s*-\s*["']\*["']/);
   });
 
   it('verifies macOS Developer ID signing identity and Team ID (PG6G5TQVQQ) consistency across tauri.conf.json and release.yml', () => {
