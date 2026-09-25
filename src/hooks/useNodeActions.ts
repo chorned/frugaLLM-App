@@ -179,6 +179,12 @@ export function useNodeActions({
         getFrugallmServerStatus().then((st: any) => {
           if (st?.status === 'Running') {
             setPortConflict(null);
+          } else if (st?.status === 'PortConflict') {
+            setPortConflict({
+              port: st.data?.port || (typeof st.port === 'number' ? st.port : (frugalConfig?.port || 61721)),
+              message: st.data?.message || st.message || `Close the service currently using port [${st.data?.port || st.port || 61721}] and restart the app.`,
+              showBanner: true,
+            });
           }
         }).catch(() => {});
         if (finalConfig.manual_model_overrides !== undefined) {

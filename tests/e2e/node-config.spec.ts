@@ -198,9 +198,9 @@ test.describe('Node Configuration Panel', () => {
     // The Global Routing Pool should be visible
     await expect(page.getByText('GLOBAL ROUTING POOL')).toBeVisible();
 
-    // Check that the normal models are listed
-    await expect(page.getByText('anthropic/claude-3-opus')).toBeVisible();
-    await expect(page.getByText('anthropic/claude-3-sonnet')).toBeVisible();
+    // Check that the normal models are listed in the routing panel
+    await expect(page.getByTestId('model-row-anthropic/claude-3-opus')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId('model-row-anthropic/claude-3-sonnet')).toBeVisible({ timeout: 15000 });
 
     // The computer-use model should be filtered out
     await expect(page.getByText('gemini-2.5-computer-use-preview-10-2025')).not.toBeVisible();

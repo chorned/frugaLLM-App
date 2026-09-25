@@ -15,7 +15,15 @@ export interface UseOnboardingOptions {
 }
 
 export function useOnboarding(options?: UseOnboardingOptions) {
-  const [onboardingState, setOnboardingState] = useState<OnboardingState>('fresh');
+  const [onboardingState, setOnboardingState] = useState<OnboardingState>(() => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const saved = window.localStorage.getItem('onboardingState');
+      if (saved === 'learning' || saved === 'completed') {
+        return saved;
+      }
+    }
+    return 'fresh';
+  });
   const [currentStep, setCurrentStep] = useState<OnboardingStep>(1);
   const [isFooterDismissed, setIsFooterDismissed] = useState<boolean>(false);
   const [hasSourceLinkedInternal, setHasSourceLinkedInternal] = useState<boolean>(false);

@@ -15,6 +15,7 @@ export class MainCanvas {
 
   async goto() {
     await this.page.goto('/');
+    await expect(this.canvas).toBeVisible({ timeout: 15000 });
   }
 
   async getNode(label: string | RegExp) {
