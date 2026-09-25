@@ -2650,32 +2650,39 @@ HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bf
             target: "openrouter".to_string(),
             is_active: true,
             phase: Some("request".to_string()),
+            model: Some("deepseek/deepseek-chat".to_string()),
         };
         let req_json = serde_json::to_string(&req_payload).unwrap();
         assert!(req_json.contains(r#""phase":"request""#));
         assert!(req_json.contains(r#""source":"opencode""#));
+        assert!(req_json.contains(r#""model":"deepseek/deepseek-chat""#));
 
         let res_payload = ProxyActivityPayload {
             source: "hermes".to_string(),
             target: "ollama".to_string(),
             is_active: true,
             phase: Some("response".to_string()),
+            model: Some("gemma4:e2b".to_string()),
         };
         let res_json = serde_json::to_string(&res_payload).unwrap();
         assert!(res_json.contains(r#""phase":"response""#));
+        assert!(res_json.contains(r#""model":"gemma4:e2b""#));
 
         let drop_payload = ProxyActivityPayload {
             source: "hermes".to_string(),
             target: "ollama".to_string(),
             is_active: false,
             phase: None,
+            model: None,
         };
         let drop_json = serde_json::to_string(&drop_payload).unwrap();
         assert!(!drop_json.contains(r#""phase""#));
+        assert!(!drop_json.contains(r#""model""#));
 
         // Test round-trip deserialization
         let parsed: ProxyActivityPayload = serde_json::from_str(&req_json).unwrap();
         assert_eq!(parsed.phase, Some("request".to_string()));
+        assert_eq!(parsed.model, Some("deepseek/deepseek-chat".to_string()));
         assert_eq!(parsed.source, "opencode");
         assert_eq!(parsed.target, "openrouter");
         assert!(parsed.is_active);

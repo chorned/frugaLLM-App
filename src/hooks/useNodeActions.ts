@@ -55,12 +55,22 @@ export function useNodeActions({
 }: UseNodeActionsProps) {
   const handleInitializeHermes = () => setTerminalMode('install-hermes');
   const handleOpenHermes = () => {
+    setSelectedNodeId(null);
     setActiveProcesses(prev => ({ ...prev, 'hermes-cli': true }));
     launchNativeAppSession('hermes', undefined, frugalConfig?.hermes_workspace || undefined).catch(console.error);
   };
-  const handleOpenHermesGateway = () => setTerminalMode('run-hermes-gateway');
-  const handleOpenHermesDesktop = () => setTerminalMode('run-hermes-desktop');
-  const handleOpenHermesWeb = () => setTerminalMode('run-hermes-web');
+  const handleOpenHermesGateway = () => {
+    setSelectedNodeId(null);
+    setTerminalMode('run-hermes-gateway');
+  };
+  const handleOpenHermesDesktop = () => {
+    setSelectedNodeId(null);
+    setTerminalMode('run-hermes-desktop');
+  };
+  const handleOpenHermesWeb = () => {
+    setSelectedNodeId(null);
+    setTerminalMode('run-hermes-web');
+  };
   const handleKillProcess = (mode: string) => {
     killPty(mode).catch(console.error);
     stopHermesService(mode).catch(console.error);
@@ -101,10 +111,14 @@ export function useNodeActions({
   };
   const handleInitializeOpenCode = () => setTerminalMode('install-opencode');
   const handleOpenOpenCode = () => {
+    setSelectedNodeId(null);
     setActiveProcesses(prev => ({ ...prev, 'run-opencode': true }));
     launchNativeAppSession('opencode', undefined, frugalConfig?.opencode_workspace || undefined).catch(console.error);
   };
-  const handleOpenOpenCodeWeb = () => setTerminalMode('run-opencode-web');
+  const handleOpenOpenCodeWeb = () => {
+    setSelectedNodeId(null);
+    setTerminalMode('run-opencode-web');
+  };
   const handleInitializeOllama = () => setTerminalMode('install-ollama');
   const handleOpenOllama = () => {
     launchNativeAppSession('ollama').catch(console.error);

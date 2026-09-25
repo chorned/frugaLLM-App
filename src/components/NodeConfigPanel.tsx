@@ -945,18 +945,18 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
                   style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem' }} />
               </div>
               <button 
-                onClick={(e) => { e.stopPropagation(); handleOpenHermes(); }}
+                onClick={(e) => { e.stopPropagation(); handleOpenHermes(); onClose(); }}
                 style={{ width: '100%', padding: '10px 16px', backgroundColor: '#10B981', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
                 LAUNCH HERMES
               </button>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button 
-                  onClick={(e) => { e.stopPropagation(); (handleOpenHermesDesktop || handleOpenHermesGateway)(); }}
+                  onClick={(e) => { e.stopPropagation(); (handleOpenHermesDesktop || handleOpenHermesGateway)(); onClose(); }}
                   style={{ flex: 1, padding: '8px 12px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                   LAUNCH APP
                 </button>
                 <button 
-                  onClick={(e) => { e.stopPropagation(); handleOpenHermesWeb(); }}
+                  onClick={(e) => { e.stopPropagation(); handleOpenHermesWeb(); onClose(); }}
                   style={{ flex: 1, padding: '8px 12px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                   LAUNCH WEBUI
                 </button>
@@ -1080,12 +1080,12 @@ export const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose,
                   style={{ width: '100%', padding: '9px 14px', border: '1px solid var(--zen-border-input)', borderRadius: '12px', backgroundColor: 'var(--zen-surface-header)', color: 'var(--zen-text)', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', fontWeight: 500, fontSize: '0.82rem' }} />
               </div>
               <button 
-                onClick={(e) => { e.stopPropagation(); handleOpenOpenCode(); }}
+                onClick={(e) => { e.stopPropagation(); handleOpenOpenCode(); onClose(); }}
                 style={{ width: '100%', padding: '10px 16px', backgroundColor: '#10B981', color: '#FFFFFF', border: 'none', borderRadius: '9999px', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
                 LAUNCH OPENCODE
               </button>
               <button 
-                onClick={(e) => { e.stopPropagation(); handleOpenOpenCodeWeb(); }}
+                onClick={(e) => { e.stopPropagation(); handleOpenOpenCodeWeb(); onClose(); }}
                 style={{ width: '100%', padding: '8px 12px', backgroundColor: 'var(--zen-surface-hover)', color: 'var(--zen-text)', border: '1px solid var(--zen-border)', borderRadius: '9999px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem' }}>
                 LAUNCH WEBUI
               </button>

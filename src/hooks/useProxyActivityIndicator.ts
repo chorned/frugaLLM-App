@@ -5,12 +5,14 @@ export interface ProxyActivityPayload {
   target: string;
   is_active: boolean;
   phase?: 'request' | 'response';
+  model?: string;
 }
 
 export interface ProxyActivityState {
   source: string;
   target: string;
   phase?: 'request' | 'response';
+  model?: string;
 }
 
 export interface UseProxyActivityIndicatorOptions {
@@ -48,6 +50,9 @@ export function useProxyActivityIndicator(options?: UseProxyActivityIndicatorOpt
         };
         if (payload.phase) {
           nextState.phase = payload.phase;
+        }
+        if (payload.model) {
+          nextState.model = payload.model;
         }
         setActiveProxyState(nextState);
         // Fallback safety timeout in case the drop event is lost

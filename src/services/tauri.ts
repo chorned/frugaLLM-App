@@ -318,3 +318,10 @@ export async function launchNativeAppSession(
     workspaceOverride: workspaceOverride || null,
   });
 }
+
+export async function launchCompanionTerminal(
+  companion: 'opencode' | 'hermes'
+): Promise<void> {
+  return invoke<void>('launch_companion_terminal', { companion });
+}
+

@@ -38,7 +38,8 @@ pub async fn set_model_override(
     let new_chain = fetch_live_routing_chain(&app).await;
     let dynamic_state = app.state::<DynamicRosterState>();
     let mut chain = dynamic_state.fallback_chain.write().await;
-    *chain = new_chain;
+    *chain = new_chain.clone();
+    let _ = app.emit("routing_chain_updated", &new_chain);
     
     Ok(())
 }
@@ -57,6 +58,7 @@ pub async fn refresh_routing_chain(state: State<'_, DynamicRosterState>, app: ta
     
     let mut chain = state.fallback_chain.write().await;
     *chain = new_chain.clone();
+    let _ = app.emit("routing_chain_updated", &new_chain);
     
     Ok(new_chain)
 }

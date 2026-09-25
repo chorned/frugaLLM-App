@@ -372,6 +372,8 @@ pub struct ProxyActivityPayload {
     pub is_active: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub phase: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -385,6 +387,7 @@ pub struct NotifyOnDrop {
     pub app: tauri::AppHandle,
     pub source: String,
     pub target: String,
+    pub model: Option<String>,
     pub token_estimate: Arc<std::sync::atomic::AtomicUsize>,
     pub exact_output_tokens: Arc<std::sync::atomic::AtomicUsize>,
     pub exact_input_tokens: Arc<std::sync::atomic::AtomicUsize>,
@@ -399,6 +402,7 @@ impl Drop for NotifyOnDrop {
             target: self.target.clone(),
             is_active: false,
             phase: None,
+            model: self.model.clone(),
         });
 
         let exact_out = self.exact_output_tokens.load(std::sync::atomic::Ordering::Acquire);

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { TerminalLoader } from './components/TerminalLoader';
 import { useCanvasLogic } from './hooks/useCanvasLogic';
 import { useProxyActivityIndicator } from './hooks/useProxyActivityIndicator';
-import { confirmExitApp, retryFrugallmServer } from './services/tauri';
+import { confirmExitApp, getRoutingChain, retryFrugallmServer } from './services/tauri';
 import { MemoryProvider, useMemory } from './context/MemoryContext';
 import { useOnboarding } from './hooks/useOnboarding';
 import { useTheme } from './hooks/useTheme';
@@ -153,6 +153,17 @@ function AppContent() {
   });
   const [portConflict, setPortConflict] = useState<{ port: number; message: string; showBanner?: boolean } | null>(null);
   const [daemonError, setDaemonError] = useState<string | null>(null);
+  const [routingChain, setRoutingChain] = useState<any[]>([]);
+
+  useEffect(() => {
+    getRoutingChain()
+      .then((chain) => {
+        if (Array.isArray(chain)) {
+          setRoutingChain(chain);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const isGoogleLinked = nodes.some(
     (n) => n.id === 'node-google' && (n.data.status === 'active' || Boolean(n.data.keyPrefix) || n.data.lastStatus === '200 OK')
@@ -213,6 +224,7 @@ function AppContent() {
     setFrugalConfig,
     setPortConflict,
     setDaemonError,
+    setRoutingChain,
   });
 
   // Node Actions Hook
@@ -403,6 +415,8 @@ function AppContent() {
         activeProcesses={activeProcesses}
         hermesVersion={hermesVersion}
         opencodeVersion={opencodeVersion}
+        latestTelemetry={latestTelemetry}
+        routingChain={routingChain}
       />
       <Footer
         portConflict={portConflict}

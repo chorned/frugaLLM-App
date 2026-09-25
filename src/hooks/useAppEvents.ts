@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { getActiveServices, getFrugallmConfig } from '../services/tauri';
+import { getActiveServices, getFrugallmConfig, getRoutingChain } from '../services/tauri';
 import { ProxyActivityPayload } from './useProxyActivityIndicator';
 import { AppNode } from '../constants/canvas';
 
@@ -18,6 +18,7 @@ interface UseAppEventsProps {
   setFrugalConfig: (conf: any) => void;
   setPortConflict: (conflict: any) => void;
   setDaemonError?: (err: string | null) => void;
+  setRoutingChain?: (chain: any[]) => void;
 }
 
 export function useAppEvents({
@@ -34,6 +35,7 @@ export function useAppEvents({
   setFrugalConfig,
   setPortConflict,
   setDaemonError,
+  setRoutingChain,
 }: UseAppEventsProps) {
   useEffect(() => {
     let disposed = false;
@@ -112,6 +114,15 @@ export function useAppEvents({
 
     registerListener(listen('frugallm_config_updated', () => {
       getFrugallmConfig().then((conf: any) => setFrugalConfig(conf)).catch(console.error);
+      getRoutingChain().then((chain: any) => {
+        if (Array.isArray(chain)) setRoutingChain?.(chain);
+      }).catch(console.error);
+    }));
+
+    registerListener(listen('routing_chain_updated', (event: any) => {
+      if (Array.isArray(event.payload)) {
+        setRoutingChain?.(event.payload);
+      }
     }));
 
     registerListener(listen('frugallm_port_error', (event: any) => {
@@ -175,5 +186,5 @@ export function useAppEvents({
       });
       cleanupProxyIndicator();
     };
-  }, [memoryRef, setLatestTelemetry, setHardwareProfile, setIsOllamaInstalled, setNodes, handleProxyActivityEvent, setExitServices, setShowExitModal, setActiveProcesses, cleanupProxyIndicator, setFrugalConfig, setPortConflict, setDaemonError]);
+  }, [memoryRef, setLatestTelemetry, setHardwareProfile, setIsOllamaInstalled, setNodes, handleProxyActivityEvent, setExitServices, setShowExitModal, setActiveProcesses, cleanupProxyIndicator, setFrugalConfig, setPortConflict, setDaemonError, setRoutingChain]);
 }

@@ -33,6 +33,17 @@ export interface TopologyCanvasProps {
   activeProcesses: Record<string, boolean>;
   hermesVersion: string;
   opencodeVersion: string;
+  routingChain?: any[];
+  latestTelemetry?: any;
+}
+
+export function formatModelDisplayName(rawModel: string | undefined | null): string {
+  if (!rawModel || rawModel === 'None' || rawModel === 'Unknown') return 'None';
+  return rawModel
+    .replace(/^library\//, '')
+    .replace(/^models\//, '')
+    .replace(/frugallm-active.*/, 'gemma4')
+    .replace(/:latest$/, '');
 }
 
 export function getEndpointStatusColor(rawStatus: string | undefined, isActive = false): string {
@@ -89,6 +100,8 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   activeProcesses,
   hermesVersion,
   opencodeVersion,
+  routingChain,
+  latestTelemetry,
 }) => {
   const topNodes = ['node-ollama', 'node-google', 'node-openrouter']
     .map(id => nodes.find(n => n.id === id))
@@ -310,6 +323,59 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                   Port {portConflict.port} Conflict
                 </div>
               )}
+              {(() => {
+                const isActivelyUsed = Boolean(activeProxyState);
+                let resolvedModel = 'None';
+
+                if (isActivelyUsed && activeProxyState?.model) {
+                  resolvedModel = activeProxyState.model;
+                } else if (isActivelyUsed && activeProxyState?.target) {
+                  const providerModel = routingChain?.find((m: any) => m.provider?.toLowerCase() === activeProxyState.target?.toLowerCase())?.model;
+                  if (providerModel) {
+                    resolvedModel = providerModel;
+                  } else if (activeProxyState.target === 'ollama' && latestTelemetry?.ollama?.model_name && latestTelemetry.ollama.model_name !== 'None' && latestTelemetry.ollama.model_name !== 'Unknown') {
+                    resolvedModel = latestTelemetry.ollama.model_name;
+                  } else if (routingChain && routingChain.length > 0 && routingChain[0]?.model) {
+                    resolvedModel = routingChain[0].model;
+                  }
+                } else if (routingChain && routingChain.length > 0 && routingChain[0]?.model) {
+                  resolvedModel = routingChain[0].model;
+                } else if (latestTelemetry?.ollama?.model_name && latestTelemetry.ollama.model_name !== 'None' && latestTelemetry.ollama.model_name !== 'Unknown') {
+                  resolvedModel = latestTelemetry.ollama.model_name;
+                }
+
+                const displayModelName = formatModelDisplayName(resolvedModel);
+                const hasModel = displayModelName !== 'None';
+
+                return (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Tooltip 
+                      text={en.routingGraph.frugallmNode?.activeModelTooltip || "The model currently being utilized or queued for the next call."}
+                      triggerTestId="btn-frugallm-active-model-info"
+                      ariaLabel="Model: The model currently being utilized or queued for the next call."
+                    >
+                      <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--zen-text-secondary)' }}>
+                        {en.routingGraph.frugallmNode?.model || 'Model:'}
+                      </span>
+                    </Tooltip>
+                    <span 
+                      data-testid="frugallm-active-model" 
+                      style={{ 
+                        fontSize: '0.78rem', 
+                        fontWeight: 600, 
+                        color: isActivelyUsed ? '#10B981' : (hasModel ? 'var(--zen-text)' : 'var(--zen-text-secondary)'),
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        maxWidth: '120px'
+                      }}
+                      title={displayModelName}
+                    >
+                      {displayModelName}
+                    </span>
+                  </div>
+                );
+              })()}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Tooltip 
                   text={en.routingGraph.frugallmNode?.sessionTokensTooltip || en.routingGraph.frugallmNode?.sessionTokensHelp || "Total prompt and completion tokens routed through FrugaLLM since launch. Monitors current workload and resets to zero upon restart."}

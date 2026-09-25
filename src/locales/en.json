@@ -386,6 +386,8 @@
       "contextWindow": "CTX"
     },
     "frugallmNode": {
+      "model": "Model:",
+      "activeModelTooltip": "The model currently being utilized or queued for the next call.",
       "sessionTokens": "Session tokens:",
       "sessionTokensTooltip": "Total prompt and completion tokens routed through FrugaLLM since launch. Monitors current workload and resets to zero upon restart.",
       "sessionTokensHelp": "Total prompt and completion tokens routed through FrugaLLM since the application started.",
@@ -484,7 +486,17 @@
       "step6": {
         "badge": "Setup Complete",
         "title": "Ready to Vibe Code",
-        "desc": "Your environment is linked! All CLI binaries are symlinked to your terminal ($PATH), or you can control them from this canvas.",
+        "desc": "Your environment is configured. Launch a companion with an optimized starter prompt below, or head straight to your canvas.",
+        "opencodeTitle": "Open Code",
+        "opencodeSubtitle": "Full project builder",
+        "opencodePreview": "Scaffold neon matrix canvas & launch http://localhost:8001",
+        "hermesTitle": "Hermes",
+        "hermesSubtitle": "Autonomous digital butler",
+        "hermesPreview": "Non-destructive Estate Clutter Audit & Downloads scan",
+        "launchBtn": "Launch",
+        "launchingBtn": "✓ Copied & Launching...",
+        "handoffTitle": "The Hand-off",
+        "handoffCallout": "The Hand-off: We've copied the starter prompt to your clipboard. Simply press {{shortcut}} + Enter in the terminal to start!",
         "whatsNextTitle": "Recommended Next Steps:",
         "top10Link": "Top 10 Things to Build with Open Code & Hermes",
         "reportIssues": "Report Issue",
