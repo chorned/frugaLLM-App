@@ -12,6 +12,10 @@ updates:
       - "dependencies"
       - "frontend"
     groups:
+      vitest:
+        patterns:
+          - "vitest*"
+          - "@vitest/*"
       npm-dependencies:
         patterns:
           - "*"
