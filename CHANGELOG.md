@@ -5,6 +5,23 @@ All notable changes to the **FrugaLLM** project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0] - 2026-09-24
+
+### Added
+- **Zero-Spillover Local Proxy Core**: Local-first OpenAI-compatible proxy running on port `61721` with dynamic schema normalization and streaming SSE dispatch.
+- **Global Routing Pool & Model Topology**: Interactive visual canvas with bidirectional edge animation connecting local and cloud providers.
+- **Hardware Telemetry Engine**: Live RAM and NVIDIA GPU VRAM monitoring for intelligent model placement.
+- **Onboarding Launchpad**: Interactive guided setup with companion launch cards and starter prompts for OpenCode and Hermes Agent.
+- **Bare-Metal UAT Suite**: Automated cross-platform acceptance test suite for boot, onboarding, and proxy workflows.
+
+### Fixed
+- **Windows ConPTY Buffers & Handles**: Resolved pseudo-terminal buffer management and exit code propagation on Windows.
+- **Port Conflict Drawer Handling**: Prevented UI lockups on port conflicts and implemented non-blocking health recovery.
+- **Axum IPC Non-Blocking Handlers**: Prevented runtime blocks during SSE streaming and connection resets.
+- **PTY Concurrency Mutex**: Stabilized terminal process termination without orphaned child processes.
+
+---
+
 ## [0.0.18] - 2026-09-18
 
 ### Added
