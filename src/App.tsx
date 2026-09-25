@@ -521,13 +521,20 @@ function AppContent() {
           currentStep={currentStep}
           onNext={nextStep}
           onPrev={prevStep}
+          onBack={prevStep}
           onGoToStep={goToStep}
+          onGoToProviderStep={() => goToStep(4)}
+          onGoToInstallStep={() => goToStep(5)}
           onComplete={() => handleDecision('completed')}
           onStatusChange={checkStatus}
           onInstallHermes={handleInitializeHermes}
           onInstallOpenCode={handleInitializeOpenCode}
+          hasProvider={hasSourceLinked || hasSourceLinkedFromNodes || isOllamaInstalled}
+          harnessStatus={{ opencode: isOpenCodeInstalled, hermes: isHermesInstalled }}
           isHermesInstalled={isHermesInstalled}
           isOpenCodeInstalled={isOpenCodeInstalled}
+          isOllamaInstalled={isOllamaInstalled}
+          hasSourceLinked={hasSourceLinked || hasSourceLinkedFromNodes}
           onOpenIssueReporter={() => setIsIssueReporterOpen(true)}
         />
       )}

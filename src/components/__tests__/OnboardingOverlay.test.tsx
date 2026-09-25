@@ -352,36 +352,43 @@ describe('OnboardingOverlay Component', () => {
     expect(onInstallHermes).toHaveBeenCalledTimes(1);
   });
 
-  it('renders Step 6, fires confetti, and launches workspace and bug reporter', async () => {
+  it('renders Step 6, fires confetti, confirms Go to Canvas completion, and verifies outward links are removed', async () => {
     // Arrange
     const onComplete = vi.fn();
-    const onOpenIssueReporter = vi.fn();
     render(
       <OnboardingOverlay
         currentStep={6}
         onComplete={onComplete}
-        onOpenIssueReporter={onOpenIssueReporter}
+        hasSourceLinked={true}
+        isOpenCodeInstalled={true}
       />
     );
 
     // Assert: Confetti called
     expect(confetti).toHaveBeenCalled();
-    expect(screen.getByText('Ready to Vibe Code')).toBeInTheDocument();
+    expect(screen.getByText('Ready to Build')).toBeInTheDocument();
 
-    // Click Report Bug CTA
-    const reportBugBtn = screen.getByTestId('onboarding-report-bug-btn');
-    fireEvent.click(reportBugBtn);
-    expect(onOpenIssueReporter).toHaveBeenCalledTimes(1);
+    // Verify secondary outward report bug link is removed
+    expect(screen.queryByTestId('onboarding-report-bug-btn')).not.toBeInTheDocument();
 
-    // Click Launch Workspace
+    // Click Go to Canvas finish button
     const finishBtn = screen.getByTestId('onboarding-finish-btn');
+    expect(finishBtn).toHaveTextContent('Go to Canvas');
     fireEvent.click(finishBtn);
 
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 
-  it('renders Step 6 companion launchpad cards with proper titles, subtitles, and previews', async () => {
-    render(<OnboardingOverlay currentStep={6} onComplete={vi.fn()} />);
+  it('renders Step 6 companion launchpad cards with proper titles, subtitles, and previews in fully configured state', async () => {
+    render(
+      <OnboardingOverlay
+        currentStep={6}
+        onComplete={vi.fn()}
+        hasSourceLinked={true}
+        isOpenCodeInstalled={true}
+        isHermesInstalled={true}
+      />
+    );
 
     expect(screen.getByTestId('card-launch-opencode')).toBeInTheDocument();
     expect(screen.getByTestId('card-launch-hermes')).toBeInTheDocument();
@@ -393,11 +400,170 @@ describe('OnboardingOverlay Component', () => {
     expect(screen.getByText('Full project builder')).toBeInTheDocument();
     expect(screen.getByText('Hermes')).toBeInTheDocument();
     expect(screen.getByText('Autonomous digital butler')).toBeInTheDocument();
+
+    // Verify top badge and title for fully configured state
+    expect(screen.getByTestId('onboarding-step-badge')).toHaveTextContent('Setup Complete');
+    expect(screen.getByText('Ready to Build')).toBeInTheDocument();
+
+    // Verify primary button label is "Go to Canvas →"
+    expect(screen.getByTestId('onboarding-finish-btn')).toHaveTextContent('Go to Canvas');
+
+    // Verify outward links are removed
+    expect(screen.queryByText(/Top 10 Things to Build/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('onboarding-report-bug-btn')).not.toBeInTheDocument();
+  });
+
+  it('renders Step 6 No Provider Configured state (Option A): amber badge, One Last Step title, single consolidated blocker card with Connect Provider button, and demoted bottom CTA', async () => {
+    const onGoToStep = vi.fn();
+    render(
+      <OnboardingOverlay
+        currentStep={6}
+        onComplete={vi.fn()}
+        onGoToStep={onGoToStep}
+        hasSourceLinked={false}
+        isOpenCodeInstalled={true}
+        isHermesInstalled={true}
+      />
+    );
+
+    // Top badge and title
+    expect(screen.getByTestId('onboarding-step-badge')).toHaveTextContent('Setup Incomplete');
+    expect(screen.getByText('One Last Step: Connect a Brain')).toBeInTheDocument();
+    expect(
+      screen.getByText('Your agent companions are ready, but they need an intelligence source to execute instructions.')
+    ).toBeInTheDocument();
+
+    // Option A: Single consolidated resolution card
+    const blockerCard = screen.getByTestId('card-consolidated-provider-blocker');
+    expect(blockerCard).toBeInTheDocument();
+    expect(screen.getByText('Activate Your Agents')).toBeInTheDocument();
+    expect(
+      screen.getByText('Connect a free Google AI Studio key (no credit card required) or link a local Ollama instance to power OpenCode and Hermes.')
+    ).toBeInTheDocument();
+
+    // Exactly one connect button
+    const connectBtn = screen.getByTestId('btn-connect-provider');
+    expect(connectBtn).toBeInTheDocument();
+    expect(connectBtn).toHaveTextContent('Connect Provider');
+
+    // Individual cards and buttons are NOT in document
+    expect(screen.queryByTestId('card-launch-opencode')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('card-launch-hermes')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('btn-configure-provider-opencode')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('btn-configure-provider-hermes')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('handoff-callout-box')).not.toBeInTheDocument();
+
+    // Navigation footer: Left button reads "Skip to Canvas", finish button is secondary
+    expect(screen.getByTestId('onboarding-skip-tour-btn')).toHaveTextContent('Skip to Canvas');
+    const finishBtn = screen.getByTestId('onboarding-finish-btn');
+    expect(finishBtn).toHaveTextContent('Go to Canvas');
+    expect(finishBtn.style.backgroundColor).toBe('var(--zen-surface-hover)');
+
+    // Clicking Connect Provider routes to provider step (Step 4)
+    fireEvent.click(connectBtn);
+    expect(onGoToStep).toHaveBeenCalledWith(4);
+  });
+
+  it('renders Step 6 No Harness Installed state: muted badge, AI Proxy is Ready title, install buttons, and proxy callout', async () => {
+    const onGoToStep = vi.fn();
+    render(
+      <OnboardingOverlay
+        currentStep={6}
+        onComplete={vi.fn()}
+        onGoToStep={onGoToStep}
+        hasSourceLinked={true}
+        isOpenCodeInstalled={false}
+        isHermesInstalled={false}
+      />
+    );
+
+    // Top badge and title
+    expect(screen.getByTestId('onboarding-step-badge')).toHaveTextContent('No Harness Linked');
+    expect(screen.getByText('AI Proxy is Ready')).toBeInTheDocument();
+
+    // Callout reassures proxy is active at 127.0.0.1:61721
+    const callout = screen.getByTestId('handoff-callout-box');
+    expect(callout).toHaveTextContent(/http:\/\/127\.0\.0\.1:61721\/v1/i);
+
+    // Both rows show Install buttons routing to Step 5
+    expect(screen.queryByTestId('btn-launch-opencode')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('btn-launch-hermes')).not.toBeInTheDocument();
+
+    const installOpencodeBtn = screen.getByTestId('btn-install-opencode');
+    const installHermesBtn = screen.getByTestId('btn-install-hermes');
+    expect(installOpencodeBtn).toBeInTheDocument();
+    expect(installHermesBtn).toBeInTheDocument();
+
+    fireEvent.click(installOpencodeBtn);
+    expect(onGoToStep).toHaveBeenCalledWith(5);
+  });
+
+  it('renders Step 6 with only one harness installed: active launch for installed, install button for missing', async () => {
+    const onGoToStep = vi.fn();
+    render(
+      <OnboardingOverlay
+        currentStep={6}
+        onComplete={vi.fn()}
+        onGoToStep={onGoToStep}
+        hasSourceLinked={true}
+        isOpenCodeInstalled={true}
+        isHermesInstalled={false}
+      />
+    );
+
+    // Setup complete badge because at least one harness is installed
+    expect(screen.getByTestId('onboarding-step-badge')).toHaveTextContent('Setup Complete');
+
+    // OpenCode has active launch button
+    expect(screen.getByTestId('btn-launch-opencode')).toBeInTheDocument();
+
+    // Hermes has install button routing to Step 5
+    expect(screen.queryByTestId('btn-launch-hermes')).not.toBeInTheDocument();
+    const installHermesBtn = screen.getByTestId('btn-install-hermes');
+    expect(installHermesBtn).toBeInTheDocument();
+
+    fireEvent.click(installHermesBtn);
+    expect(onGoToStep).toHaveBeenCalledWith(5);
+  });
+
+  it('updates callout box copy from pre-click default to post-click confirmation upon launching', async () => {
+    Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
+    render(
+      <OnboardingOverlay
+        currentStep={6}
+        onComplete={vi.fn()}
+        hasSourceLinked={true}
+        isOpenCodeInstalled={true}
+        isHermesInstalled={true}
+      />
+    );
+
+    const callout = screen.getByTestId('handoff-callout-box');
+    // Pre-click state explains clicking launch copies starter mission
+    expect(callout).toHaveTextContent(/Click Launch on any companion to copy the starter mission/i);
+    expect(callout).not.toHaveTextContent(/Terminal open in background/i);
+
+    // Click launch on OpenCode
+    const opencodeBtn = screen.getByTestId('btn-launch-opencode');
+    await act(async () => {
+      fireEvent.click(opencodeBtn);
+    });
+
+    // Post-click state confirms terminal open and prompt on clipboard
+    expect(callout).toHaveTextContent('Terminal open in background! Prompt is on your clipboard. Switch to your terminal and press ⌘V + Enter.');
   });
 
   it('launches OpenCode: writes starter prompt to clipboard, invokes terminal spawner, and shows temporary feedback', async () => {
     Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
-    render(<OnboardingOverlay currentStep={6} onComplete={vi.fn()} />);
+    render(
+      <OnboardingOverlay
+        currentStep={6}
+        onComplete={vi.fn()}
+        hasSourceLinked={true}
+        isOpenCodeInstalled={true}
+        isHermesInstalled={true}
+      />
+    );
 
     const opencodeBtn = screen.getByTestId('btn-launch-opencode');
     await act(async () => {
@@ -415,13 +581,21 @@ describe('OnboardingOverlay Component', () => {
     // Verifies Tauri IPC command invoked
     expect(invoke).toHaveBeenCalledWith('launch_companion_terminal', { companion: 'opencode' });
 
-    // Verifies button feedback state
-    expect(screen.getByText('✓ Copied & Launching...')).toBeInTheDocument();
+    // Verifies button feedback state shows ✓ Launched
+    expect(screen.getByText('✓ Launched')).toBeInTheDocument();
   });
 
   it('launches Hermes: writes starter prompt to clipboard, invokes terminal spawner, and shows temporary feedback', async () => {
     Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
-    render(<OnboardingOverlay currentStep={6} onComplete={vi.fn()} />);
+    render(
+      <OnboardingOverlay
+        currentStep={6}
+        onComplete={vi.fn()}
+        hasSourceLinked={true}
+        isOpenCodeInstalled={true}
+        isHermesInstalled={true}
+      />
+    );
 
     const hermesBtn = screen.getByTestId('btn-launch-hermes');
     await act(async () => {
@@ -439,23 +613,34 @@ describe('OnboardingOverlay Component', () => {
     // Verifies Tauri IPC command invoked
     expect(invoke).toHaveBeenCalledWith('launch_companion_terminal', { companion: 'hermes' });
 
-    // Verifies button feedback state
-    expect(screen.getByText('✓ Copied & Launching...')).toBeInTheDocument();
+    // Verifies button feedback state shows ✓ Launched
+    expect(screen.getByText('✓ Launched')).toBeInTheDocument();
   });
 
   it('generates Windows-specific starter prompts and Ctrl+V shortcut on Windows platform', async () => {
     Object.defineProperty(navigator, 'platform', { value: 'Win32', configurable: true });
-    render(<OnboardingOverlay currentStep={6} onComplete={vi.fn()} />);
+    render(
+      <OnboardingOverlay
+        currentStep={6}
+        onComplete={vi.fn()}
+        hasSourceLinked={true}
+        isOpenCodeInstalled={true}
+        isHermesInstalled={true}
+      />
+    );
 
-    // Verify handoff callout shows Ctrl+V
+    // Verify pre-launch handoff callout copy
     const handoffBox = screen.getByTestId('handoff-callout-box');
-    expect(handoffBox).toHaveTextContent('Ctrl+V');
+    expect(handoffBox).toHaveTextContent('simply Paste and press Enter to run');
 
     // Launch OpenCode on Windows
     const opencodeBtn = screen.getByTestId('btn-launch-opencode');
     await act(async () => {
       fireEvent.click(opencodeBtn);
     });
+
+    // Verify post-launch handoff callout shows Windows Ctrl+V shortcut
+    expect(handoffBox).toHaveTextContent('Ctrl+V');
 
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
       expect.stringContaining("Start-Process python -ArgumentList '-m http.server 8001' -WindowStyle Hidden")
@@ -477,7 +662,15 @@ describe('OnboardingOverlay Component', () => {
 
   it('handles clipboard failure gracefully without crashing terminal invocation or UI feedback', async () => {
     (navigator.clipboard.writeText as any).mockRejectedValueOnce(new Error('Clipboard permission denied'));
-    render(<OnboardingOverlay currentStep={6} onComplete={vi.fn()} />);
+    render(
+      <OnboardingOverlay
+        currentStep={6}
+        onComplete={vi.fn()}
+        hasSourceLinked={true}
+        isOpenCodeInstalled={true}
+        isHermesInstalled={true}
+      />
+    );
 
     const opencodeBtn = screen.getByTestId('btn-launch-opencode');
     await act(async () => {
@@ -487,7 +680,7 @@ describe('OnboardingOverlay Component', () => {
     // Terminal is still invoked
     expect(invoke).toHaveBeenCalledWith('launch_companion_terminal', { companion: 'opencode' });
     // Feedback is still shown
-    expect(screen.getByText('✓ Copied & Launching...')).toBeInTheDocument();
+    expect(screen.getByText('✓ Launched')).toBeInTheDocument();
   });
 
   it('triggers onComplete when Skip Tour button is clicked and has rounded pill styling', async () => {
