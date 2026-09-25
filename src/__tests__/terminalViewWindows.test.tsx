@@ -177,6 +177,13 @@ describe('TerminalView Windows Native Execution & Error Handling', () => {
           ]),
         })
       );
+      const call = vi.mocked(tauriService.spawnPty).mock.calls.find(c => typeof c[0] === 'object' && c[0].sessionId === 'test-session-hermes');
+      const firstArg = call?.[0];
+      const scriptArg = (typeof firstArg === 'object' && firstArg.args) ? (firstArg.args[firstArg.args.indexOf('-Command') + 1] || '') : '';
+      expect(scriptArg).not.toContain('-SkipSetup');
+      expect(scriptArg).toContain('-NonInteractive');
+      expect(scriptArg).not.toContain('\x08');
+      expect(scriptArg).toContain("hermes\\bin");
     });
   });
 

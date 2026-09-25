@@ -525,11 +525,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
                   Write-Host '';
                 }
                 Write-Host '>>> [2/3] Installing Hermes Agent...';
-                & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$installer" -SkipSetup -NonInteractive;
+                & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$installer" -NonInteractive;
                 $hermesPaths = @(
-                  (Join-Path $env:LOCALAPPDATA 'hermes\bin'),
-                  (Join-Path $HOME '.hermes\bin'),
-                  (Join-Path $HOME '.local\bin')
+                  (Join-Path $env:LOCALAPPDATA 'hermes\\bin'),
+                  (Join-Path $HOME '.hermes\\bin'),
+                  (Join-Path $HOME '.local\\bin')
                 );
                 foreach ($p in $hermesPaths) {
                   if (Test-Path $p) {
@@ -540,23 +540,23 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
                     }
                   }
                 }
-                $hermesBin = (Get-Command hermes.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1);
+                $hermesBin = (Get-Command hermes.cmd -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1);
                 if (!$hermesBin) {
-                  $hermesBin = (Get-Command hermes.cmd -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1);
+                  $hermesBin = (Get-Command hermes.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1);
                 }
                 if (!$hermesBin) {
                   $hermesBin = (Get-Command hermes -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1);
                 }
                 if (!$hermesBin) {
                   foreach ($p in $hermesPaths) {
-                    $c1 = Join-Path $p 'hermes.exe';
+                    $c1 = Join-Path $p 'hermes.cmd';
                     if (Test-Path $c1) { $hermesBin = $c1; break; }
-                    $c2 = Join-Path $p 'hermes.cmd';
+                    $c2 = Join-Path $p 'hermes.exe';
                     if (Test-Path $c2) { $hermesBin = $c2; break; }
                   }
                 }
                 if ($hermesBin -and (Test-Path $hermesBin)) {
-                  $ver = & $hermesBin --version;
+                  $ver = & "$hermesBin" --version;
                   Write-Host ([char]13 + '>>> [3/3] Hermes Agent successfully installed (' + $ver + ')! Ready for use.');
                   Remove-Item "$installer" -Force -ErrorAction SilentlyContinue;
                   exit 0;

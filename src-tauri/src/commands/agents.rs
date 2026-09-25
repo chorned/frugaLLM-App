@@ -1638,7 +1638,7 @@ pub async fn install_hermes(app: tauri::AppHandle) -> Result<(), String> {
                 $wc = New-Object System.Net.WebClient;
                 $wc.DownloadFile('https://hermes-agent.nousresearch.com/install.ps1', $installer);
             }
-            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$installer" -SkipSetup -NonInteractive;
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$installer" -NonInteractive;
             Remove-Item "$installer" -Force -ErrorAction SilentlyContinue;
         "#;
         let mut cmd = tokio::process::Command::new("powershell.exe");
