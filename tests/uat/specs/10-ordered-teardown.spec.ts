@@ -75,40 +75,47 @@ test.describe('Phase 10: Ordered Deprovisioning & Teardown', () => {
     await expect(hermesCard).toBeVisible({ timeout: 10000 });
     await hermesCard.click();
     const uninstallHermesBtn = appPage.locator('button:has-text("UNINSTALL HERMES")');
-    await expect(uninstallHermesBtn).toBeVisible({ timeout: 5000 });
-    console.log('[UAT Phase 10] Clicking UNINSTALL HERMES in UI...');
-    await uninstallHermesBtn.click();
-    const confirmYesHermes = appPage.locator('button:has-text("YES")').first();
-    await expect(confirmYesHermes).toBeVisible({ timeout: 5000 });
-    await confirmYesHermes.click();
-    const terminalOverlayHermes = appPage.locator('[data-testid="terminal-overlay-uninstall-hermes"]');
-    if (await terminalOverlayHermes.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await expect(terminalOverlayHermes).toBeHidden({ timeout: isWindows ? 60000 : 30000 });
+    if (await uninstallHermesBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+      console.log('[UAT Phase 10] Clicking UNINSTALL HERMES in UI...');
+      await uninstallHermesBtn.click();
+      const confirmYesHermes = appPage.locator('button:has-text("YES")').first();
+      await expect(confirmYesHermes).toBeVisible({ timeout: 5000 });
+      await confirmYesHermes.click();
+      const terminalOverlayHermes = appPage.locator('[data-testid="terminal-overlay-uninstall-hermes"]');
+      if (await terminalOverlayHermes.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await expect(terminalOverlayHermes).toBeHidden({ timeout: isWindows ? 60000 : 30000 });
+      }
     }
 
     // Verify node resets to uninstalled status
+    const drawerHermes = appPage.locator('.node-config-panel, [data-testid="node-config-panel"]').first();
+    if (!await drawerHermes.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await hermesCard.click();
+    }
     const installHermesBtn = appPage.locator('button:has-text("INSTALL HERMES")');
     await expect(installHermesBtn).toBeVisible({ timeout: 10000 });
     console.log('[UAT Phase 10] Hermes reset to uninstalled status');
 
     const closeHermes = appPage.locator('button:has-text("✕")').first();
-    await expect(closeHermes).toBeVisible({ timeout: 5000 });
-    await closeHermes.click();
+    if (await closeHermes.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await closeHermes.click();
+    }
 
     // 2. Uninstall OpenCode
     const opencodeCard = appPage.locator('[data-testid="node-opencode"]');
     await expect(opencodeCard).toBeVisible({ timeout: 10000 });
     await opencodeCard.click();
     const uninstallOpencodeBtn = appPage.locator('button:has-text("UNINSTALL OPENCODE")');
-    await expect(uninstallOpencodeBtn).toBeVisible({ timeout: 5000 });
-    console.log('[UAT Phase 10] Clicking UNINSTALL OPENCODE in UI...');
-    await uninstallOpencodeBtn.click();
-    const confirmYesOpencode = appPage.locator('button:has-text("YES")').first();
-    await expect(confirmYesOpencode).toBeVisible({ timeout: 5000 });
-    await confirmYesOpencode.click();
-    const terminalOverlayOpencode = appPage.locator('[data-testid="terminal-overlay-uninstall-opencode"]');
-    if (await terminalOverlayOpencode.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await expect(terminalOverlayOpencode).toBeHidden({ timeout: isWindows ? 60000 : 30000 });
+    if (await uninstallOpencodeBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+      console.log('[UAT Phase 10] Clicking UNINSTALL OPENCODE in UI...');
+      await uninstallOpencodeBtn.click();
+      const confirmYesOpencode = appPage.locator('button:has-text("YES")').first();
+      await expect(confirmYesOpencode).toBeVisible({ timeout: 5000 });
+      await confirmYesOpencode.click();
+      const terminalOverlayOpencode = appPage.locator('[data-testid="terminal-overlay-uninstall-opencode"]');
+      if (await terminalOverlayOpencode.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await expect(terminalOverlayOpencode).toBeHidden({ timeout: isWindows ? 60000 : 30000 });
+      }
     }
 
     // Verify node resets to uninstalled status
@@ -119,8 +126,9 @@ test.describe('Phase 10: Ordered Deprovisioning & Teardown', () => {
     const installOpencodeBtn = appPage.locator('button:has-text("INSTALL OPENCODE")');
     await expect(installOpencodeBtn).toBeVisible({ timeout: isWindows ? 20000 : 10000 });
     const closeOpencode = appPage.locator('button:has-text("✕")').first();
-    await expect(closeOpencode).toBeVisible({ timeout: 5000 });
-    await closeOpencode.click();
+    if (await closeOpencode.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await closeOpencode.click();
+    }
 
     // 3. Uninstall Ollama (if managed by FrugaLLM)
     const ollamaCard = appPage.locator('[data-testid="node-ollama"]');

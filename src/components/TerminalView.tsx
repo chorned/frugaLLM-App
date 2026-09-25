@@ -400,7 +400,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
               const script = `
                 $ProgressPreference = 'SilentlyContinue';
                 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
-                $installDir = Join-Path $HOME '.opencode\\bin';
+                $installDir = Join-Path $HOME (Join-Path '.opencode' 'bin');
                 if (!(Test-Path $installDir)) { New-Item -ItemType Directory -Force -Path $installDir | Out-Null };
                 $tempZip = Join-Path $env:TEMP 'opencode-windows-x64.zip';
                 $downloadUrl = 'https://github.com/anomalyco/opencode/releases/latest/download/opencode-windows-x64.zip';
@@ -415,14 +415,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
                   Write-Host '';
                 }
                 Write-Host ">>> [2/3] Extracting OpenCode to $installDir...";
-                taskkill /F /IM opencode.exe 2>$null;
+                Stop-Process -Name opencode -Force -ErrorAction SilentlyContinue;
                 $tarExit = -1;
                 if (Get-Command tar.exe -ErrorAction SilentlyContinue) {
                   & tar.exe -xf "$tempZip" -C "$installDir";
                   $tarExit = $LASTEXITCODE;
                 }
                 if ($tarExit -ne 0 -or !(Test-Path (Join-Path $installDir 'opencode.exe'))) {
-                  Expand-Archive -Path $tempZip -DestinationPath $installDir -Force;
+                  Expand-Archive -Path "$tempZip" -DestinationPath "$installDir" -Force;
                 }
                 $userPath = [Environment]::GetEnvironmentVariable('PATH', 'User');
                 if ($userPath -notlike ('*' + $installDir + '*')) {
@@ -431,7 +431,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
                 $env:PATH = "$installDir;$env:PATH";
                 $exe = Join-Path $installDir 'opencode.exe';
                 if (Test-Path $exe) {
-                  $ver = & $exe --version;
+                  $ver = & "$exe" --version;
                   Write-Host ([char]13 + '>>> [3/3] OpenCode successfully installed (' + $ver + ')! Ready for use.');
                   Remove-Item "$tempZip" -Force -ErrorAction SilentlyContinue;
                   exit 0;
@@ -499,7 +499,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
             });
             cleanups.push(unlisten1, unlisten2, unlisten3, unlisten4, unlisten5);
             
-            deployLocalModel().catch((err) => {
+            deployLocalModel(memoryRef?.current?.activeModelName).catch((err) => {
               console.error(err);
               setIsProvisioningModel(false);
               term.writeln(`\r\n\x1b[31mInstallation failed: ${err}\x1b[0m\r\n`);
@@ -525,11 +525,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
                   Write-Host '';
                 }
                 Write-Host '>>> [2/3] Installing Hermes Agent...';
-                & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$installer" -SkipSetup -NonInteractive;
+                & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$installer" -NonInteractive;
                 $hermesPaths = @(
-                  (Join-Path $env:LOCALAPPDATA 'hermes\bin'),
-                  (Join-Path $HOME '.hermes\bin'),
-                  (Join-Path $HOME '.local\bin')
+                  (Join-Path $env:LOCALAPPDATA 'hermes\\bin'),
+                  (Join-Path $HOME '.hermes\\bin'),
+                  (Join-Path $HOME '.local\\bin')
                 );
                 foreach ($p in $hermesPaths) {
                   if (Test-Path $p) {
@@ -540,23 +540,23 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
                     }
                   }
                 }
-                $hermesBin = (Get-Command hermes.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1);
+                $hermesBin = (Get-Command hermes.cmd -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1);
                 if (!$hermesBin) {
-                  $hermesBin = (Get-Command hermes.cmd -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1);
+                  $hermesBin = (Get-Command hermes.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1);
                 }
                 if (!$hermesBin) {
                   $hermesBin = (Get-Command hermes -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1);
                 }
                 if (!$hermesBin) {
                   foreach ($p in $hermesPaths) {
-                    $c1 = Join-Path $p 'hermes.exe';
+                    $c1 = Join-Path $p 'hermes.cmd';
                     if (Test-Path $c1) { $hermesBin = $c1; break; }
-                    $c2 = Join-Path $p 'hermes.cmd';
+                    $c2 = Join-Path $p 'hermes.exe';
                     if (Test-Path $c2) { $hermesBin = $c2; break; }
                   }
                 }
                 if ($hermesBin -and (Test-Path $hermesBin)) {
-                  $ver = & $hermesBin --version;
+                  $ver = & "$hermesBin" --version;
                   Write-Host ([char]13 + '>>> [3/3] Hermes Agent successfully installed (' + $ver + ')! Ready for use.');
                   Remove-Item "$installer" -Force -ErrorAction SilentlyContinue;
                   exit 0;

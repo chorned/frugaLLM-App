@@ -159,6 +159,7 @@ export class TauriAppSession {
           localStorage.removeItem('onboardingStep');
           localStorage.removeItem('onboarding_footer_dismissed');
         }).catch(() => {});
+        await this.page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
       }
     } else {
       const devServerPort = 1420;

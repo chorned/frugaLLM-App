@@ -1638,7 +1638,7 @@ pub async fn install_hermes(app: tauri::AppHandle) -> Result<(), String> {
                 $wc = New-Object System.Net.WebClient;
                 $wc.DownloadFile('https://hermes-agent.nousresearch.com/install.ps1', $installer);
             }
-            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$installer" -SkipSetup -NonInteractive;
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$installer" -NonInteractive;
             Remove-Item "$installer" -Force -ErrorAction SilentlyContinue;
         "#;
         let mut cmd = tokio::process::Command::new("powershell.exe");
@@ -1693,7 +1693,7 @@ pub async fn install_opencode(app: tauri::AppHandle) -> Result<(), String> {
             $downloadUrl = 'https://github.com/anomalyco/opencode/releases/latest/download/opencode-windows-x64.zip';
             try {
                 curl.exe -# -L --fail -o "$tempZip" "$downloadUrl";
-                Expand-Archive -Path "$tempZip" -DestinationPath $installDir -Force;
+                Expand-Archive -Path "$tempZip" -DestinationPath "$installDir" -Force;
             } finally {
                 Remove-Item "$tempZip" -Force -ErrorAction SilentlyContinue;
             }
@@ -2085,7 +2085,7 @@ impl Drop for DeployModelGuard {
 }
 
 #[tauri::command(async)]
-pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn deploy_local_model(app: tauri::AppHandle, model: Option<String>) -> Result<(), String> {
     if DEPLOYING_LOCAL_MODEL.compare_exchange(false, true, std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst).is_err() {
         log_event(&app, "WARN", "OLLAMA", "deploy_local_model already running in background; skipping concurrent invocation");
         return Ok(());
@@ -2113,7 +2113,10 @@ pub async fn deploy_local_model(app: tauri::AppHandle) -> Result<(), String> {
         }
     };
     let detected_vram_gb = vram_mb as f64 / 1024.0;
-    let tag = get_model_tag_for_vram(detected_vram_gb);
+    let tag = match model {
+        Some(m) if !m.trim().is_empty() => m.trim().to_string(),
+        _ => get_model_tag_for_vram(detected_vram_gb),
+    };
     log_event(&app, "INFO", "OLLAMA", &format!("Detected VRAM: {:.2} GB, selected model tag: {}", detected_vram_gb, tag));
 
     let app_data_dir = match app.path().app_data_dir().map_err(|e| e.to_string()) {

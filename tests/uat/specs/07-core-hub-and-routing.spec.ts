@@ -72,6 +72,13 @@ test.describe('Phase 7: Core Hub & Global Routing Pool', () => {
     await expect(copyIpPortBtn).toBeVisible();
     await copyIpPortBtn.click();
     await appPage.waitForTimeout(300);
+
+    // Close drawer to ensure clean state for subsequent tests
+    const closeBtn = appPage.locator('[data-testid="node-config-close-btn"], button:has-text("✕")').first();
+    if (await drawer.isVisible().catch(() => false)) {
+      await closeBtn.click();
+      await expect(drawer).toBeHidden({ timeout: 5000 });
+    }
   });
 
   test('07.2 - API Password: configure token, verify 401 gate, verify 200 with auth', async ({
@@ -81,10 +88,13 @@ test.describe('Phase 7: Core Hub & Global Routing Pool', () => {
 
     const frugallmCard = appPage.locator('[data-testid="node-frugallm"]');
     const drawer = appPage.locator('.node-config-panel, [data-testid="node-config-panel"]').first();
-    if (!await drawer.isVisible().catch(() => false)) {
-      await frugallmCard.click();
-      await expect(drawer).toBeVisible({ timeout: 5000 });
+    if (await drawer.isVisible().catch(() => false)) {
+      const closeBtn = appPage.locator('[data-testid="node-config-close-btn"], button:has-text("✕")').first();
+      await closeBtn.click();
+      await expect(drawer).toBeHidden({ timeout: 5000 });
     }
+    await frugallmCard.click();
+    await expect(drawer).toBeVisible({ timeout: 5000 });
 
     const passCheckbox = appPage.locator('[data-testid="api-password-checkbox"]');
     await expect(passCheckbox).toBeVisible({ timeout: 5000 });
@@ -141,6 +151,11 @@ test.describe('Phase 7: Core Hub & Global Routing Pool', () => {
       await saveBtn.click();
       await expect(saveBtn).not.toHaveText(/SAVING/i, { timeout: 15000 });
       await appPage.waitForTimeout(500);
+    }
+    const closeBtn = appPage.locator('[data-testid="node-config-close-btn"], button:has-text("✕")').first();
+    if (await drawer.isVisible().catch(() => false)) {
+      await closeBtn.click();
+      await expect(drawer).toBeHidden({ timeout: 5000 });
     }
     await appPage.waitForTimeout(500);
   });

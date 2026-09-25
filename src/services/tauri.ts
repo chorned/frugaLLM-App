@@ -258,8 +258,8 @@ export async function configureOpencodeDefaults(): Promise<void> {
   return invoke<void>('configure_opencode_defaults');
 }
 
-export async function deployLocalModel(): Promise<void> {
-  return invoke<void>('deploy_local_model');
+export async function deployLocalModel(model?: string): Promise<void> {
+  return invoke<void>('deploy_local_model', { model: model || undefined });
 }
 
 export async function deleteLocalModel(): Promise<void> {
