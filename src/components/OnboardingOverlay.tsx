@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import confetti from 'canvas-confetti';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { invoke } from '@tauri-apps/api/core';
 import {
   setCredential,
   getCredential,
@@ -13,6 +14,8 @@ import {
   detectHardwareProfile,
   safeFetch,
 } from '../services/tauri';
+import { detectPlatformOS, getPasteShortcut, getStarterPrompt } from '../utils/starterPrompts';
+import { copyToClipboard } from '../utils/clipboard';
 import { useMemory } from '../context/MemoryContext';
 import { useTheme } from '../hooks/useTheme';
 import { FrugaLLMIcon } from './icons/ProviderIcons';
@@ -152,6 +155,9 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({
   const [installingOpenCode, setInstallingOpenCode] = useState(false);
   const [installingHermes, setInstallingHermes] = useState(false);
   const [installError, setInstallError] = useState<string | null>(null);
+
+  // Step 6 State
+  const [launchingCompanion, setLaunchingCompanion] = useState<'opencode' | 'hermes' | null>(null);
 
   const effectiveIsOpenCodeInstalled = propIsOpenCodeInstalled ?? isOpenCodeInstalled;
   const effectiveIsHermesInstalled = propIsHermesInstalled ?? isHermesInstalled;
@@ -624,6 +630,37 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({
     } finally {
       setInstallingHermes(false);
     }
+  };
+
+  // Step 6 Companion Launch Handler
+  const handleLaunchCompanion = async (tool: 'opencode' | 'hermes') => {
+    const os = detectPlatformOS();
+    const prompt = getStarterPrompt(tool, os);
+
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(prompt);
+      } else {
+        await copyToClipboard(prompt);
+      }
+    } catch (err) {
+      try {
+        await copyToClipboard(prompt);
+      } catch (clipErr) {
+        console.warn('Failed to copy starter prompt to clipboard:', clipErr);
+      }
+    }
+
+    setLaunchingCompanion(tool);
+    try {
+      await invoke('launch_companion_terminal', { companion: tool });
+    } catch (err) {
+      console.error('Failed to launch companion terminal:', err);
+    }
+
+    setTimeout(() => {
+      setLaunchingCompanion((prev) => (prev === tool ? null : prev));
+    }, 2500);
   };
 
   const hasTargetRect = Boolean(targetRect && currentStep !== 3);
@@ -1380,30 +1417,166 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({
               </h3>
               <p style={{ color: 'var(--zen-text-secondary)' }} className="text-xs leading-relaxed">
                 {en.onboarding?.steps?.step6?.desc ??
-                  'Your environment is configured. Run your harness terminal commands below or explore recommended projects.'}
+                  'Your environment is configured. Launch a companion with an optimized starter prompt below, or head straight to your canvas.'}
               </p>
             </div>
 
+            {/* OpenCode Launch Card */}
             <div
+              data-testid="card-launch-opencode"
+              onClick={() => handleLaunchCompanion('opencode')}
               style={{
                 backgroundColor: 'var(--zen-surface-hover)',
                 borderColor: 'var(--zen-border)',
               }}
-              className="p-3.5 rounded-2xl border space-y-2 text-xs"
+              className="p-3 rounded-2xl border flex items-center justify-between gap-3 cursor-pointer hover:border-emerald-500/50 transition-colors"
             >
-              <div style={{ color: 'var(--zen-text)' }} className="font-semibold mb-1">
-                {en.onboarding?.steps?.step6?.whatsNextTitle ?? 'Recommended Next Steps:'}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span style={{ color: 'var(--zen-text)' }} className="text-xs font-semibold">
+                    {en.onboarding?.steps?.step6?.opencodeTitle ?? 'Open Code'}
+                  </span>
+                  <span
+                    style={{
+                      backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                      color: '#34D399',
+                    }}
+                    className="text-[10px] font-medium px-2 py-0.5 rounded-full"
+                  >
+                    {en.onboarding?.steps?.step6?.opencodeSubtitle ?? 'Full project builder'}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    color: 'var(--zen-text-secondary)',
+                    backgroundColor: isDark ? 'rgba(0, 0, 0, 0.25)' : 'rgba(0, 0, 0, 0.04)',
+                    borderColor: 'var(--zen-border)',
+                  }}
+                  className="text-[11px] font-mono mt-1 px-2 py-0.5 rounded-lg border truncate"
+                  title={getStarterPrompt('opencode', detectPlatformOS())}
+                >
+                  {en.onboarding?.steps?.step6?.opencodePreview ?? 'Scaffold neon matrix canvas & launch http://localhost:8001'}
+                </div>
               </div>
               <button
                 type="button"
-                onClick={() => handleOpenLink('https://github.com/chorned/frugallm-app#top-10')}
-                style={{ color: 'var(--zen-text)' }}
-                className="w-full flex items-center justify-between hover:opacity-80 py-1 cursor-pointer transition-opacity"
+                data-testid="btn-launch-opencode"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleLaunchCompanion('opencode');
+                }}
+                disabled={launchingCompanion === 'opencode'}
+                style={{
+                  backgroundColor: 'var(--zen-accent)',
+                  color: '#FFFFFF',
+                }}
+                className="px-3 py-1.5 text-xs font-semibold rounded-xl hover:opacity-90 disabled:opacity-75 cursor-pointer transition-all shrink-0 flex items-center gap-1.5 shadow-sm"
               >
-                <span>🚀 {en.onboarding?.steps?.step6?.top10Link ?? 'Top 10 Things to Build'}</span>
-                <span>↗</span>
+                {launchingCompanion === 'opencode' ? (
+                  <span>{en.onboarding?.steps?.step6?.launchingBtn ?? '✓ Copied & Launching...'}</span>
+                ) : (
+                  <>
+                    <span>⚡</span>
+                    <span>{en.onboarding?.steps?.step6?.launchBtn ?? 'Launch'}</span>
+                  </>
+                )}
               </button>
-              <div style={{ backgroundColor: 'var(--zen-border)' }} className="h-px" />
+            </div>
+
+            {/* Hermes Launch Card */}
+            <div
+              data-testid="card-launch-hermes"
+              onClick={() => handleLaunchCompanion('hermes')}
+              style={{
+                backgroundColor: 'var(--zen-surface-hover)',
+                borderColor: 'var(--zen-border)',
+              }}
+              className="p-3 rounded-2xl border flex items-center justify-between gap-3 cursor-pointer hover:border-emerald-500/50 transition-colors"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span style={{ color: 'var(--zen-text)' }} className="text-xs font-semibold">
+                    {en.onboarding?.steps?.step6?.hermesTitle ?? 'Hermes'}
+                  </span>
+                  <span
+                    style={{
+                      backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                      color: isDark ? '#60A5FA' : '#2563EB',
+                    }}
+                    className="text-[10px] font-medium px-2 py-0.5 rounded-full"
+                  >
+                    {en.onboarding?.steps?.step6?.hermesSubtitle ?? 'Autonomous digital butler'}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    color: 'var(--zen-text-secondary)',
+                    backgroundColor: isDark ? 'rgba(0, 0, 0, 0.25)' : 'rgba(0, 0, 0, 0.04)',
+                    borderColor: 'var(--zen-border)',
+                  }}
+                  className="text-[11px] font-mono mt-1 px-2 py-0.5 rounded-lg border truncate"
+                  title={getStarterPrompt('hermes', detectPlatformOS())}
+                >
+                  {en.onboarding?.steps?.step6?.hermesPreview ?? 'Non-destructive Estate Clutter Audit & Downloads scan'}
+                </div>
+              </div>
+              <button
+                type="button"
+                data-testid="btn-launch-hermes"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleLaunchCompanion('hermes');
+                }}
+                disabled={launchingCompanion === 'hermes'}
+                style={{
+                  backgroundColor: 'var(--zen-accent)',
+                  color: '#FFFFFF',
+                }}
+                className="px-3 py-1.5 text-xs font-semibold rounded-xl hover:opacity-90 disabled:opacity-75 cursor-pointer transition-all shrink-0 flex items-center gap-1.5 shadow-sm"
+              >
+                {launchingCompanion === 'hermes' ? (
+                  <span>{en.onboarding?.steps?.step6?.launchingBtn ?? '✓ Copied & Launching...'}</span>
+                ) : (
+                  <>
+                    <span>⚡</span>
+                    <span>{en.onboarding?.steps?.step6?.launchBtn ?? 'Launch'}</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* The Hand-off Callout */}
+            <div
+              data-testid="handoff-callout-box"
+              style={{
+                backgroundColor: isDark ? 'rgba(79, 191, 103, 0.12)' : 'rgba(236, 253, 245, 0.85)',
+                borderColor: isDark ? 'rgba(79, 191, 103, 0.35)' : 'rgba(16, 185, 129, 0.4)',
+                color: isDark ? '#34D399' : '#14532D',
+              }}
+              className="p-3 rounded-2xl border flex items-start gap-2.5 text-xs leading-relaxed"
+            >
+              <span className="text-base leading-none">💡</span>
+              <p
+                style={{ color: isDark ? '#34D399' : '#14532D', fontWeight: 500 }}
+                className="text-xs leading-relaxed"
+              >
+                {(en.onboarding?.steps?.step6?.handoffCallout ??
+                  "The Hand-off: We've copied the starter prompt to your clipboard. Simply press {{shortcut}} + Enter in the terminal to start!"
+                ).replace('{{shortcut}}', getPasteShortcut(detectPlatformOS()))}
+              </p>
+            </div>
+
+            {/* Helper links: Top 10 + Report issue */}
+            <div className="flex items-center justify-between text-[11px] px-1 pt-0.5">
+              <button
+                type="button"
+                onClick={() => handleOpenLink('https://github.com/chorned/frugallm-app#top-10')}
+                style={{ color: 'var(--zen-text-secondary)' }}
+                className="hover:underline cursor-pointer flex items-center gap-1 transition-opacity opacity-75 hover:opacity-100"
+              >
+                <span>🚀</span>
+                <span>{en.onboarding?.steps?.step6?.top10Link ?? 'Top 10 Things to Build'}</span>
+              </button>
               <button
                 type="button"
                 data-testid="onboarding-report-bug-btn"
@@ -1414,14 +1587,11 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({
                     handleOpenLink('https://github.com/chorned/frugallm-app/issues');
                   }
                 }}
-                style={{ color: 'var(--zen-text)' }}
-                className="w-full flex items-center justify-between hover:opacity-80 py-1 cursor-pointer transition-opacity"
+                style={{ color: 'var(--zen-text-secondary)' }}
+                className="hover:underline cursor-pointer flex items-center gap-1 transition-opacity opacity-75 hover:opacity-100"
               >
-                <span className="flex items-center gap-1.5">
-                  <span>💬</span>
-                  <span>{en.header?.reportIssue ?? en.onboarding?.steps?.step6?.reportIssues ?? 'Report Issue'}</span>
-                </span>
-                <span>↗</span>
+                <span>💬</span>
+                <span>{en.header?.reportIssue ?? en.onboarding?.steps?.step6?.reportIssues ?? 'Report Issue'}</span>
               </button>
             </div>
           </div>

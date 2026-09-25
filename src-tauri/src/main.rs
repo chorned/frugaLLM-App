@@ -193,7 +193,7 @@ fn main() {
             has_active_services, get_active_services, confirm_exit_app, check_hermes_ready,
             set_global_cli_commands, get_global_cli_commands_status,
             get_diagnostic_data, submit_issue_report,
-            launch_native_terminal, launch_native_app_session
+            launch_native_terminal, launch_native_app_session, launch_companion_terminal
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

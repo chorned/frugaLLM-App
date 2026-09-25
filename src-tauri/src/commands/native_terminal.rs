@@ -444,6 +444,15 @@ pub async fn launch_native_app_session(
     }
 }
 
+#[tauri::command]
+pub async fn launch_companion_terminal(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, FrugalConfigState>,
+    companion: String,
+) -> Result<(), String> {
+    launch_native_app_session(app, state, companion, None, None).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

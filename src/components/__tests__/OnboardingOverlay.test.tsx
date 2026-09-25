@@ -57,7 +57,16 @@ describe('OnboardingOverlay Component', () => {
       if (cmd === 'refresh_routing_chain') return Promise.resolve();
       if (cmd === 'install_opencode') return Promise.resolve();
       if (cmd === 'install_hermes') return Promise.resolve();
+      if (cmd === 'launch_companion_terminal') return Promise.resolve();
       return Promise.resolve(null);
+    });
+
+    Object.defineProperty(navigator, 'clipboard', {
+      value: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+      configurable: true,
+      writable: true,
     });
 
     // Create DOM targets
@@ -117,6 +126,10 @@ describe('OnboardingOverlay Component', () => {
   });
 
   afterEach(() => {
+    Object.defineProperty(navigator, 'platform', {
+      value: 'MacIntel',
+      configurable: true,
+    });
     [topRow, bottomRow, frugallmNode, googleWire, opencodeWire].forEach((el) => {
       if (document.body.contains(el)) document.body.removeChild(el);
     });
@@ -365,6 +378,116 @@ describe('OnboardingOverlay Component', () => {
     fireEvent.click(finishBtn);
 
     expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders Step 6 companion launchpad cards with proper titles, subtitles, and previews', async () => {
+    render(<OnboardingOverlay currentStep={6} onComplete={vi.fn()} />);
+
+    expect(screen.getByTestId('card-launch-opencode')).toBeInTheDocument();
+    expect(screen.getByTestId('card-launch-hermes')).toBeInTheDocument();
+    expect(screen.getByTestId('btn-launch-opencode')).toBeInTheDocument();
+    expect(screen.getByTestId('btn-launch-hermes')).toBeInTheDocument();
+    expect(screen.getByTestId('handoff-callout-box')).toBeInTheDocument();
+
+    expect(screen.getByText('Open Code')).toBeInTheDocument();
+    expect(screen.getByText('Full project builder')).toBeInTheDocument();
+    expect(screen.getByText('Hermes')).toBeInTheDocument();
+    expect(screen.getByText('Autonomous digital butler')).toBeInTheDocument();
+  });
+
+  it('launches OpenCode: writes starter prompt to clipboard, invokes terminal spawner, and shows temporary feedback', async () => {
+    Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
+    render(<OnboardingOverlay currentStep={6} onComplete={vi.fn()} />);
+
+    const opencodeBtn = screen.getByTestId('btn-launch-opencode');
+    await act(async () => {
+      fireEvent.click(opencodeBtn);
+    });
+
+    // Verifies clipboard written with macOS prompt
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      expect.stringContaining('nohup python3 -m http.server 8001')
+    );
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      expect.stringContaining('http://localhost:8001')
+    );
+
+    // Verifies Tauri IPC command invoked
+    expect(invoke).toHaveBeenCalledWith('launch_companion_terminal', { companion: 'opencode' });
+
+    // Verifies button feedback state
+    expect(screen.getByText('✓ Copied & Launching...')).toBeInTheDocument();
+  });
+
+  it('launches Hermes: writes starter prompt to clipboard, invokes terminal spawner, and shows temporary feedback', async () => {
+    Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
+    render(<OnboardingOverlay currentStep={6} onComplete={vi.fn()} />);
+
+    const hermesBtn = screen.getByTestId('btn-launch-hermes');
+    await act(async () => {
+      fireEvent.click(hermesBtn);
+    });
+
+    // Verifies clipboard written with macOS prompt
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      expect.stringContaining('Estate Clutter Audit non-destructively')
+    );
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      expect.stringContaining('df -h / && ls -lhS ~/Downloads | head -n 6')
+    );
+
+    // Verifies Tauri IPC command invoked
+    expect(invoke).toHaveBeenCalledWith('launch_companion_terminal', { companion: 'hermes' });
+
+    // Verifies button feedback state
+    expect(screen.getByText('✓ Copied & Launching...')).toBeInTheDocument();
+  });
+
+  it('generates Windows-specific starter prompts and Ctrl+V shortcut on Windows platform', async () => {
+    Object.defineProperty(navigator, 'platform', { value: 'Win32', configurable: true });
+    render(<OnboardingOverlay currentStep={6} onComplete={vi.fn()} />);
+
+    // Verify handoff callout shows Ctrl+V
+    const handoffBox = screen.getByTestId('handoff-callout-box');
+    expect(handoffBox).toHaveTextContent('Ctrl+V');
+
+    // Launch OpenCode on Windows
+    const opencodeBtn = screen.getByTestId('btn-launch-opencode');
+    await act(async () => {
+      fireEvent.click(opencodeBtn);
+    });
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      expect.stringContaining("Start-Process python -ArgumentList '-m http.server 8001' -WindowStyle Hidden")
+    );
+
+    // Launch Hermes on Windows
+    const hermesCard = screen.getByTestId('card-launch-hermes');
+    await act(async () => {
+      fireEvent.click(hermesCard);
+    });
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      expect.stringContaining('Get-PSDrive C')
+    );
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      expect.stringContaining('Get-ChildItem $HOME\\Downloads')
+    );
+  });
+
+  it('handles clipboard failure gracefully without crashing terminal invocation or UI feedback', async () => {
+    (navigator.clipboard.writeText as any).mockRejectedValueOnce(new Error('Clipboard permission denied'));
+    render(<OnboardingOverlay currentStep={6} onComplete={vi.fn()} />);
+
+    const opencodeBtn = screen.getByTestId('btn-launch-opencode');
+    await act(async () => {
+      fireEvent.click(opencodeBtn);
+    });
+
+    // Terminal is still invoked
+    expect(invoke).toHaveBeenCalledWith('launch_companion_terminal', { companion: 'opencode' });
+    // Feedback is still shown
+    expect(screen.getByText('✓ Copied & Launching...')).toBeInTheDocument();
   });
 
   it('triggers onComplete when Skip Tour button is clicked and has rounded pill styling', async () => {

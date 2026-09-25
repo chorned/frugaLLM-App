@@ -72,6 +72,7 @@ export function useTopologyWires({
       const outerCenter = getCenter(outerEl, defaultFallback[outerId] || { x: 0, y: 0 });
 
       let isActive = false;
+      let direction: 'forward' | 'reverse' = 'forward';
       if (edge.id === 'edge-hermes-frugallm') {
         isActive = activeProxyState?.source === 'hermes' || !!activeProcesses['run-hermes'] || !!activeProcesses['run-hermes-gateway'];
       } else if (edge.id === 'edge-opencode-frugallm') {
@@ -82,6 +83,10 @@ export function useTopologyWires({
         isActive = activeProxyState?.target === 'openrouter';
       } else if (edge.id === 'edge-frugallm-google') {
         isActive = activeProxyState?.target === 'google';
+      }
+
+      if (isActive) {
+        direction = activeProxyState?.phase === 'response' ? 'reverse' : 'forward';
       }
 
       const sx = isCentralSource ? centralCenter.x : outerCenter.x;
@@ -98,6 +103,7 @@ export function useTopologyWires({
         x2: tx,
         y2: ty,
         isActive,
+        direction,
       });
     }
 
@@ -112,7 +118,8 @@ export function useTopologyWires({
             Math.abs(p.y1 - c.y1) < 0.5 &&
             Math.abs(p.x2 - c.x2) < 0.5 &&
             Math.abs(p.y2 - c.y2) < 0.5 &&
-            p.isActive === c.isActive
+            p.isActive === c.isActive &&
+            p.direction === c.direction
           );
         })
       ) {

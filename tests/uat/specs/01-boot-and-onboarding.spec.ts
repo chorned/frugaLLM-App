@@ -155,6 +155,9 @@ test.describe('Phase 1: Boot Sequence & Onboarding', () => {
     // Step 6: Celebration screen & Launch FrugaLLM
     const step6 = appPage.locator('[data-testid="onboarding-step-6"]');
     await expect(step6).toBeVisible({ timeout: 5000 });
+    await expect(appPage.locator('[data-testid="card-launch-opencode"]')).toBeVisible();
+    await expect(appPage.locator('[data-testid="card-launch-hermes"]')).toBeVisible();
+    await expect(appPage.locator('[data-testid="handoff-callout-box"]')).toBeVisible();
 
     const finishBtn = appPage.locator('[data-testid="onboarding-finish-btn"]');
     await expect(finishBtn).toBeVisible();

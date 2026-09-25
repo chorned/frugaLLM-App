@@ -4,11 +4,15 @@ export interface ProxyActivityPayload {
   source: string;
   target: string;
   is_active: boolean;
+  phase?: 'request' | 'response';
+  model?: string;
 }
 
 export interface ProxyActivityState {
   source: string;
   target: string;
+  phase?: 'request' | 'response';
+  model?: string;
 }
 
 export interface UseProxyActivityIndicatorOptions {
@@ -40,7 +44,17 @@ export function useProxyActivityIndicator(options?: UseProxyActivityIndicatorOpt
 
       if (payload.is_active) {
         activeStartTime.current = Date.now();
-        setActiveProxyState({ source: payload.source, target: payload.target });
+        const nextState: ProxyActivityState = {
+          source: payload.source,
+          target: payload.target,
+        };
+        if (payload.phase) {
+          nextState.phase = payload.phase;
+        }
+        if (payload.model) {
+          nextState.model = payload.model;
+        }
+        setActiveProxyState(nextState);
         // Fallback safety timeout in case the drop event is lost
         safetyTimeout.current = setTimeout(() => {
           setActiveProxyState(null);
@@ -49,6 +63,8 @@ export function useProxyActivityIndicator(options?: UseProxyActivityIndicatorOpt
       } else {
         const elapsed = Date.now() - (activeStartTime.current || 0);
         if (elapsed < minPulseMs) {
+          // If deactivated during minimum pulse window and currently in request phase, transition to response phase during residual pulse
+          setActiveProxyState((curr) => (curr ? (curr.phase ? { ...curr, phase: 'response' } : curr) : null));
           deactivateTimeout.current = setTimeout(() => {
             setActiveProxyState(null);
             deactivateTimeout.current = null;

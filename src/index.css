@@ -291,3 +291,33 @@
   color: var(--zen-text);
 }
 
+/* Edge flow animations:
+   - flowAnimation (forward): stroke-dashoffset 0 -> -16 moves dashes along line vector (User -> FrugaLLM -> Cloud)
+   - flowAnimationReverse (reverse): stroke-dashoffset 0 -> 16 moves dashes backwards against line vector (Cloud -> FrugaLLM -> User)
+*/
+@keyframes flowAnimation {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: -16;
+  }
+}
+
+@keyframes flowAnimationReverse {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: 16;
+  }
+}
+
+.edge-flow-active {
+  animation: flowAnimation 0.8s linear infinite;
+}
+
+.edge-flow-active-reverse {
+  animation: flowAnimationReverse 0.8s linear infinite;
+}
+

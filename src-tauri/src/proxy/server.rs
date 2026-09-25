@@ -250,6 +250,8 @@ async fn try_ollama(
         source: source.to_string(),
         target: "ollama".to_string(),
         is_active: true,
+        phase: Some("request".to_string()),
+        model: Some(ollama_model.to_string()),
     });
 
     let request_body_size = serde_json::to_string(&body).map(|s| s.len()).unwrap_or(0);
@@ -263,6 +265,7 @@ async fn try_ollama(
         app: app.clone(),
         source: source.to_string(),
         target: "ollama".to_string(),
+        model: Some(ollama_model.to_string()),
         token_estimate: token_estimate.clone(),
         exact_output_tokens: exact_output_tokens.clone(),
         exact_input_tokens: exact_input_tokens.clone(),
@@ -307,6 +310,7 @@ async fn try_ollama(
         }
         let app_clone = app.clone();
         let source_clone = source.to_string();
+        let ollama_model_clone = ollama_model.to_string();
         let is_streaming = body.get("stream").and_then(|v| v.as_bool()).unwrap_or(true);
 
         if is_streaming {
@@ -345,6 +349,8 @@ async fn try_ollama(
                             source: source_clone.clone(),
                             target: "ollama".to_string(),
                             is_active: true,
+                            phase: Some("response".to_string()),
+                            model: Some(ollama_model_clone.clone()),
                         });
                         let sanitized = sanitize_reprimand_chunk(&bytes, &app_clone);
                         Ok::<axum::body::Bytes, reqwest::Error>(sanitized)
@@ -361,6 +367,13 @@ async fn try_ollama(
             Ok(builder.body(axum::body::Body::from_stream(chained_stream)).unwrap())
         } else {
             let bytes = res.bytes().await.map_err(|e| format!("Ollama network read error: {}", e))?;
+            let _ = app.emit("proxy_activity", ProxyActivityPayload {
+                source: source.to_string(),
+                target: "ollama".to_string(),
+                is_active: true,
+                phase: Some("response".to_string()),
+                model: Some(ollama_model.to_string()),
+            });
             process_stream_chunk_for_tokens(&bytes, &drop_guard);
             log_event(
                 app,
@@ -595,6 +608,8 @@ async fn try_cloud_provider(
         source: source.to_string(),
         target: cloud_model.provider.clone(),
         is_active: true,
+        phase: Some("request".to_string()),
+        model: Some(cloud_model.model.clone()),
     });
 
     let request_body_size = serde_json::to_string(&body).map(|s| s.len()).unwrap_or(0);
@@ -609,6 +624,7 @@ async fn try_cloud_provider(
         app: app.clone(),
         source: source.to_string(),
         target: cloud_model.provider.clone(),
+        model: Some(cloud_model.model.clone()),
         token_estimate: token_estimate.clone(),
         exact_output_tokens: exact_output_tokens.clone(),
         exact_input_tokens: exact_input_tokens.clone(),
@@ -651,6 +667,7 @@ async fn try_cloud_provider(
         let app_clone = app.clone();
         let source_clone = source.to_string();
         let provider_clone = cloud_model.provider.clone();
+        let model_clone = cloud_model.model.clone();
         
         if is_streaming {
             let elapsed = start_time.elapsed();
@@ -753,6 +770,8 @@ async fn try_cloud_provider(
                             source: source_clone.clone(),
                             target: provider_clone.clone(),
                             is_active: true,
+                            phase: Some("response".to_string()),
+                            model: Some(model_clone.clone()),
                         });
                         let sanitized = sanitize_reprimand_chunk(&bytes, &app_clone);
                         Ok::<axum::body::Bytes, reqwest::Error>(sanitized)
@@ -770,6 +789,13 @@ async fn try_cloud_provider(
             Ok(builder.body(axum::body::Body::from_stream(chained_stream)).unwrap())
         } else {
             let bytes = res.bytes().await.map_err(|e| format!("Network read error: {}", e))?;
+            let _ = app.emit("proxy_activity", ProxyActivityPayload {
+                source: source.to_string(),
+                target: cloud_model.provider.clone(),
+                is_active: true,
+                phase: Some("response".to_string()),
+                model: Some(cloud_model.model.clone()),
+            });
             process_stream_chunk_for_tokens(&bytes, &drop_guard);
             update_provider_status(app, &cloud_model.provider, "200 OK").await;
             if let Some(health_state) = app.try_state::<ProviderHealthState>() {
@@ -2516,6 +2542,11 @@ fn dispatch_ipc_command(
             let model = args.as_ref().and_then(|a| a.get("model").and_then(|v| v.as_str())).map(String::from);
             let workspace_override = args.as_ref().and_then(|a| a.get("workspaceOverride").or_else(|| a.get("workspace_override")).and_then(|v| v.as_str())).map(String::from);
             launch_native_app_session(app.clone(), app.state::<FrugalConfigState>(), app_name, model, workspace_override).await?;
+            Ok(serde_json::json!(null))
+        }
+        "launch_companion_terminal" => {
+            let companion = args.as_ref().and_then(|a| a.get("companion").and_then(|v| v.as_str())).unwrap_or("").to_string();
+            launch_companion_terminal(app.clone(), app.state::<FrugalConfigState>(), companion).await?;
             Ok(serde_json::json!(null))
         }
         "edit_hermes_soul" => {
