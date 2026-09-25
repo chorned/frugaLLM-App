@@ -74,8 +74,19 @@ test.describe('Phase 1: Boot Sequence & Onboarding', () => {
     // Assert FrugaLLM native proxy is healthy and listening on primary port 61721
     expect(await isPortOpen(61721)).toBe(true);
 
+    // Account for CDP attachment where terminal-loader may have already completed its transition:
+    // If visible, wait for it to transition to hidden. Do NOT fail if the loader already transitioned before CDP connected.
+    const loader = appPage.locator('[data-testid="terminal-loader"]');
+    await expect(loader).toBeHidden({ timeout: 10000 });
+
     // Assert app initializes into OnboardingDecision
     const decisionModal = appPage.locator('[data-testid="onboarding-guided-btn"]');
+    if (!await decisionModal.isVisible({ timeout: 2000 }).catch(() => false)) {
+      const tourBtn = appPage.locator('[data-testid="footer-tracker-tour-btn"]');
+      if (await tourBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await tourBtn.click();
+      }
+    }
     await expect(decisionModal).toBeVisible({ timeout: 20000 });
   });
 

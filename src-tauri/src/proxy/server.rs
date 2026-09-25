@@ -2492,8 +2492,9 @@ fn dispatch_ipc_command(
         }
         "deploy_local_model" => {
             let app_clone = app.clone();
+            let model = args.as_ref().and_then(|a| a.get("model").and_then(|v| v.as_str())).map(String::from);
             tokio::spawn(async move {
-                if let Err(e) = deploy_local_model(app_clone).await {
+                if let Err(e) = deploy_local_model(app_clone, model).await {
                     eprintln!("deploy_local_model background error: {}", e);
                 }
             });
