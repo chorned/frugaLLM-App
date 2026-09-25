@@ -9,14 +9,24 @@ export function detectPlatformOS(): PlatformOS {
     const platform = (navigator.platform || '').toLowerCase();
     const userAgent = (navigator.userAgent || '').toLowerCase();
 
-    if (platform.includes('win') || userAgent.includes('windows')) {
+    if (platform.includes('win')) {
       return 'windows';
     }
-    if (platform.includes('linux') || userAgent.includes('linux') || platform.includes('x11')) {
+    if (platform.includes('mac')) {
+      return 'macos';
+    }
+    if (platform.includes('linux') || platform.includes('x11')) {
       return 'linux';
     }
-    if (platform.includes('mac') || userAgent.includes('macintosh') || userAgent.includes('mac os')) {
+
+    if (userAgent.includes('windows')) {
+      return 'windows';
+    }
+    if (userAgent.includes('macintosh') || userAgent.includes('mac os')) {
       return 'macos';
+    }
+    if (userAgent.includes('linux')) {
+      return 'linux';
     }
   }
   return 'macos';

@@ -37,8 +37,20 @@ describe('starterPrompts utility', () => {
       expect(detectPlatformOS()).toBe('macos');
     });
 
+    it('detects macOS when platform is MacIntel even if ambient userAgent contains Linux', () => {
+      Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
+      Object.defineProperty(navigator, 'userAgent', { value: 'Mozilla/5.0 (X11; Linux x86_64)', configurable: true });
+      expect(detectPlatformOS()).toBe('macos');
+    });
+
     it('detects Linux when navigator.platform is Linux x86_64', () => {
       Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64', configurable: true });
+      expect(detectPlatformOS()).toBe('linux');
+    });
+
+    it('detects Linux when platform is Linux even if ambient userAgent contains Macintosh', () => {
+      Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64', configurable: true });
+      Object.defineProperty(navigator, 'userAgent', { value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', configurable: true });
       expect(detectPlatformOS()).toBe('linux');
     });
 
