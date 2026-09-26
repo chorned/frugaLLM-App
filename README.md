@@ -171,8 +171,6 @@ FrugaLLM is built upon the discoveries, architectures, and open-source contribut
 
 Contributions are welcome! Please consult the [Contributing Guide](CONTRIBUTING.md) for local environment setup, architecture standards, and pull request workflows.
 
-* **Issue Tracker:** [GitHub Issues](https://github.com/chorned/frugaLLM-App/issues)
-* **Discussions:** [GitHub Discussions](https://github.com/chorned/frugaLLM-App/discussions)
 * **Changelog:** [CHANGELOG.md](CHANGELOG.md)
 * **Security Policy:** [SECURITY.md](SECURITY.md)
 
