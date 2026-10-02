@@ -101,11 +101,11 @@ The following third-party npm packages are utilized in the FrugaLLM frontend app
 | `@sindresorhus/merge-streams` | 4.0.0 | MIT | [https://github.com/sindresorhus/merge-streams](https://github.com/sindresorhus/merge-streams) |
 | `@standard-schema/spec` | 1.1.0 | MIT | [https://github.com/standard-schema/standard-schema](https://github.com/standard-schema/standard-schema) |
 | `@tauri-apps/api` | 2.11.1 | Apache-2.0 OR MIT | [https://github.com/tauri-apps/tauri](https://github.com/tauri-apps/tauri) |
-| `@tauri-apps/cli` | 2.11.4 | Apache-2.0 OR MIT | [https://github.com/tauri-apps/tauri](https://github.com/tauri-apps/tauri) |
-| `@tauri-apps/cli-darwin-x64` | 2.11.4 | Apache-2.0 OR MIT | [https://github.com/tauri-apps/tauri](https://github.com/tauri-apps/tauri) |
+| `@tauri-apps/cli` | 2.11.5 | Apache-2.0 OR MIT | [https://github.com/tauri-apps/tauri](https://github.com/tauri-apps/tauri) |
+| `@tauri-apps/cli-darwin-x64` | 2.11.5 | Apache-2.0 OR MIT | [https://github.com/tauri-apps/tauri](https://github.com/tauri-apps/tauri) |
 | `@tauri-apps/plugin-autostart` | 2.5.1 | MIT OR Apache-2.0 | [https://github.com/tauri-apps/plugins-workspace](https://github.com/tauri-apps/plugins-workspace) |
 | `@tauri-apps/plugin-clipboard-manager` | 2.3.2 | MIT OR Apache-2.0 | [https://github.com/tauri-apps/plugins-workspace](https://github.com/tauri-apps/plugins-workspace) |
-| `@tauri-apps/plugin-http` | 2.5.9 | MIT OR Apache-2.0 | [https://github.com/tauri-apps/plugins-workspace](https://github.com/tauri-apps/plugins-workspace) |
+| `@tauri-apps/plugin-http` | 2.7.0 | MIT OR Apache-2.0 | [https://github.com/tauri-apps/plugins-workspace](https://github.com/tauri-apps/plugins-workspace) |
 | `@tauri-apps/plugin-opener` | 2.5.4 | MIT OR Apache-2.0 | [https://github.com/tauri-apps/plugins-workspace](https://github.com/tauri-apps/plugins-workspace) |
 | `@tauri-apps/plugin-shell` | 2.3.5 | MIT OR Apache-2.0 | [https://github.com/tauri-apps/plugins-workspace](https://github.com/tauri-apps/plugins-workspace) |
 | `@tauri-apps/plugin-store` | 2.4.4 | MIT OR Apache-2.0 | [https://github.com/tauri-apps/plugins-workspace](https://github.com/tauri-apps/plugins-workspace) |
