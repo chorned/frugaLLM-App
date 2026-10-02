@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, waitFor, screen } from '@testing-library/react';
+import { render, waitFor, screen, act } from '@testing-library/react';
 import { isWindowsPlatform, TerminalView } from '../components/TerminalView';
 import * as tauriService from '../services/tauri';
 
@@ -271,5 +271,68 @@ describe('TerminalView Windows Native Execution & Error Handling', () => {
     capturedOnDataCallback!('\x1b[1;1R');
 
     expect(tauriService.writePty).toHaveBeenCalledWith('test-session-dsr', '\x1b[1;1R');
+  });
+
+  it('handles install-ollama mode by invoking deployLocalModel and capturing installation failure', async () => {
+    vi.mocked(tauriService.deployLocalModel).mockRejectedValueOnce(
+      new Error('Ollama installation script failed with status Some(1)')
+    );
+
+    render(
+      <TerminalView
+        mode="install-ollama"
+        sessionId="test-session-ollama-fail"
+        onExit={vi.fn()}
+        setIsHermesInstalled={vi.fn()}
+        setIsOpenCodeInstalled={vi.fn()}
+        setIsOllamaInstalled={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(tauriService.deployLocalModel).toHaveBeenCalled();
+      expect(mockWriteln).toHaveBeenCalledWith(
+        expect.stringContaining('Installation failed: Error: Ollama installation script failed with status Some(1)')
+      );
+    });
+  });
+
+  it('handles install-ollama mode deployment success and transitions app state', async () => {
+    vi.mocked(tauriService.deployLocalModel).mockResolvedValueOnce(undefined);
+    const setIsOllamaInstalled = vi.fn();
+    const setNodes = vi.fn();
+    const onExit = vi.fn();
+
+    render(
+      <TerminalView
+        mode="install-ollama"
+        sessionId="test-session-ollama-success"
+        onExit={onExit}
+        setIsHermesInstalled={vi.fn()}
+        setIsOpenCodeInstalled={vi.fn()}
+        setIsOllamaInstalled={setIsOllamaInstalled}
+        setNodes={setNodes}
+      />
+    );
+
+    await waitFor(() => {
+      expect(tauriService.deployLocalModel).toHaveBeenCalled();
+    });
+
+    // Simulate model_deployment_complete event
+    act(() => {
+      const completeCallbacks = eventListeners['model_deployment_complete'] || [];
+      for (const cb of completeCallbacks) {
+        cb({ payload: { success: true, message: 'Model Provisioned successfully.' } });
+      }
+    });
+
+    await waitFor(() => {
+      expect(setIsOllamaInstalled).toHaveBeenCalledWith(true);
+      expect(setNodes).toHaveBeenCalled();
+      expect(mockWriteln).toHaveBeenCalledWith(
+        expect.stringContaining('Model Provisioned successfully.')
+      );
+    });
   });
 });

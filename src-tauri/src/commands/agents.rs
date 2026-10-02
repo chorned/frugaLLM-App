@@ -488,6 +488,18 @@ pub fn clean_windows_user_path_ollama() -> Result<(), String> {
         use std::os::windows::process::CommandExt;
         ps_cmd.creation_flags(0x08000000);
         let _ = ps_cmd.output().map_err(|e| e.to_string())?;
+
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let target = std::path::PathBuf::from(local_app_data).join("Programs").join("Ollama");
+            let target_str = target.to_string_lossy().to_string();
+            if let Ok(current_path) = std::env::var("PATH") {
+                let filtered: Vec<&str> = current_path
+                    .split(';')
+                    .filter(|p| !p.trim().is_empty() && !p.eq_ignore_ascii_case(&target_str))
+                    .collect();
+                std::env::set_var("PATH", filtered.join(";"));
+            }
+        }
     }
     Ok(())
 }
@@ -781,6 +793,7 @@ pub async fn uninstall_ollama_internal(app: &tauri::AppHandle, force: bool) -> R
                 let _ = child.wait().await;
             }
         }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
 
     // 3. Reclaim Disk Space & Delete Leftover Storage
@@ -798,10 +811,20 @@ pub async fn uninstall_ollama_internal(app: &tauri::AppHandle, force: bool) -> R
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
             let local_base = std::path::PathBuf::from(&local_app_data);
             let app_data_cache = local_base.join("Ollama");
-            let _ = tokio::fs::remove_dir_all(&app_data_cache).await;
+            for _ in 0..10 {
+                if !app_data_cache.exists() || tokio::fs::remove_dir_all(&app_data_cache).await.is_ok() {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            }
 
             let prog_ollama = local_base.join("Programs").join("Ollama");
-            let _ = tokio::fs::remove_dir_all(&prog_ollama).await;
+            for _ in 0..10 {
+                if !prog_ollama.exists() || tokio::fs::remove_dir_all(&prog_ollama).await.is_ok() {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            }
         }
 
         if let Ok(app_data) = std::env::var("APPDATA") {
@@ -848,6 +871,13 @@ pub async fn uninstall_ollama_internal(app: &tauri::AppHandle, force: bool) -> R
 
     // 4. Clean the User Environment PATH on Windows
     let _ = clean_windows_user_path_ollama();
+
+    for _ in 0..15 {
+        if !is_ollama_installed().await {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    }
 
     // 5. Reset App State & Notify Frontend
     if let Ok(store) = app.store("store.json") {
@@ -1608,6 +1638,7 @@ pub async fn install_ollama(app: tauri::AppHandle) -> Result<(), String> {
     };
     ensure_ollama_installed(&app).await?;
     let _ = set_installation_managed(&app, "ollama", true).await;
+    let _ = start_ollama_daemon(&app).await;
     Ok(())
 }
 
@@ -1805,25 +1836,47 @@ pub async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), Strin
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
             $ProgressPreference = 'SilentlyContinue';
 
-            Get-Process -Name 'ollama app', 'ollama', 'ollama_llama_server' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue;
+            function Stop-OllamaProcesses {
+                try {
+                    $procs = Get-Process -Name 'ollama app', 'ollama', 'ollama_llama_server' -ErrorAction SilentlyContinue;
+                    if ($procs) {
+                        foreach ($p in $procs) {
+                            try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
+                        }
+                    }
+                } catch {}
+            }
+
+            Stop-OllamaProcesses;
 
             $markerDir = Join-Path $env:LOCALAPPDATA 'Ollama';
             if (!(Test-Path $markerDir)) { New-Item -ItemType Directory -Path $markerDir -Force | Out-Null };
             New-Item -ItemType File -Path (Join-Path $markerDir 'upgraded') -Force | Out-Null;
 
             Write-Host '>>> Initializing Ollama installation for Windows...';
-            $tempInstaller = Join-Path $env:TEMP ('OllamaSetup_' + (Get-Random) + '.exe');
+            $tempInstaller = Join-Path $env:TEMP 'OllamaSetup_frugallm.exe';
             try {
-                Write-Host '>>> [1/4] Downloading Ollama installer from ollama.com...';
-                $oldEap = $ErrorActionPreference;
-                $ErrorActionPreference = 'Continue';
                 $installerUrl = 'https://ollama.com/download/OllamaSetup.exe';
-                curl.exe -# -L --fail -o "$tempInstaller" "$installerUrl";
-                $curlExit = $LASTEXITCODE;
-                $ErrorActionPreference = $oldEap;
-                if ($curlExit -ne 0 -or !(Test-Path "$tempInstaller")) {
-                    $wc = New-Object System.Net.WebClient;
-                    $wc.DownloadFile($installerUrl, "$tempInstaller");
+                $needDownload = $true;
+                if (Test-Path "$tempInstaller") {
+                    $existingLen = (Get-Item "$tempInstaller").Length;
+                    if ($existingLen -gt 700000000) {
+                        Write-Host '>>> [1/4] Found verified cached installer in temp, verifying...';
+                        $needDownload = $false;
+                    }
+                }
+
+                if ($needDownload) {
+                    Write-Host '>>> [1/4] Downloading Ollama installer from ollama.com...';
+                    $oldEap = $ErrorActionPreference;
+                    $ErrorActionPreference = 'Continue';
+                    curl.exe -# -L --fail --retry 3 --retry-delay 2 -C - -o "$tempInstaller" "$installerUrl";
+                    $curlExit = $LASTEXITCODE;
+                    $ErrorActionPreference = $oldEap;
+                    if ($curlExit -ne 0 -or !(Test-Path "$tempInstaller") -or (Get-Item "$tempInstaller").Length -lt 1000000) {
+                        $wc = New-Object System.Net.WebClient;
+                        $wc.DownloadFile($installerUrl, "$tempInstaller");
+                    }
                 }
                 Write-Host '';
 
@@ -1834,28 +1887,31 @@ pub async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), Strin
                 while (-not $proc.HasExited) {
                     $sec = [math]::Floor($sw.Elapsed.TotalSeconds);
                     $char = $sp[$i % 4];
-                    Write-Host -NoNewline ("`r>>> [2/4] Extracting & installing Ollama engine... (" + $sec + "s elapsed) [" + $char + "]   ");
+                    Write-Host -NoNewline ('`r>>> [2/4] Extracting and installing Ollama engine... (' + $sec + 's elapsed) [' + $char + ']   ');
                     Start-Sleep -Milliseconds 250;
                     $i++;
                 }
                 $sw.Stop();
                 $proc.WaitForExit();
-                if ($proc.ExitCode -ne 0) {
+
+                $targetExe = Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama.exe';
+                if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 8 -and !(Test-Path $targetExe)) {
                     throw ('Installer exited with code ' + $proc.ExitCode);
                 }
-                Write-Host ("`r>>> [2/4] Ollama engine extraction complete! (" + [math]::Floor($sw.Elapsed.TotalSeconds) + "s)                    ");
+                Write-Host ('`r>>> [2/4] Ollama engine extraction complete! (' + [math]::Floor($sw.Elapsed.TotalSeconds) + 's)                    ');
             } finally {
-                Remove-Item -Force $tempInstaller -ErrorAction SilentlyContinue;
+                # Stop any background tray/daemon processes auto-spawned by the installer so start_ollama_daemon can manage the process cleanly
+                Stop-OllamaProcesses;
             }
-
-            # Stop any background tray/daemon processes auto-spawned by the installer so start_ollama_daemon can manage the process cleanly
-            Get-Process -Name 'ollama app', 'ollama', 'ollama_llama_server' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue;
 
             $ollamaProgDir = Join-Path $env:LOCALAPPDATA 'Programs\Ollama';
             if (Test-Path $ollamaProgDir) {
                 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User');
                 if ($userPath -notlike ('*' + $ollamaProgDir + '*')) {
                     [Environment]::SetEnvironmentVariable('Path', ($ollamaProgDir + ';' + $userPath), 'User');
+                }
+                if ($env:Path -notlike ('*' + $ollamaProgDir + '*')) {
+                    $env:Path = $ollamaProgDir + ';' + $env:Path;
                 }
             }
         "#;
@@ -1871,6 +1927,9 @@ pub async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), Strin
             log_event(app, "ERROR", "OLLAMA", &err);
             err
         })?;
+
+        let last_stderr = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
+        let last_stderr_clone = last_stderr.clone();
 
         let app_clone = app.clone();
         if let Some(mut stdout) = child.stdout.take() {
@@ -1892,6 +1951,10 @@ pub async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), Strin
                 while let Ok(n) = stderr.read(&mut buf).await {
                     if n == 0 { break; }
                     let s = String::from_utf8_lossy(&buf[..n]).to_string();
+                    let mut lock = last_stderr_clone.lock().await;
+                    if lock.len() < 4096 {
+                        lock.push_str(&s);
+                    }
                     let _ = app_inner.emit("download_progress", DownloadProgress { status: s });
                 }
             });
@@ -1903,10 +1966,39 @@ pub async fn ensure_ollama_installed(app: &tauri::AppHandle) -> Result<(), Strin
             err
         })?;
 
+        // Update PATH in current process immediately if Ollama directory exists
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let ollama_dir = std::path::PathBuf::from(local_app_data).join("Programs").join("Ollama");
+            if ollama_dir.exists() {
+                if let Some(curr_path) = std::env::var_os("PATH") {
+                    let mut paths = std::env::split_paths(&curr_path).collect::<Vec<_>>();
+                    if !paths.iter().any(|p| p == &ollama_dir) {
+                        paths.insert(0, ollama_dir.clone());
+                        if let Ok(new_path) = std::env::join_paths(paths) {
+                            std::env::set_var("PATH", new_path);
+                        }
+                    }
+                }
+            }
+        }
+
         if !status.success() {
-            let err = format!("Ollama installation script failed with status {:?}", status.code());
-            log_event(app, "ERROR", "OLLAMA", &err);
-            return Err(err);
+            let stderr_output = last_stderr.lock().await.clone();
+            if is_ollama_installed().await {
+                log_event(app, "WARN", "OLLAMA", &format!(
+                    "PowerShell installer exited with status {:?}, but Ollama binary is present. Proceeding. Stderr: {}",
+                    status.code(),
+                    stderr_output.trim()
+                ));
+            } else {
+                let err = format!(
+                    "Ollama installation script failed with status {:?}. Stderr: {}",
+                    status.code(),
+                    stderr_output.trim()
+                );
+                log_event(app, "ERROR", "OLLAMA", &err);
+                return Err(err);
+            }
         }
 
         log_event(app, "INFO", "OLLAMA", "Ollama installer exited successfully. Verifying installation...");
@@ -1992,7 +2084,7 @@ pub async fn start_ollama_daemon(app: &tauri::AppHandle) -> Result<(), String> {
         Err(_) => (std::process::Stdio::null(), std::process::Stdio::null()),
     };
 
-    let mut cmd = tokio::process::Command::new(ollama_bin);
+    let mut cmd = tokio::process::Command::new(&ollama_bin);
     cmd.arg("serve")
         .stdout(stdout_cfg)
         .stderr(stderr_cfg)
@@ -2000,6 +2092,13 @@ pub async fn start_ollama_daemon(app: &tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         cmd.creation_flags(0x08000000);
+        if let Some(parent) = ollama_bin.parent() {
+            let current_path = std::env::var("PATH").unwrap_or_default();
+            let parent_str = parent.to_string_lossy();
+            if !current_path.contains(&*parent_str) {
+                cmd.env("PATH", format!("{};{}", parent_str, current_path));
+            }
+        }
     }
     let child = cmd.spawn().map_err(|e| {
         let err = format!("Failed to spawn Ollama daemon: {}", e);
@@ -2269,7 +2368,7 @@ pub async fn deploy_local_model(app: tauri::AppHandle, model: Option<String>) ->
             modelfile_path.to_string_lossy().to_string()
         };
         log_event(&app_clone, "INFO", "OLLAMA", &format!("Stage 3: Creating frugallm-active model using binary {:?} and Modelfile {:?}", ollama_bin, modelfile_path_str));
-        let mut cmd = tokio::process::Command::new(ollama_bin);
+        let mut cmd = tokio::process::Command::new(&ollama_bin);
         cmd.current_dir(&models_dir)
             .arg("create")
             .arg("frugallm-active")
@@ -2280,6 +2379,13 @@ pub async fn deploy_local_model(app: tauri::AppHandle, model: Option<String>) ->
         #[cfg(target_os = "windows")]
         {
             cmd.creation_flags(0x08000000);
+            if let Some(parent) = ollama_bin.parent() {
+                let current_path = std::env::var("PATH").unwrap_or_default();
+                let parent_str = parent.to_string_lossy();
+                if !current_path.contains(&*parent_str) {
+                    cmd.env("PATH", format!("{};{}", parent_str, current_path));
+                }
+            }
         }
         let child_res = cmd.spawn();
 

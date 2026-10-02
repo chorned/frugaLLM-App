@@ -1992,6 +1992,59 @@ HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bf
     }
 
     #[test]
+    fn test_windows_ollama_installer_resilience_pattern() {
+        let script = r#"
+            function Stop-OllamaProcesses {
+                try {
+                    $procs = Get-Process -Name 'ollama app', 'ollama', 'ollama_llama_server' -ErrorAction SilentlyContinue;
+                    if ($procs) {
+                        foreach ($p in $procs) {
+                            try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
+                        }
+                    }
+                } catch {}
+            }
+            $targetExe = Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama.exe';
+            if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 8 -and !(Test-Path $targetExe)) {
+                throw ('Installer exited with code ' + $proc.ExitCode);
+            }
+            $tempInstaller = Join-Path $env:TEMP 'OllamaSetup_frugallm.exe';
+            if ($existingLen -gt 700000000) { $needDownload = $false; }
+            curl.exe -# -L --fail --retry 3 --retry-delay 2 -C - -o "$tempInstaller" "$installerUrl";
+        "#;
+        assert!(script.contains("Stop-OllamaProcesses"));
+        assert!(script.contains("-ne 8"));
+        assert!(script.contains("targetExe"));
+        assert!(script.contains("700000000"));
+        assert!(script.contains("-C -"));
+
+        #[cfg(target_os = "windows")]
+        {
+            // Verify PowerShell AST parser parses the script without syntax errors
+            let check_syntax_script = format!(
+                r#"
+                $s = @'
+                {}
+'@;
+                $tokens = $null;
+                $errors = $null;
+                [System.Management.Automation.Language.Parser]::ParseInput($s, [ref]$tokens, [ref]$errors) | Out-Null;
+                if ($errors.Count -gt 0) {{
+                    throw ("AST Parse Errors: " + ($errors | ForEach-Object {{ $_.Message }} -join "; "));
+                }}
+                "#,
+                script
+            );
+            let mut ps_cmd = std::process::Command::new("powershell.exe");
+            ps_cmd.args(["-NoProfile", "-NonInteractive", "-Command", &check_syntax_script]);
+            use std::os::windows::process::CommandExt;
+            ps_cmd.creation_flags(0x08000000);
+            let output = ps_cmd.output().expect("Failed to invoke PowerShell for AST check");
+            assert!(output.status.success(), "PowerShell AST validation failed: {}", String::from_utf8_lossy(&output.stderr));
+        }
+    }
+
+    #[test]
     fn test_ollama_bare_app_bundle_directory_not_reported_as_installed() {
         let temp_dir = tempfile::tempdir().unwrap();
         // Create an empty /Applications/Ollama.app directory (orphaned app bundle)

@@ -182,4 +182,28 @@ test.describe('Terminal Runner View', () => {
     await expect(terminal.downloadEta).toContainText('3m 40s left');
     await expect(page.getByText('45%')).toBeVisible();
   });
+
+  test('should display terminal error message when Ollama model deployment fails', async ({ page }) => {
+    const canvas = new MainCanvas(page);
+    const terminal = new TerminalRunner(page);
+
+    await canvas.goto();
+    await canvas.clickNode('Ollama');
+
+    const initButton = page.getByRole('button', { name: /INSTALL OLLAMA/i });
+    await expect(initButton).toBeVisible();
+    await initButton.click();
+
+    await expect(terminal.xterm).toBeVisible();
+
+    // Simulate failure event from model deployment
+    await page.evaluate(() => {
+      (window as any).emitTauriEvent('model_deployment_complete', {
+        success: false,
+        message: 'Ollama installation script failed with status Some(1)'
+      });
+    });
+
+    await expect(terminal.xterm).toContainText('Installation failed: Ollama installation script failed with status Some(1)');
+  });
 });
