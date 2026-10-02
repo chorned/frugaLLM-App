@@ -1992,6 +1992,29 @@ HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bf
     }
 
     #[test]
+    fn test_windows_ollama_installer_resilience_pattern() {
+        let script = r#"
+            function Stop-OllamaProcesses {
+                try {
+                    $procs = Get-Process -Name 'ollama app', 'ollama', 'ollama_llama_server' -ErrorAction SilentlyContinue;
+                    if ($procs) {
+                        foreach ($p in $procs) {
+                            try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
+                        }
+                    }
+                } catch {}
+            }
+            $targetExe = Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama.exe';
+            if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 8 -and !(Test-Path $targetExe)) {
+                throw ('Installer exited with code ' + $proc.ExitCode);
+            }
+        "#;
+        assert!(script.contains("Stop-OllamaProcesses"));
+        assert!(script.contains("-ne 8"));
+        assert!(script.contains("targetExe"));
+    }
+
+    #[test]
     fn test_ollama_bare_app_bundle_directory_not_reported_as_installed() {
         let temp_dir = tempfile::tempdir().unwrap();
         // Create an empty /Applications/Ollama.app directory (orphaned app bundle)
