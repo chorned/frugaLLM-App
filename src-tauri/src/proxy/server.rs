@@ -184,19 +184,53 @@ fn process_stream_chunk_for_tokens(
     }
 }
 
-fn sanitize_reprimand_chunk(bytes: &[u8], app: &tauri::AppHandle) -> axum::body::Bytes {
-    if let Ok(text) = std::str::from_utf8(bytes) {
-        if text.contains("[SYSTEM REPRIMAND:") {
+pub const RAW_TOOL_TOKENS: &[&str] = &[
+    "<｜tool▁calls▁begin｜>",
+    "<｜tool▁calls▁end｜>",
+    "<｜tool▁call▁begin｜>",
+    "<｜tool▁call▁end｜>",
+    "<｜tool▁sep｜>",
+    "<｜tool calls begin｜>",
+    "<｜tool calls end｜>",
+    "<｜tool call begin｜>",
+    "<｜tool call end｜>",
+    "<｜tool sep｜>",
+];
+
+pub fn sanitize_proxy_text(text: &str, app: Option<&tauri::AppHandle>) -> (String, bool) {
+    let mut modified = false;
+    let mut cleaned = text.to_string();
+
+    if cleaned.contains("[SYSTEM REPRIMAND:") {
+        if let Some(a) = app {
             log_event(
-                app,
+                a,
                 "WARN",
                 "GATEWAY",
                 "Silently suppressed system reprimand from user-facing stream to maintain clean context",
             );
-            let cleaned = text.replace(
-                "[SYSTEM REPRIMAND: You detailed a plan and informed the user you were taking action, but failed to output the corresponding JSON tool call. Do not apologize. Output the required tool call immediately.]",
-                "",
-            );
+        }
+        cleaned = cleaned.replace(
+            "[SYSTEM REPRIMAND: You detailed a plan and informed the user you were taking action, but failed to output the corresponding JSON tool call. Do not apologize. Output the required tool call immediately.]",
+            "",
+        );
+        modified = true;
+    }
+
+    for &tok in RAW_TOOL_TOKENS {
+        if cleaned.contains(tok) {
+            cleaned = cleaned.replace(tok, "");
+            modified = true;
+        }
+    }
+
+    (cleaned, modified)
+}
+
+fn sanitize_reprimand_chunk(bytes: &[u8], app: &tauri::AppHandle) -> axum::body::Bytes {
+    if let Ok(text) = std::str::from_utf8(bytes) {
+        let (cleaned, modified) = sanitize_proxy_text(text, Some(app));
+        if modified {
             return axum::body::Bytes::from(cleaned);
         }
     }
@@ -381,7 +415,8 @@ async fn try_ollama(
                 "OLLAMA",
                 &format!("Request succeeded for model '{}'", ollama_model),
             );
-            Ok(builder.body(axum::body::Body::from(bytes)).unwrap())
+            let sanitized_bytes = sanitize_reprimand_chunk(&bytes, app);
+            Ok(builder.body(axum::body::Body::from(sanitized_bytes)).unwrap())
         }
     } else {
         let status = res.status();
@@ -535,30 +570,164 @@ pub fn classify_google_429(
         return QuotaFailureScope::ModelDisabled(model_id);
     }
 
-    // Check if the quota failure explicitly references a model-specific metric (RPM / TPM)
+    // Check if the quota failure explicitly references a model-specific metric (RPM / TPM / InputTokens / QuotaDimensions)
+    let body_lower = body.to_lowercase();
     let clean_target = target_model.strip_prefix("models/").unwrap_or(target_model);
-    let is_per_model = body.contains("per_model")
-        || body.contains("requests_per_model_per_minute")
-        || body.contains("tokens_per_model_per_minute")
-        || body.contains(&format!("models/{}", clean_target))
-        || body.contains(clean_target)
-        || body.contains("free_tier_requests");
+    let base_target = clean_target
+        .strip_suffix("-it")
+        .or_else(|| clean_target.strip_suffix("-preview"))
+        .or_else(|| clean_target.strip_suffix("-latest"))
+        .unwrap_or(clean_target);
+
+    let mut model_from_details: Option<String> = None;
+    let mut is_structured_per_model = false;
+    let mut retry_from_details: Option<u64> = None;
+
+    if let Some(ref root) = json_val {
+        if let Some(details) = root.get("error").and_then(|e| e.get("details")).and_then(|d| d.as_array()) {
+            for item in details {
+                // Check RetryInfo for retryDelay e.g. "10s", "10.57s"
+                if item.get("@type").and_then(|t| t.as_str()) == Some("type.googleapis.com/google.rpc.RetryInfo") {
+                    if let Some(delay_str) = item.get("retryDelay").and_then(|r| r.as_str()) {
+                        let trimmed = delay_str.trim().trim_end_matches('s');
+                        if let Ok(secs_f) = trimmed.parse::<f64>() {
+                            retry_from_details = Some(secs_f.ceil().max(1.0) as u64);
+                        }
+                    }
+                }
+
+                // Check QuotaFailure violations
+                if let Some(violations) = item.get("violations").and_then(|v| v.as_array()) {
+                    for v in violations {
+                        // Check quotaDimensions: { "model": "gemma-4-31b" }
+                        if let Some(dims) = v.get("quotaDimensions").and_then(|d| d.as_object()) {
+                            if let Some(m) = dims.get("model").and_then(|m| m.as_str()) {
+                                if !m.is_empty() {
+                                    model_from_details = Some(m.strip_prefix("models/").unwrap_or(m).to_string());
+                                    is_structured_per_model = true;
+                                }
+                            }
+                        }
+
+                        // Check subject: "models/..."
+                        if let Some(subj) = v.get("subject").and_then(|s| s.as_str()) {
+                            if !subj.is_empty() && subj.contains("models/") {
+                                model_from_details = Some(subj.strip_prefix("models/").unwrap_or(subj).to_string());
+                                is_structured_per_model = true;
+                            }
+                        }
+
+                        // Check quotaId: "GenerateContentInputTokensPerModelPerMinute-FreeTier"
+                        if let Some(qid) = v.get("quotaId").and_then(|q| q.as_str()) {
+                            let qid_lower = qid.to_lowercase();
+                            if qid_lower.contains("permodel") || qid_lower.contains("per_model") {
+                                is_structured_per_model = true;
+                            }
+                        }
+
+                        // Check quotaMetric: contains per_model or permodel
+                        if let Some(qm) = v.get("quotaMetric").and_then(|q| q.as_str()) {
+                            let qm_lower = qm.to_lowercase();
+                            if qm_lower.contains("permodel") || qm_lower.contains("per_model") {
+                                is_structured_per_model = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let is_per_model = is_structured_per_model
+        || body_lower.contains("per_model")
+        || body_lower.contains("permodel")
+        || body_lower.contains("requests_per_model_per_minute")
+        || body_lower.contains("tokens_per_model_per_minute")
+        || body_lower.contains("inputtokenspermodel")
+        || body_lower.contains(&format!("models/{}", clean_target.to_lowercase()))
+        || body_lower.contains(&clean_target.to_lowercase())
+        || body_lower.contains(&base_target.to_lowercase())
+        || body_lower.contains("free_tier_requests")
+        || body_lower.contains("free_tier_input_token_count");
 
     if is_per_model {
-        let retry_after = headers
-            .get("retry-after")
-            .and_then(|v| v.to_str().ok())
-            .and_then(|s| s.parse::<u64>().ok())
+        let retry_after = retry_from_details
+            .or_else(|| {
+                if let Some(idx) = body.find("retry in ") {
+                    let after = &body[idx + 9..];
+                    let num_str: String = after.chars().take_while(|c| c.is_ascii_digit() || *c == '.').collect();
+                    if let Ok(val) = num_str.parse::<f64>() {
+                        return Some(val.ceil().max(1.0) as u64);
+                    }
+                }
+                None
+            })
+            .or_else(|| {
+                headers
+                    .get("retry-after")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|s| s.parse::<u64>().ok())
+            })
             .unwrap_or(60);
 
+        let affected_model = model_from_details.unwrap_or_else(|| target_model.to_string());
+
         return QuotaFailureScope::ModelRateLimited {
-            model_id: target_model.to_string(),
+            model_id: affected_model,
             retry_after_secs: retry_after,
         };
     }
 
     // Fallback: project-wide quota or billing ceiling
     QuotaFailureScope::ProviderExhausted
+}
+
+pub fn ensure_google_thought_signatures(body: &mut Value) {
+    if let Some(messages) = body.get_mut("messages").and_then(|m| m.as_array_mut()) {
+        for msg in messages.iter_mut() {
+            if msg.get("role").and_then(|r| r.as_str()) == Some("assistant") {
+                if let Some(tool_calls) = msg.get_mut("tool_calls").and_then(|t| t.as_array_mut()) {
+                    for tc in tool_calls.iter_mut() {
+                        let has_valid_signature = tc.get("extra_content")
+                            .and_then(|ec| ec.get("google"))
+                            .and_then(|g| g.get("thought_signature"))
+                            .and_then(|ts| ts.as_str())
+                            .map(|s| !s.trim().is_empty())
+                            .unwrap_or(false)
+                            || tc.get("thought_signature")
+                                .and_then(|ts| ts.as_str())
+                                .map(|s| !s.trim().is_empty())
+                                .unwrap_or(false);
+
+                        if !has_valid_signature {
+                            if let Some(tc_obj) = tc.as_object_mut() {
+                                let mut google_obj = serde_json::Map::new();
+                                google_obj.insert("thought_signature".to_string(), json!("skip_thought_signature_validator"));
+
+                                let mut extra_content = match tc_obj.get("extra_content").and_then(|ec| ec.as_object()) {
+                                    Some(ec) => ec.clone(),
+                                    None => serde_json::Map::new(),
+                                };
+                                extra_content.insert("google".to_string(), Value::Object(google_obj));
+                                tc_obj.insert("extra_content".to_string(), Value::Object(extra_content));
+                                tc_obj.insert("thought_signature".to_string(), json!("skip_thought_signature_validator"));
+                            }
+                        }
+                    }
+                }
+
+                if let Some(fc) = msg.get_mut("function_call").and_then(|f| f.as_object_mut()) {
+                    let has_sig = fc.get("thought_signature")
+                        .and_then(|s| s.as_str())
+                        .map(|s| !s.trim().is_empty())
+                        .unwrap_or(false);
+                    if !has_sig {
+                        fc.insert("thought_signature".to_string(), json!("skip_thought_signature_validator"));
+                    }
+                }
+            }
+        }
+    }
 }
 
 async fn try_cloud_provider(
@@ -588,6 +757,7 @@ async fn try_cloud_provider(
             if let Some(obj) = body.as_object_mut() {
                 obj.insert("model".to_string(), json!(cloud_model.model));
             }
+            ensure_google_thought_signatures(&mut body);
             (url, auth, false)
         },
         _ => {
@@ -808,7 +978,8 @@ async fn try_cloud_provider(
                 &cloud_model.provider.to_uppercase(),
                 &format!("Request succeeded for model '{}'", cloud_model.model),
             );
-            Ok(builder.body(axum::body::Body::from(bytes)).unwrap())
+            let sanitized_bytes = sanitize_reprimand_chunk(&bytes, app);
+            Ok(builder.body(axum::body::Body::from(sanitized_bytes)).unwrap())
         }
     } else {
         let status = res.status();

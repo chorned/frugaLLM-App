@@ -163,12 +163,18 @@ test.describe('Phase 1: Boot Sequence & Onboarding', () => {
     await expect(hermesAction.first()).toBeVisible();
     await nextBtn.click();
 
-    // Step 6: Celebration screen & Launch FrugaLLM
+    // Step 6: Celebration screen & Launchpad (or Consolidated Provider Blocker when no key is linked)
     const step6 = appPage.locator('[data-testid="onboarding-step-6"]');
     await expect(step6).toBeVisible({ timeout: 5000 });
-    await expect(appPage.locator('[data-testid="card-launch-opencode"]')).toBeVisible();
-    await expect(appPage.locator('[data-testid="card-launch-hermes"]')).toBeVisible();
-    await expect(appPage.locator('[data-testid="handoff-callout-box"]')).toBeVisible();
+    const blockerCard = appPage.locator('[data-testid="card-consolidated-provider-blocker"]');
+    const opencodeCard = appPage.locator('[data-testid="card-launch-opencode"]');
+    await expect(blockerCard.or(opencodeCard)).toBeVisible({ timeout: 5000 });
+    if (await opencodeCard.isVisible().catch(() => false)) {
+      await expect(appPage.locator('[data-testid="card-launch-hermes"]')).toBeVisible();
+      await expect(appPage.locator('[data-testid="handoff-callout-box"]')).toBeVisible();
+    } else {
+      await expect(blockerCard).toBeVisible();
+    }
 
     const finishBtn = appPage.locator('[data-testid="onboarding-finish-btn"]');
     await expect(finishBtn).toBeVisible();

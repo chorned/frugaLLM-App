@@ -973,6 +973,19 @@ use std::collections::{HashMap, HashSet};
     }
 
     #[test]
+    fn test_sanitize_proxy_text_removes_raw_tool_tokens() {
+        use crate::proxy::server::sanitize_proxy_text;
+
+        let raw_leak = "Verify Docker Compose Status\n{\n  \"function\": \"terminal\",\n  \"parameters\": {\"command\": \"docker compose ls\"}\n}<｜tool▁call▁end｜><｜tool▁calls▁end｜>";
+        let (cleaned, modified) = sanitize_proxy_text(raw_leak, None);
+        assert!(modified);
+        assert!(!cleaned.contains("<｜tool▁call▁end｜>"));
+        assert!(!cleaned.contains("<｜tool▁calls▁end｜>"));
+        assert!(cleaned.contains("Verify Docker Compose Status"));
+        assert!(cleaned.contains("\"docker compose ls\""));
+    }
+
+    #[test]
     fn test_tool_enforcement_directive_format() {
         assert!(TOOL_ENFORCEMENT_DIRECTIVE.contains("[TOOL ENFORCEMENT DIRECTIVE]"));
         assert!(TOOL_ENFORCEMENT_DIRECTIVE.contains("Strict tool calling is required"));
@@ -2568,6 +2581,136 @@ HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bf
 
         let scope = classify_google_429(429, &headers, body_json, "gemini-2.0-flash");
         assert_eq!(scope, QuotaFailureScope::ProviderExhausted);
+    }
+
+    #[test]
+    fn test_classify_google_429_structured_quota_failure_gemma() {
+        use crate::proxy::server::{classify_google_429, QuotaFailureScope};
+        use reqwest::header::HeaderMap;
+
+        let headers = HeaderMap::new();
+
+        let gemma_429_payload = r#"{
+            "error": {
+                "code": 429,
+                "message": "You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 16000, model: gemma-4-31b\nPlease retry in 10.571858054s.",
+                "status": "RESOURCE_EXHAUSTED",
+                "details": [
+                    {
+                        "@type": "type.googleapis.com/google.rpc.Help",
+                        "links": [
+                            {
+                                "description": "Learn more about Gemini API quotas",
+                                "url": "https://ai.google.dev/gemini-api/docs/rate-limits"
+                            }
+                        ]
+                    },
+                    {
+                        "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                        "violations": [
+                            {
+                                "quotaMetric": "generativelanguage.googleapis.com/generate_content_free_tier_input_token_count",
+                                "quotaId": "GenerateContentInputTokensPerModelPerMinute-FreeTier",
+                                "quotaDimensions": {
+                                    "location": "global",
+                                    "model": "gemma-4-31b"
+                                },
+                                "quotaValue": "16000"
+                            }
+                        ]
+                    },
+                    {
+                        "@type": "type.googleapis.com/google.rpc.RetryInfo",
+                        "retryDelay": "10s"
+                    }
+                ]
+            }
+        }"#;
+
+        let scope = classify_google_429(429, &headers, gemma_429_payload, "gemma-4-31b-it");
+        assert_eq!(
+            scope,
+            QuotaFailureScope::ModelRateLimited {
+                model_id: "gemma-4-31b".to_string(),
+                retry_after_secs: 10,
+            }
+        );
+    }
+
+    #[test]
+    fn test_ensure_google_thought_signatures_injection() {
+        use crate::proxy::server::ensure_google_thought_signatures;
+        use serde_json::json;
+
+        let mut body = json!({
+            "model": "gemini-3.8-flash",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "List containers"
+                },
+                {
+                    "role": "assistant",
+                    "content": null,
+                    "tool_calls": [
+                        {
+                            "id": "call_123",
+                            "type": "function",
+                            "function": {
+                                "name": "default_api:terminal",
+                                "arguments": "{\"command\":\"docker ps\"}"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_123",
+                    "content": "container_abc"
+                },
+                {
+                    "role": "assistant",
+                    "content": null,
+                    "tool_calls": [
+                        {
+                            "id": "call_456",
+                            "type": "function",
+                            "extra_content": {
+                                "google": {
+                                    "thought_signature": "existing_valid_sig_xyz"
+                                }
+                            },
+                            "function": {
+                                "name": "default_api:terminal",
+                                "arguments": "{\"command\":\"docker inspect\"}"
+                            }
+                        }
+                    ]
+                }
+            ]
+        });
+
+        ensure_google_thought_signatures(&mut body);
+
+        let messages = body.get("messages").unwrap().as_array().unwrap();
+
+        // First assistant message should have injected skip_thought_signature_validator
+        let tc0 = &messages[1]["tool_calls"][0];
+        assert_eq!(
+            tc0["extra_content"]["google"]["thought_signature"].as_str().unwrap(),
+            "skip_thought_signature_validator"
+        );
+        assert_eq!(
+            tc0["thought_signature"].as_str().unwrap(),
+            "skip_thought_signature_validator"
+        );
+
+        // Second assistant message with existing signature should be preserved
+        let tc1 = &messages[3]["tool_calls"][0];
+        assert_eq!(
+            tc1["extra_content"]["google"]["thought_signature"].as_str().unwrap(),
+            "existing_valid_sig_xyz"
+        );
     }
 
     #[tokio::test]
