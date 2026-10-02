@@ -28,20 +28,20 @@ test.describe('Phase 7: Core Hub & Global Routing Pool', () => {
     await expect(portInput).toBeVisible();
 
     try {
-      // Change port to 8081 and click save
-      console.log('[UAT Phase 7] Changing port to 8081 and saving...');
-      await portInput.fill('8081');
+      // Change port to 8082 and click save
+      console.log('[UAT Phase 7] Changing port to 8082 and saving...');
+      await portInput.fill('8082');
       const saveBtn = appPage.locator('[data-testid="save-node-config-button"]');
       await expect(saveBtn).toBeVisible();
       await expect(saveBtn).toBeEnabled({ timeout: 5000 });
       await saveBtn.click();
 
-      // Verify via PortSentinel that the native Axum server successfully binds to port 8081 (bumped to 45s)
-      console.log('[UAT Phase 7] Verifying Axum proxy server bound to 8081...');
-      const port8081Bound = await waitForPortOpen(8081, 45000);
-      expect(port8081Bound).toBe(true);
+      // Verify via PortSentinel that the native Axum server successfully binds to port 8082 (bumped to 45s)
+      console.log('[UAT Phase 7] Verifying Axum proxy server bound to 8082...');
+      const port8082Bound = await waitForPortOpen(8082, 45000);
+      expect(port8082Bound).toBe(true);
 
-      // Verify persistence: Close drawer, re-open, and assert the input still displays 8081
+      // Verify persistence: Close drawer, re-open, and assert the input still displays 8082
       console.log('[UAT Phase 7] Verifying persistence: closing drawer and reopening...');
       const closeBtn = appPage.locator('[data-testid="node-config-close-btn"], button:has-text("✕")').first();
       await closeBtn.click();
@@ -49,9 +49,9 @@ test.describe('Phase 7: Core Hub & Global Routing Pool', () => {
 
       await frugallmCard.click();
       await expect(drawer).toBeVisible({ timeout: 5000 });
-      await expect(portInput).toHaveValue('8081');
+      await expect(portInput).toHaveValue('8082');
     } finally {
-      // Unconditionally restore port 61721 even if the 8081 assertion throws
+      // Unconditionally restore port 61721 even if the 8082 assertion throws
       await restoreDefaultPort(appPage, 61721);
     }
 

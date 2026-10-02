@@ -174,7 +174,7 @@ export async function restoreDefaultPort(page?: any, targetPort = 61721): Promis
   }
 
   // Tier 2: Direct HTTP IPC to candidate ports
-  const candidatePorts = [8081, 8080, 54321, targetPort];
+  const candidatePorts = isWindows ? [8082, 8080, 54321, targetPort] : [8081, 8082, 8080, 54321, targetPort];
   for (const p of candidatePorts) {
     try {
       await fetch(`http://127.0.0.1:${p}/__tauri_ipc__`, {
@@ -221,7 +221,10 @@ export async function restoreDefaultPort(page?: any, targetPort = 61721): Promis
   if (!await waitForPortOpen(targetPort, 5000)) {
     console.warn(`⚠️ [PortSentinel] Port ${targetPort} is still not open. Killing lingering frugallm-app processes to prevent single-instance deadlock...`);
     await killProcessesByName('frugallm-app');
-    await waitForPortClosed(8081, 5000);
+    if (!isWindows) {
+      await waitForPortClosed(8081, 5000);
+    }
+    await waitForPortClosed(8082, 5000);
     await waitForPortClosed(8080, 5000);
     await waitForPortClosed(54321, 5000);
   }

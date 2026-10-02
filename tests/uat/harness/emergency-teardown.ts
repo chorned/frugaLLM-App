@@ -16,7 +16,8 @@ export async function executeEmergencyTeardown(): Promise<void> {
     await killOrphanProcesses();
 
     // 2. Ensure ports are free
-    const trackedPorts = [8080, 8081, 54321, 61721, 11434];
+    const isWindows = process.platform === 'win32';
+    const trackedPorts = isWindows ? [8080, 8082, 54321, 61721] : [8080, 8081, 8082, 54321, 61721];
     for (const port of trackedPorts) {
       await waitForPortClosed(port, 3000);
     }

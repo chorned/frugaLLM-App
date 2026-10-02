@@ -105,7 +105,10 @@ export class TauriAppSession {
     if (!isAlreadyRunning) {
       console.log('🧹 [TauriLauncher] Checking for and terminating any zombie frugallm-app processes before spawn...');
       await killProcessesByName('frugallm-app');
-      await waitForPortClosed(8081, 3000);
+      if (!isWindows) {
+        await waitForPortClosed(8081, 3000);
+      }
+      await waitForPortClosed(8082, 3000);
       await waitForPortClosed(8080, 3000);
       await waitForPortClosed(54321, 3000);
       await waitForPortClosed(this.proxyPort, 3000);
@@ -135,7 +138,7 @@ export class TauriAppSession {
 
       // Wait for the native proxy server to bind and start listening
       console.log('⏳ [TauriLauncher] Waiting for FrugaLLM native proxy server...');
-      const proxyOnline = await waitForPortOpen(this.proxyPort, 20000) || await waitForPortOpen(8080, 5000) || await waitForPortOpen(8081, 5000);
+      const proxyOnline = await waitForPortOpen(this.proxyPort, 20000) || await waitForPortOpen(8080, 5000) || (!isWindows && await waitForPortOpen(8081, 5000)) || await waitForPortOpen(8082, 5000);
       if (!proxyOnline) {
         console.warn('⚠️ [TauriLauncher] Proxy port not detected within timeout, proceeding with webview connection probe...');
       } else {
@@ -146,22 +149,47 @@ export class TauriAppSession {
     }
 
     // Connect automation to the application webview
+    let cdpConnected = false;
     if (isWindows) {
-      console.log(`[TauriLauncher] Connecting over CDP to WebView2 on port ${this.cdpPort}...`);
-      await waitForPortOpen(this.cdpPort, 15000);
-      const browser = await chromium.connectOverCDP(`http://127.0.0.1:${this.cdpPort}`);
-      this.context = browser.contexts()[0];
-      const pages = this.context.pages();
-      this.page = pages[0] || await this.context.newPage();
-      if (options.cleanProfile) {
-        await this.page.evaluate(() => {
-          localStorage.removeItem('onboardingState');
-          localStorage.removeItem('onboardingStep');
-          localStorage.removeItem('onboarding_footer_dismissed');
-        }).catch(() => {});
-        await this.page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+      console.log(`[TauriLauncher] Probing for WebView2 CDP on port ${this.cdpPort}...`);
+      if (await waitForPortOpen(this.cdpPort, 3000)) {
+        try {
+          console.log(`[TauriLauncher] Connecting over CDP to WebView2 on port ${this.cdpPort}...`);
+          const browser = await chromium.connectOverCDP(`http://127.0.0.1:${this.cdpPort}`, { timeout: 5000 });
+          let targetPage = null;
+          for (const ctx of browser.contexts()) {
+            for (const p of ctx.pages()) {
+              const url = p.url();
+              if (url.includes('1420') || url.includes('tauri://') || url.includes('frugallm')) {
+                targetPage = p;
+                this.context = ctx;
+                break;
+              }
+            }
+            if (targetPage) break;
+          }
+          if (targetPage) {
+            this.page = targetPage;
+            if (options.cleanProfile) {
+              await this.page.evaluate(() => {
+                localStorage.removeItem('onboardingState');
+                localStorage.removeItem('onboardingStep');
+                localStorage.removeItem('onboarding_footer_dismissed');
+              }).catch(() => {});
+              await this.page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+            }
+            cdpConnected = true;
+          } else {
+            console.warn(`[TauriLauncher] No FrugaLLM page in CDP contexts on port ${this.cdpPort}, falling back to simulated context`);
+            await browser.close().catch(() => {});
+          }
+        } catch (err) {
+          console.warn(`[TauriLauncher] Failed to connect over CDP, falling back to simulated Tauri context:`, err);
+        }
       }
-    } else {
+    }
+
+    if (!cdpConnected) {
       const devServerPort = 1420;
       await waitForPortOpen(devServerPort, 30000);
       const targetUrl = `http://localhost:${devServerPort}`;
@@ -182,7 +210,7 @@ export class TauriAppSession {
       });
 
       // Inject native Tauri IPC bridge so that all frontend commands invoke the live desktop backend
-      await this.context.addInitScript(({ port }) => {
+      await this.context.addInitScript(({ port, isWindows }) => {
         const listeners: Record<string, ((event: any) => void)[]> = {};
         const callbacks: Record<number, (data: any) => void> = {};
         let callbackIdCounter = 1;
@@ -262,7 +290,7 @@ export class TauriAppSession {
               throw new Error('plugin:http not available in mock IPC bridge');
             }
 
-            const candidatePorts = [currentPort, 61721, 8081, 8080].filter((v, i, a) => a.indexOf(v) === i);
+            const candidatePorts = (isWindows ? [currentPort, 61721, 8082, 8080] : [currentPort, 61721, 8081, 8082, 8080]).filter((v, i, a) => a.indexOf(v) === i);
             let res: Response | null = null;
             let lastErr: any = null;
 
@@ -278,7 +306,8 @@ export class TauriAppSession {
                   signal: controller.signal,
                 });
                 clearTimeout(timeoutId);
-                if (r.ok || r.status === 500) {
+                const contentType = r.headers.get('content-type') || '';
+                if ((r.ok || r.status === 500) && contentType.includes('application/json')) {
                   res = r;
                   if (p !== currentPort) {
                     currentPort = p;
@@ -312,10 +341,18 @@ export class TauriAppSession {
             },
           },
         };
-      }, { port: this.proxyPort });
+      }, { port: this.proxyPort, isWindows });
 
       this.page = await this.context.newPage();
       await this.page.goto(targetUrl);
+      if (options.cleanProfile) {
+        await this.page.evaluate(() => {
+          localStorage.removeItem('onboardingState');
+          localStorage.removeItem('onboardingStep');
+          localStorage.removeItem('onboarding_footer_dismissed');
+        }).catch(() => {});
+        await this.page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+      }
     }
 
     await this.page.waitForLoadState('domcontentloaded');
@@ -339,7 +376,10 @@ export class TauriAppSession {
 
     await killProcessesByName('frugallm-app');
     await waitForPortClosed(this.proxyPort, 3000);
-    await waitForPortClosed(8081, 3000);
+    if (!isWindows) {
+      await waitForPortClosed(8081, 3000);
+    }
+    await waitForPortClosed(8082, 3000);
     await waitForPortClosed(8080, 3000);
     await waitForPortClosed(54321, 3000);
   }
