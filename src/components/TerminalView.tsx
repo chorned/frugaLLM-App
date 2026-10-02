@@ -66,6 +66,23 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
     etaSeconds: number;
   }>({ completed: 0, total: 0, speedBytesPerSec: 0, etaSeconds: 0 });
   const [showConfirmClose, setShowConfirmClose] = useState(false);
+  const [isPackagingDesktop, setIsPackagingDesktop] = useState(false);
+  const [desktopElapsed, setDesktopElapsed] = useState(0);
+  const [isProcessActive, setIsProcessActive] = useState(true);
+
+  const calcDesktopPercent = (seconds: number) => {
+    if (seconds <= 0) return 5;
+    if (seconds <= 15) return Math.min(30, 5 + Math.round((seconds / 15) * 25));
+    if (seconds <= 75) return Math.min(80, 30 + Math.round(((seconds - 15) / 60) * 50));
+    if (seconds <= 150) return Math.min(95, 80 + Math.round(((seconds - 75) / 75) * 15));
+    return Math.min(98, 95 + Math.round(((seconds - 150) / 100) * 3));
+  };
+
+  const formatElapsedTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+  };
 
   const formatBytes = (bytes: number) => {
     if (!bytes || bytes <= 0) return '0 B';
@@ -332,6 +349,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
               term.writeln(`\r\n\x1b[33m[Hermes Provisioning] Installation taking longer than expected (${Math.floor(elapsed / 60)}m elapsed). Still awaiting completion...\x1b[0m`);
             }
           }, 30000);
+          cleanups.push(() => {
+            if (hermesProgressTimer) {
+              clearInterval(hermesProgressTimer);
+              hermesProgressTimer = null;
+            }
+          });
         }
 
         unlistenOutput = await listen<{ session_id: string, data: string }>('pty_output', (event) => {
@@ -343,6 +366,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
         unlistenExit = await listen<{ session_id: string, exit_code: number }>('pty_exit', async (event) => {
           if (event.payload.session_id !== sessionId) return;
           setIsProvisioningModel(false);
+          setIsProcessActive(false);
           if (hermesProgressTimer) {
             clearInterval(hermesProgressTimer);
             hermesProgressTimer = null;
@@ -588,6 +612,43 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
         if (mode === 'run-ollama') runningText = 'Chatting with Ollama...';
         term.writeln(runningText);
 
+        let desktopProgressTimer: any = null;
+        let desktopSec = 0;
+        if (mode === 'run-hermes-desktop') {
+          term.writeln('\x1b[36m>>> [Hermes App] Initializing desktop build environment...\x1b[0m');
+          term.writeln('\x1b[90m>>> ' + (en.routingGraph?.terminal?.hermesDesktopBannerNotice || 'Notice: Compiling local Vite bundle and packaging Electron (~1-3 minutes). Terminal output will resume once packaging completes.') + '\x1b[0m\r\n');
+          setIsPackagingDesktop(true);
+          setDesktopElapsed(0);
+          desktopProgressTimer = setInterval(() => {
+            if (!isMountedRef.current) return;
+            desktopSec += 1;
+            setDesktopElapsed(desktopSec);
+
+            if (desktopSec % 15 === 0) {
+              const timeStr = formatElapsedTime(desktopSec);
+              let msg = '';
+              if (desktopSec <= 20) {
+                msg = (en.routingGraph?.terminal?.packagingHeartbeat1 || '[Hermes Builder] Bundling application assets & validating modules ({time} elapsed - active)...').replace('{time}', timeStr);
+              } else if (desktopSec <= 50) {
+                msg = (en.routingGraph?.terminal?.packagingHeartbeat2 || '[Hermes Builder] Verifying asset chunks & preparing staging directory ({time} elapsed - active)...').replace('{time}', timeStr);
+              } else if (desktopSec <= 90) {
+                msg = (en.routingGraph?.terminal?.packagingHeartbeat3 || '[Hermes Builder] Packaging Electron distribution binary ({time} elapsed - active)...').replace('{time}', timeStr);
+              } else if (desktopSec <= 150) {
+                msg = (en.routingGraph?.terminal?.packagingHeartbeatFinal || '[Hermes Builder] Finalizing desktop package ({time} elapsed). Almost ready...').replace('{time}', timeStr);
+              } else {
+                msg = (en.routingGraph?.terminal?.packagingHeartbeatDelayed || '[Hermes Builder] Build taking longer than expected ({time} elapsed). Still awaiting completion...').replace('{time}', timeStr);
+              }
+              term.writeln(`\r\n\x1b[36m${msg}\x1b[0m`);
+            }
+          }, 1000);
+          cleanups.push(() => {
+            if (desktopProgressTimer) {
+              clearInterval(desktopProgressTimer);
+              desktopProgressTimer = null;
+            }
+          });
+        }
+
         let webUiAutoClosed = false;
         const isWebUiMode = mode === 'run-hermes-web' || mode === 'run-opencode-web';
 
@@ -595,6 +656,16 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
           if (event.payload.session_id === sessionId) {
             term.write(event.payload.data);
             window.dispatchEvent(new CustomEvent('pty_bytes', { detail: event.payload.data.length }));
+
+            if (mode === 'run-hermes-desktop' && desktopProgressTimer) {
+              const text = event.payload.data;
+              if (/Packaging complete|Electron started|Launching Hermes|Ready on|App launched|Application launched/i.test(text)) {
+                clearInterval(desktopProgressTimer);
+                desktopProgressTimer = null;
+                setIsPackagingDesktop(false);
+                term.writeln(`\r\n\x1b[32m✔ ${en.routingGraph?.terminal?.packagingComplete || 'Hermes Desktop application launched successfully.'}\x1b[0m\r\n`);
+              }
+            }
 
             if (isWebUiMode && !webUiAutoClosed) {
               const text = event.payload.data;
@@ -612,6 +683,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
         if (unlistenOutput) cleanups.push(unlistenOutput);
         unlistenExit = await listen<{ session_id: string, exit_code: number }>('pty_exit', (event) => {
           if (event.payload.session_id !== sessionId) return;
+          if (desktopProgressTimer) {
+            clearInterval(desktopProgressTimer);
+            desktopProgressTimer = null;
+          }
+          setIsPackagingDesktop(false);
+          setIsProcessActive(false);
           if (onProcessExit) onProcessExit();
           let name = 'Process';
           if (mode.startsWith('run-opencode')) name = 'OpenCode';
@@ -720,6 +797,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
             }, 12000);
           }
         } catch (err: any) {
+          setIsPackagingDesktop(false);
+          setIsProcessActive(false);
           console.error('Failed to spawn PTY process:', err);
           term.writeln(`\r\n\x1b[31mFailed to launch process: ${err?.message || err}\x1b[0m\r\n`);
           if (onProcessExit) onProcessExit();
@@ -773,6 +852,81 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
           <h2 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--zen-text)', margin: 0 }}>
             {title}
           </h2>
+          {isPackagingDesktop ? (
+            <span 
+              data-testid="terminal-alive-badge"
+              style={{ 
+                display: 'inline-flex', 
+                alignItems: 'center', 
+                gap: '6px', 
+                fontSize: '0.75rem', 
+                padding: '2px 8px', 
+                borderRadius: '9999px', 
+                backgroundColor: 'rgba(59, 130, 246, 0.15)', 
+                color: '#60a5fa', 
+                border: '1px solid rgba(59, 130, 246, 0.3)',
+                fontWeight: 500,
+                marginLeft: '4px'
+              }}
+            >
+              <span 
+                style={{ 
+                  width: '6px', 
+                  height: '6px', 
+                  borderRadius: '50%', 
+                  backgroundColor: '#60a5fa', 
+                  boxShadow: '0 0 6px #60a5fa' 
+                }} 
+              />
+              {en.routingGraph?.terminal?.packagingApp || 'Packaging App'} ({formatElapsedTime(desktopElapsed)})
+            </span>
+          ) : isProcessActive ? (
+            <span 
+              data-testid="terminal-status-badge"
+              style={{ 
+                display: 'inline-flex', 
+                alignItems: 'center', 
+                gap: '5px', 
+                fontSize: '0.72rem', 
+                padding: '1px 7px', 
+                borderRadius: '9999px', 
+                backgroundColor: 'rgba(16, 185, 129, 0.12)', 
+                color: '#10b981', 
+                border: '1px solid rgba(16, 185, 129, 0.25)',
+                fontWeight: 500,
+                marginLeft: '4px'
+              }}
+            >
+              <span 
+                style={{ 
+                  width: '5px', 
+                  height: '5px', 
+                  borderRadius: '50%', 
+                  backgroundColor: '#10b981' 
+                }} 
+              />
+              {en.routingGraph?.terminal?.active || 'Active'}
+            </span>
+          ) : (
+            <span 
+              data-testid="terminal-status-badge"
+              style={{ 
+                display: 'inline-flex', 
+                alignItems: 'center', 
+                gap: '5px', 
+                fontSize: '0.72rem', 
+                padding: '1px 7px', 
+                borderRadius: '9999px', 
+                backgroundColor: 'rgba(156, 163, 175, 0.12)', 
+                color: 'var(--zen-text-secondary)', 
+                border: '1px solid var(--zen-border)',
+                fontWeight: 500,
+                marginLeft: '4px'
+              }}
+            >
+              {en.routingGraph?.terminal?.completed || 'Completed'}
+            </span>
+          )}
         </div>
         {showConfirmClose ? (
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -858,6 +1012,32 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
           </div>
         )}
       </div>
+
+      {isPackagingDesktop && (
+        <div data-testid="desktop-build-progress-bar" style={{ padding: '10px 18px', backgroundColor: 'var(--zen-surface-hover)', borderBottom: '1px solid var(--zen-border)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#3b82f6', boxShadow: '0 0 8px #3b82f6' }} />
+              <span style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--zen-text)' }}>
+                {desktopElapsed < 30 
+                  ? (en.routingGraph?.terminal?.packagingStage1 || 'Bundling Application Assets...') 
+                  : desktopElapsed < 75 
+                    ? (en.routingGraph?.terminal?.packagingStage2 || 'Verifying Module Chunks...') 
+                    : (en.routingGraph?.terminal?.packagingStage3 || 'Packaging Electron Distribution...')}
+              </span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--zen-text-secondary)', fontFamily: 'monospace' }}>
+                ({formatElapsedTime(desktopElapsed)} elapsed)
+              </span>
+            </div>
+            <span style={{ fontSize: '0.82rem', color: '#60a5fa', fontWeight: 600, fontFamily: 'monospace' }}>
+              {calcDesktopPercent(desktopElapsed)}%
+            </span>
+          </div>
+          <div style={{ width: '100%', height: '4px', backgroundColor: 'var(--zen-border)', borderRadius: '2px', overflow: 'hidden' }}>
+            <div style={{ width: `${calcDesktopPercent(desktopElapsed)}%`, height: '100%', backgroundColor: '#3b82f6', transition: 'width 0.4s ease' }} />
+          </div>
+        </div>
+      )}
 
       {isProvisioningModel && (
         <div data-testid="model-download-progress-bar" style={{ padding: '14px 24px', backgroundColor: 'var(--zen-surface-hover)', borderBottom: '1px solid var(--zen-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
