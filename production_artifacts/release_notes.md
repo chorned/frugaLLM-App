@@ -1,33 +1,27 @@
-# FrugaLLM v0.1.1 Release Notes
+# FrugaLLM v0.1.2 Release Notes
 
 ### 🚀 Features
-- **Modularized Onboarding Launchpad UI**: Refactored Onboarding Step 6 into a dedicated, test-isolated component featuring dynamic agent status badges, companion action CTAs, and streamlined clipboard-based terminal handoff.
-- **Zero-Spillover Local Proxy Core**: Local-first OpenAI-compatible proxy running on port `61721` with dynamic schema normalization, streaming SSE dispatch, and low-latency request handling.
-- **Global Routing Pool & Model Topology**: Interactive visual topology canvas connecting agents (Hermes, OpenCode) with local (Ollama) and cloud providers (Google AI Studio, OpenRouter).
-- **Hardware Memory Visualizers & Telemetry**: Real-time CPU, RAM, and NVIDIA GPU VRAM monitoring to prevent out-of-memory states and optimize model routing.
-- **Bidirectional Canvas Edge Highlighting**: Real-time visual pulse animations indicating request and response data flow phases across active nodes.
+- **Dynamic Routing & Stream Failover Hardening**: Enhanced OpenAI-compatible proxy streaming resilience on port `61721` with structured thought signature handling and model-level quota classification.
+- **Bare-Metal UAT Suite & Test Pyramid Expansion**: Validated 100% green test suite across 122 Rust unit/integration tests, 370 frontend unit tests, and 29 automated bare-metal Playwright UAT phases.
 
 ### 🐛 Fixes
-- **Cross-Platform Hermes & OpenCode Companion Setup**: Resolved Windows PATH resolution, ConPTY stream non-blocking read handling, and companion CLI detection across Windows, macOS, and Linux (#66).
-- **Drawer Lifecycle & Port Routing**: Eliminated UI lockout states during port contention and resolved drawer unmount lifecycle race conditions.
-- **ConPTY Windows Buffer Stability**: Resolved pseudo-terminal buffer synchronization and exit handle mismatches in Windows terminal environments.
-- **Axum IPC Non-Blocking Handlers**: Ensured asynchronous proxy endpoints never block the Tokio runtime during heavy streaming or connection drops.
-- **PTY Concurrency Mutex & Lifecycle**: Stabilized terminal process tree shutdown, preventing orphaned child processes and deadlocks.
-- **Ollama Empty Model Discovery**: Gracefully handles cold-start and pre-installed Ollama instances with manifest validation.
+- **Windows Agent Installation & Pack File Teardown**: Fixed terminal runner deadlocks during companion installer scripts by detecting functional existing binaries, auto-purging corrupt non-git install directories, and utilizing PowerShell `-LiteralPath` deletion with quote escaping for read-only Git pack files on Windows (#82).
+- **Global Routing Candidate Discovery & Proxy Inference**: Eliminated premature model deprovisioning in setup phases to ensure Ollama candidates (`gemma4:e2b`) are preserved for downstream routing and inference (#82).
+- **Proxy Server Mock IPC Routing Parity**: Added missing IPC dispatch routes in `src-tauri/src/proxy/server.rs` for `resize_pty`, `set_global_cli_commands`, `get_global_cli_commands_status`, `start_hermes_service`, and `stop_hermes_service` (#82).
+- **Gemini 3 Thought Signature & Tool Token Sanitization**: Resolved HTTP 400 errors from unhandled thought signatures during Gemini 3 streaming and sanitized raw internal tool tokens from client responses (#74).
+- **Windows Ollama Installer Resilience**: Hardened headless installer execution, process exit timeouts, and elevated directory cleanup routines (#75).
 
 ### 🔧 Under the Hood
-- **Vite 8 & Modern Frontend Tooling**: Upgraded to Vite 8.3.0 and `@vitejs/plugin-react` 6.1.1, alongside Vitest 5 test runner synchronization (#54, #68).
-- **Comprehensive Dependency Modernization**: Updated core dependencies across backend and frontend stacks (`tauri` 2.11.6, `dirs` 7.0, `windows-sys` 0.61.2, `@huggingface/transformers` 4.3.0, `framer-motion` 13.4.1, `lucide-react` 1.47.0).
-- **Hardened GitHub Actions CI**: Upgraded GitHub action runner steps to pinned immutable SHAs and enhanced cross-platform test matrix resilience.
-- **100% Bare-Metal UAT Suite**: Automated end-to-end hardware acceptance test suite covering boot, onboarding, provider probing, and proxy routing.
-- **Apple Notarization & Cross-Platform Matrix**: Hardened production release pipelines with macOS code signing/notarization, Windows NSIS installers, and Linux AppImage/deb packaging.
-- **Pluggable Credential Store & Keyring Security**: Direct OS vault integration via macOS Keychain, Windows Credential Manager, and Linux Secret Service.
+- **Tauri Ecosystem & Crate Upgrades**: Bumped `@tauri-apps/api` (~2.12.0), `@tauri-apps/cli` (~2.12.0), and official Tauri plugins (`autostart`, `clipboard-manager`, `http`, `opener`, `shell`, `store`), with synchronized Cargo crate updates (#78, #79).
+- **Frontend Dependency Modernization**: Updated `framer-motion` to 13.4.6, `lucide-react` to 1.49.0, `undici` to 6.29.0, and `@vitest/coverage-v8` to 5.0.2 (#76, #77, #79).
+- **CI Actions & Security Upgrades**: Updated `dtolnay/rust-toolchain`, `actions/checkout`, and `github/codeql-action` to latest releases (#80, #81).
+- **Inventory Synchronization**: Refreshed third-party software license inventory and dependency parity across Cargo and npm lockfiles.
 
 ### 📦 Downloads & Installation
 
 | Platform | Variant / Architecture | Direct Download |
 | :--- | :--- | :--- |
-| **macOS** | Universal (Apple Silicon & Intel) | [frugallm-app_0.1.1_universal.dmg](https://github.com/chorned/frugaLLM-App/releases/download/v0.1.1/frugallm-app_0.1.1_universal.dmg) |
-| **Windows** | Standard Installer (`.exe`) | [frugallm-app_0.1.1_x64-setup.exe](https://github.com/chorned/frugaLLM-App/releases/download/v0.1.1/frugallm-app_0.1.1_x64-setup.exe) |
-| **Ubuntu** | Debian Installer (`.deb`) | [frugallm-app_0.1.1_amd64.deb](https://github.com/chorned/frugaLLM-App/releases/download/v0.1.1/frugallm-app_0.1.1_amd64.deb) |
-| **SteamOS** | Universal Portable (`.AppImage`) | [frugallm-app_0.1.1_amd64.AppImage](https://github.com/chorned/frugaLLM-App/releases/download/v0.1.1/frugallm-app_0.1.1_amd64.AppImage) |
+| **macOS** | Universal (Apple Silicon & Intel) | [frugallm-app_0.1.2_universal.dmg](https://github.com/chorned/frugaLLM-App/releases/download/v0.1.2/frugallm-app_0.1.2_universal.dmg) |
+| **Windows** | Standard Installer (`.exe`) | [frugallm-app_0.1.2_x64-setup.exe](https://github.com/chorned/frugaLLM-App/releases/download/v0.1.2/frugallm-app_0.1.2_x64-setup.exe) |
+| **Ubuntu** | Debian Installer (`.deb`) | [frugallm-app_0.1.2_amd64.deb](https://github.com/chorned/frugaLLM-App/releases/download/v0.1.2/frugallm-app_0.1.2_amd64.deb) |
+| **SteamOS** | Universal Portable (`.AppImage`) | [frugallm-app_0.1.2_amd64.AppImage](https://github.com/chorned/frugaLLM-App/releases/download/v0.1.2/frugallm-app_0.1.2_amd64.AppImage) |
