@@ -2561,6 +2561,33 @@ fn dispatch_ipc_command(
             set_tool_gateway_installed(app.clone(), installed)?;
             Ok(serde_json::json!(null))
         }
+        "set_global_cli_commands" => {
+            let enabled = args.as_ref().and_then(|a| a.get("enabled").and_then(|v| v.as_bool())).unwrap_or(false);
+            crate::commands::config::set_global_cli_commands(app.clone(), enabled)?;
+            Ok(serde_json::json!(null))
+        }
+        "get_global_cli_commands_status" => {
+            let status = crate::commands::config::get_global_cli_commands_status(app.clone())?;
+            Ok(serde_json::json!(status))
+        }
+        "start_hermes_service" => {
+            let service = args.as_ref().and_then(|a| a.get("service").and_then(|v| v.as_str())).unwrap_or("").to_string();
+            let pid = start_hermes_service(
+                app.clone(),
+                app.state::<Arc<crate::proxy::ChildProcessManager>>(),
+                app.state::<FrugalConfigState>(),
+                service,
+            ).await?;
+            Ok(serde_json::json!(pid))
+        }
+        "stop_hermes_service" => {
+            let service = args.as_ref().and_then(|a| a.get("service").and_then(|v| v.as_str())).unwrap_or("").to_string();
+            stop_hermes_service(
+                app.state::<Arc<crate::proxy::ChildProcessManager>>(),
+                service,
+            )?;
+            Ok(serde_json::json!(null))
+        }
         "is_wipe_mode" => {
             Ok(serde_json::json!(is_wipe_mode()))
         }
@@ -2659,6 +2686,13 @@ fn dispatch_ipc_command(
             let session_id = args.as_ref().and_then(|a| a.get("sessionId").or_else(|| a.get("session_id")).and_then(|v| v.as_str())).unwrap_or("");
             let data = args.as_ref().and_then(|a| a.get("data").and_then(|v| v.as_str())).unwrap_or("");
             write_pty(app.state::<PtyState>(), session_id.to_string(), data.to_string())?;
+            Ok(serde_json::json!(null))
+        }
+        "resize_pty" => {
+            let session_id = args.as_ref().and_then(|a| a.get("sessionId").or_else(|| a.get("session_id")).and_then(|v| v.as_str())).unwrap_or("").to_string();
+            let cols = args.as_ref().and_then(|a| a.get("cols").and_then(|v| v.as_u64())).unwrap_or(80) as u16;
+            let rows = args.as_ref().and_then(|a| a.get("rows").and_then(|v| v.as_u64())).unwrap_or(24) as u16;
+            crate::commands::pty::resize_pty(app.state::<PtyState>(), session_id, rows, cols)?;
             Ok(serde_json::json!(null))
         }
         "deploy_local_model" => {

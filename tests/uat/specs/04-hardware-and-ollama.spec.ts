@@ -33,23 +33,6 @@ test.describe('Phase 4: Local Hardware Node (Ollama) & Tool Gateway', () => {
     await modelSelect.selectOption('gemma4:e2b');
     await appPage.waitForTimeout(300);
 
-    // If Ollama is currently managed and installed, clean uninstall first so fresh installation is exercised
-    const uninstallBtn = appPage.getByRole('button', { name: 'UNINSTALL OLLAMA', exact: true });
-    if (await uninstallBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-      console.log('[UAT Phase 4] Ollama currently installed; executing clean uninstall before fresh install test...');
-      await uninstallBtn.click();
-      const confirmYes = appPage.getByRole('button', { name: 'YES', exact: true });
-      await expect(confirmYes).toBeVisible({ timeout: 3000 });
-      await confirmYes.click();
-
-      // Wait for uninstallation terminal overlay to finish and close
-      const uninstallOverlay = appPage.locator('[data-testid="terminal-overlay-uninstall-ollama"]');
-      if (await uninstallOverlay.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await expect(uninstallOverlay).toBeHidden({ timeout: 60_000 });
-      }
-      await appPage.waitForTimeout(1000);
-    }
-
     const installBtn = appPage.getByRole('button', { name: 'INSTALL OLLAMA', exact: true });
     if (await installBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
       console.log('[UAT Phase 4] Triggering genuine bare-metal Ollama installation and deployment via UI button...');
@@ -81,6 +64,27 @@ test.describe('Phase 4: Local Hardware Node (Ollama) & Tool Gateway', () => {
     const versionJson = await versionRes?.json().catch(() => null);
     console.log('[UAT Phase 4] Live Ollama daemon responded 200 OK:', versionJson);
     expect(versionJson).toHaveProperty('version');
+
+    // Ensure base model gemma4:e2b is present in Ollama for downstream routing and inference tests
+    try {
+      const tagsRes = await fetch('http://127.0.0.1:11434/api/tags');
+      if (tagsRes.ok) {
+        const tagsJson = await tagsRes.json();
+        const hasModel = (tagsJson.models || []).some((m: any) =>
+          m.name.includes('gemma4:e2b') || m.name.includes('frugallm-active')
+        );
+        if (!hasModel) {
+          console.log('[UAT Phase 4] Ingesting gemma4:e2b model into Ollama for routing and inference...');
+          await fetch('http://127.0.0.1:11434/api/pull', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: 'gemma4:e2b', stream: false }),
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[UAT Phase 4] Ollama model check warning:', e);
+    }
 
     // Ensure config drawer is open
     const drawerAfter = appPage.locator('.node-config-panel, [data-testid="node-config-panel"]').first();

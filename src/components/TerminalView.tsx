@@ -407,6 +407,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
             }
           } else {
             term.writeln(`\r\n\x1b[31mProcess exited with code ${event.payload.exit_code}\x1b[0m\r\n`);
+            setTimeout(() => { if (isMountedRef.current) onExit(); }, 3000);
           }
         });
         if (unlistenOutput) cleanups.push(unlistenOutput);
@@ -538,6 +539,41 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
               const script = `
                 $ProgressPreference = 'SilentlyContinue';
                 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
+                $hermesPaths = @(
+                  (Join-Path $env:LOCALAPPDATA 'hermes\\bin'),
+                  (Join-Path $HOME '.hermes\\bin'),
+                  (Join-Path $HOME '.local\\bin')
+                );
+                foreach ($p in $hermesPaths) {
+                  if (Test-Path $p) {
+                    $env:PATH = "$p;$env:PATH";
+                    $userPath = [Environment]::GetEnvironmentVariable('PATH', 'User');
+                    if ($userPath -notlike ('*' + $p + '*')) {
+                      [Environment]::SetEnvironmentVariable('PATH', ($p + ';' + $userPath), 'User');
+                    }
+                  }
+                }
+                $existingHermes = (Get-Command hermes.cmd, hermes.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1);
+                if (!$existingHermes) {
+                  foreach ($p in $hermesPaths) {
+                    $c1 = Join-Path $p 'hermes.cmd'; if (Test-Path $c1) { $existingHermes = $c1; break; }
+                    $c2 = Join-Path $p 'hermes.exe'; if (Test-Path $c2) { $existingHermes = $c2; break; }
+                  }
+                }
+                if ($existingHermes) {
+                  $ver = & "$existingHermes" --version 2>$null;
+                  if ($LASTEXITCODE -eq 0 -and $ver) {
+                    Write-Host ([char]13 + '>>> [3/3] Hermes Agent is already installed (' + $ver + ')! Ready for use.');
+                    exit 0;
+                  }
+                }
+                $installDir = Join-Path $env:LOCALAPPDATA 'hermes\\hermes-agent';
+                if (Test-Path $installDir) {
+                  if (!(Test-Path (Join-Path $installDir '.git'))) {
+                    Write-Host '>>> Purging incomplete/non-git Hermes directory...';
+                    Remove-Item -LiteralPath $installDir -Recurse -Force -ErrorAction SilentlyContinue;
+                  }
+                }
                 Write-Host '>>> [1/3] Fetching Hermes installer from nousresearch.com...';
                 $installer = Join-Path $env:TEMP 'hermes-install.ps1';
                 try {
@@ -550,11 +586,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ mode, sessionId, onE
                 }
                 Write-Host '>>> [2/3] Installing Hermes Agent...';
                 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$installer" -NonInteractive;
-                $hermesPaths = @(
-                  (Join-Path $env:LOCALAPPDATA 'hermes\\bin'),
-                  (Join-Path $HOME '.hermes\\bin'),
-                  (Join-Path $HOME '.local\\bin')
-                );
                 foreach ($p in $hermesPaths) {
                   if (Test-Path $p) {
                     $env:PATH = "$p;$env:PATH";

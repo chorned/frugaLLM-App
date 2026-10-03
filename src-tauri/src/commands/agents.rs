@@ -811,20 +811,10 @@ pub async fn uninstall_ollama_internal(app: &tauri::AppHandle, force: bool) -> R
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
             let local_base = std::path::PathBuf::from(&local_app_data);
             let app_data_cache = local_base.join("Ollama");
-            for _ in 0..10 {
-                if !app_data_cache.exists() || tokio::fs::remove_dir_all(&app_data_cache).await.is_ok() {
-                    break;
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-            }
+            safe_remove_dir_all_async(&app_data_cache).await;
 
             let prog_ollama = local_base.join("Programs").join("Ollama");
-            for _ in 0..10 {
-                if !prog_ollama.exists() || tokio::fs::remove_dir_all(&prog_ollama).await.is_ok() {
-                    break;
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-            }
+            safe_remove_dir_all_async(&prog_ollama).await;
         }
 
         if let Ok(app_data) = std::env::var("APPDATA") {
@@ -909,8 +899,9 @@ fn safe_remove_dir_all_sync(path: &std::path::Path) {
         }
     }
     use std::os::windows::process::CommandExt;
-    let mut cmd = std::process::Command::new("cmd.exe");
-    cmd.args(["/C", &format!("rmdir /S /Q \"{}\"", path.display())])
+    let escaped_path = path.to_string_lossy().replace('\'', "''");
+    let mut cmd = std::process::Command::new("powershell.exe");
+    cmd.args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", &format!("Remove-Item -LiteralPath '{}' -Recurse -Force -ErrorAction SilentlyContinue", escaped_path)])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .creation_flags(0x08000000);
@@ -931,8 +922,9 @@ async fn safe_remove_dir_all_async(path: &std::path::Path) {
             return;
         }
     }
-    let mut cmd = tokio::process::Command::new("cmd.exe");
-    cmd.args(["/C", &format!("rmdir /S /Q \"{}\"", path.display())])
+    let escaped_path = path.to_string_lossy().replace('\'', "''");
+    let mut cmd = tokio::process::Command::new("powershell.exe");
+    cmd.args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", &format!("Remove-Item -LiteralPath '{}' -Recurse -Force -ErrorAction SilentlyContinue", escaped_path)])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .creation_flags(0x08000000);
@@ -986,10 +978,10 @@ pub fn wipe_hermes(home: &std::path::Path) {
     {
         let _ = std::fs::remove_file(home.join(".local").join("bin").join("hermes.cmd"));
         if let Ok(local) = std::env::var("LOCALAPPDATA") {
-            let _ = std::fs::remove_dir_all(std::path::PathBuf::from(local).join("hermes"));
+            safe_remove_dir_all_sync(&std::path::PathBuf::from(local).join("hermes"));
         }
         if let Ok(roaming) = std::env::var("APPDATA") {
-            let _ = std::fs::remove_dir_all(std::path::PathBuf::from(roaming).join("hermes"));
+            safe_remove_dir_all_sync(&std::path::PathBuf::from(roaming).join("hermes"));
         }
     }
 }
@@ -1214,13 +1206,13 @@ pub async fn uninstall_hermes(app: tauri::AppHandle) -> Result<(), String> {
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
             let win_hermes = std::path::PathBuf::from(local_app_data).join("hermes");
             if win_hermes.exists() {
-                let _ = tokio::fs::remove_dir_all(&win_hermes).await;
+                safe_remove_dir_all_async(&win_hermes).await;
             }
         }
         if let Ok(app_data) = std::env::var("APPDATA") {
             let win_roaming_hermes = std::path::PathBuf::from(app_data).join("hermes");
             if win_roaming_hermes.exists() {
-                let _ = tokio::fs::remove_dir_all(&win_roaming_hermes).await;
+                safe_remove_dir_all_async(&win_roaming_hermes).await;
             }
         }
         let _ = clean_windows_user_path_hermes();
